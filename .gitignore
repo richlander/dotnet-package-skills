@@ -1,0 +1,11 @@
+# Build output from fixture projects
+bin/
+obj/
+
+# skill-validator results
+.skill-validator-results/
+.tools/
+
+# OS / editor
+.DS_Store
+*.swp

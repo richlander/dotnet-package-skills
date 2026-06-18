@@ -1,0 +1,38 @@
+config:
+  # Migrations are stateful; keep one scenario at a time for clean signal.
+  max_parallel_scenarios: 1
+
+scenarios:
+  - name: "Migrate CommandLineDemo from McMaster to System.CommandLine 2.0 GA"
+    prompt: |
+      The CommandLineDemo project uses McMaster.Extensions.CommandLineUtils.
+      Migrate it to the latest stable System.CommandLine (2.0 GA), updating the
+      project reference and the code. Preserve the exact behavior of the `greet`
+      and `sum` commands so that the existing tests in CommandLineDemo.Tests
+      continue to pass. Update the test project as needed to drive the migrated
+      app, but do not change the asserted output strings or exit codes.
+    setup:
+      # Copies everything beside this eval.yaml (the fixture projects) into the
+      # agent's working directory. Applies to BOTH the baseline and enriched arms.
+      copy_test_files: true
+    # Prove the grounding earned its keep: a grounded agent should not need to
+    # search the web to discover the 2.0 GA API surface.
+    reject_tools:
+      - web_search
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "test CommandLineDemo.Tests/CommandLineDemo.Tests.csproj"
+        expected_exit_code: 0
+      - type: file_not_contains
+        path: "CommandLineDemo/CommandLineDemo.csproj"
+        value: "McMaster"
+      - type: file_contains
+        path: "CommandLineDemo/CommandLineDemo.csproj"
+        value: "System.CommandLine"
+    rubric:
+      - "The project builds and all CommandLineDemo.Tests pass"
+      - "Uses System.CommandLine 2.0 GA APIs (RootCommand, Command, Option<T>, Argument<T>, SetAction, ParseResult.GetValue)"
+      - "No remaining reference to McMaster.Extensions.CommandLineUtils"
+      - "greet and sum behavior (output text and exit codes) is unchanged"
+    timeout: 900
