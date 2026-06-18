@@ -1,0 +1,6 @@
+{
+  "name": "dotnet-package-grounding",
+  "version": "0.1.0",
+  "description": "NuGet package grounding content (AGENTS.md), evaluated as skills via skill-validator.",
+  "skills": ["./"]
+}

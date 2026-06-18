@@ -16,9 +16,11 @@ scenarios:
       # agent's working directory. Applies to BOTH the baseline and enriched arms.
       copy_test_files: true
     # Prove the grounding earned its keep: a grounded agent should not need to
-    # search the web to discover the 2.0 GA API surface.
+    # research the API online. Reject BOTH web tools — otherwise the baseline
+    # just substitutes web_fetch for web_search and the quality gap disappears.
     reject_tools:
       - web_search
+      - web_fetch
     assertions:
       - type: run_command_and_assert
         command_to_run: "dotnet"
