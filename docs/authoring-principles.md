@@ -51,6 +51,18 @@ the whole document. So:
 This is the opposite of how we write `README.md` files, which are authored to be read
 top-to-bottom by a human.
 
+### Cross-package data point (System.Text.Json unit)
+
+| Scenario | Baseline → Grounded | Improvement | Lesson |
+| --- | --- | --- | --- |
+| N1: migrate a Newtonsoft.Json CLI to System.Text.Json; silent break = STJ is case-sensitive by default (Newtonsoft is case-insensitive) | 5.0 → 4.8 (isolated) / 4.0 (plugin) | **−12.5%** (runs=5; isolated −6.9%) | The baseline reliably adds `PropertyNameCaseInsensitive = true` on its own — STJ case-insensitivity is **the most-cited STJ gotcha, so it is model-resident**. Grounding adds no value (slightly negative). A *silent* break is necessary but **not sufficient**: it must also be *obscure* (under-documented) to be non-resident. |
+
+The contrast with the SCL silent-break win is the key lesson: SCL's alias-vs-description
+shift earned signal because it is **both silent and obscure** (a rarely-discussed beta-era
+constructor change). STJ case-insensitivity is silent but **famous**, so the model already
+guards against it. When probing a package, target gotchas that are silent **and** rarely
+written about.
+
 ## Practical consequences
 
 - **Measure before you keep.** New grounding content is a hypothesis; the eval is the test.
