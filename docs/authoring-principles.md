@@ -58,3 +58,28 @@ top-to-bottom by a human.
   real; greenfield tasks tend to be model-resident for strong models.
 - **Stay within the line budget** (`eng/agents-line-limit.txt`). Cutting model-resident
   content is the first lever when you're over budget.
+
+## Conclusion: does System.CommandLine 3.x need grounding?
+
+**Verdict: it needs grounding for a few specific, medium-to-high-value topics — not as
+a general rule.**
+
+Across every scenario we measured against a strong frontier model (Opus 4.6):
+
+- **General API usage is model-resident.** Greenfield CLI authoring (G1, +1.1%) and
+  "new in 3.x" member discovery (S1, −2.2%) showed no signal — the model already writes
+  correct current-API code and guesses well-named members.
+- **Even removed-API migration is largely model-resident.** Migrating a beta4 CLI whose
+  API was deleted before GA (M1, +6.4% with behavior gates) is recoverable through the
+  normal dev loop: compile errors point at the removed members and reflection reveals the
+  replacements. Grounding bought efficiency, not correctness.
+- **The one durable gap is silent breaking changes** — code that *compiles but behaves
+  wrong*, where neither the compiler nor reflection can catch the defect. The
+  alias-vs-description gotcha is the proof: with the grounding guaranteed in context the
+  isolated arm reached **+20.6%**. (It only landed at +9.6% effective because a single
+  trap is something this model often self-recovers, and the discover-and-read delivery
+  path lags the in-context arm — both addressable.)
+
+So the grounding doc's value is **not** "how to use System.CommandLine." It is the short
+list of **non-discoverable hazards**: silent behavioral breaks and gotchas that compile
+fine and look correct but aren't. Author those; let the model handle the rest.
