@@ -23,6 +23,7 @@ baseline on a scenario, the model already knew it — cut it.
 | G1: greenfield CLI on 3.x | 5.0 → 5.0 | **+1.1%** | The model writes correct current-API CLIs from scratch (2.0 GA API == 3.x). Greenfield authoring is model-resident. No signal. |
 | M1: migrate a real 2.0.0-beta4 CLI to 3.x (compile-error gates) | 5.0 → 5.0 | **+6.4%** | After behavior gates gave the judge ground truth, the baseline migrates **correctly** (compile errors + reflection recover the member mapping). Residual signal is efficiency-only — below the 10% bar. |
 | M1 + silent-break trap (`new Option<T>("--n","desc")`: 2nd arg = alias in 3.x) | 5.0 → 5.0 | **+9.6%** (runs=5; isolated arm **+20.6%**) | A migration that *compiles but behaves wrong* defeats the compile-error safety net, and the **isolated** arm shows the grounding is genuinely valuable (+20.6%). But over 5 runs the strong baseline self-recovers the single trap (quality ties 5.0), and the gating **plugin** (discover-and-read) arm sits at +9.6% — just under the bar. Two levers remain: widen the gap (multiple traps) and close the isolated-vs-plugin delivery gap. |
+| M1 + silent-break, **doc refocused** to dense RAG-style migration/gotchas + sharper discovery description | 4.6 → 5.0 | **+15.1%** (runs=5; isolated **+22.6%**, plugin **+15.1%**) | Scoping the doc to migration/gotchas and tightening the discovery description **lifted the gating plugin arm from +9.6% → +15.1%** — delivery, not content, was the blocker. Now clears the bar, but variance is very high (CV=91%, one +21.8% run carries the mean): the signal is real and above threshold, magnitude is soft. |
 
 **Takeaway:** signal comes from *transforming code written against an API the model can
 no longer rely on* (migration) — and specifically from the parts a model **cannot recover
@@ -76,9 +77,11 @@ Across every scenario we measured against a strong frontier model (Opus 4.6):
 - **The one durable gap is silent breaking changes** — code that *compiles but behaves
   wrong*, where neither the compiler nor reflection can catch the defect. The
   alias-vs-description gotcha is the proof: with the grounding guaranteed in context the
-  isolated arm reached **+20.6%**. (It only landed at +9.6% effective because a single
-  trap is something this model often self-recovers, and the discover-and-read delivery
-  path lags the in-context arm — both addressable.)
+  isolated arm reached **+20.6%**. (It only landed at +9.6% effective at first because a
+  single trap is something this model often self-recovers, and the discover-and-read
+  delivery path lagged the in-context arm. Refocusing the doc to dense, RAG-style
+  migration/gotcha content with a sharper discovery description lifted the gating plugin
+  arm to **+15.1%**, clearing the bar — though run-to-run variance stays high.)
 
 So the grounding doc's value is **not** "how to use System.CommandLine." It is the short
 list of **non-discoverable hazards**: silent behavioral breaks and gotchas that compile
