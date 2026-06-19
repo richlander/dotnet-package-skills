@@ -1,0 +1,67 @@
+config:
+  max_parallel_scenarios: 1
+
+scenarios:
+  # ---------------------------------------------------------------------------
+  # N1 — Newtonsoft.Json -> System.Text.Json migration with a SILENT break.
+  #
+  # The fixture deserializes a real-world camelCase JSON payload into an idiomatic
+  # PascalCase model with NO explicit property attributes. Newtonsoft.Json matches
+  # names case-INSENSITIVELY by default, so it binds correctly. System.Text.Json is
+  # case-SENSITIVE by default, so a naive migration COMPILES and runs but silently
+  # binds nothing — every field comes back null/default, with no exception. Neither a
+  # compile error nor reflection reveals this; only knowledge of the default difference
+  # does. The behavior gate below asserts the deserialized values actually print, so a
+  # silent-break migration hard-fails while a correct one (PropertyNameCaseInsensitive,
+  # JsonSerializerDefaults.Web, a camelCase naming policy, or [JsonPropertyName]) passes.
+  # ---------------------------------------------------------------------------
+
+  - name: "N1: migrate a Newtonsoft.Json CLI to System.Text.Json"
+    prompt: |
+      This project uses Newtonsoft.Json to deserialize a JSON payload. Migrate it to
+      System.Text.Json (which ships in the .NET shared framework — no package needed):
+      remove the Newtonsoft.Json package reference and the `using Newtonsoft.Json;`, and
+      update the code to use System.Text.Json. Preserve behavior exactly: the migrated
+      project must compile and produce identical console output.
+    setup:
+      files:
+        - path: AdvisoryImport.csproj
+          source: fixtures/newtonsoft-case/AdvisoryImport.csproj
+        - path: Program.cs
+          source: fixtures/newtonsoft-case/Program.cs
+        - path: Advisory.cs
+          source: fixtures/newtonsoft-case/Advisory.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      # A real migration removes Newtonsoft entirely and uses System.Text.Json.
+      - type: file_not_contains
+        path: "AdvisoryImport.csproj"
+        value: "Newtonsoft"
+      - type: file_not_contains
+        path: "Program.cs"
+        value: "Newtonsoft"
+      - type: file_contains
+        path: "Program.cs"
+        value: "System.Text.Json"
+      # Behavior gate (the silent-break discriminator): the deserialized values must
+      # actually print. A case-sensitive (naive) migration prints empty fields; only a
+      # migration that restores case-insensitive matching reproduces the original output.
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*Contoso\\.Data 1\\.2\\.3 \\[High\\] CVE-2025-0001)(?=[\\s\\S]*Contoso\\.Web 4\\.5\\.6 \\[Critical\\] CVE-2025-0002)"
+        command_timeout: 120
+    rubric:
+      - "Removes the Newtonsoft.Json package reference and uses in-box System.Text.Json"
+      - "Replaces JsonConvert.DeserializeObject<T> with JsonSerializer.Deserialize<T>"
+      - "Preserves case-insensitive property matching (e.g. PropertyNameCaseInsensitive, JsonSerializerDefaults.Web, a camelCase naming policy, or [JsonPropertyName]) so the camelCase JSON still binds to the PascalCase model"
+      - "The migrated project compiles and prints the same output as the original"
+    timeout: 900
