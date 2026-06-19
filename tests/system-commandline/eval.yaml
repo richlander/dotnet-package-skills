@@ -57,6 +57,33 @@ scenarios:
       - type: file_not_contains
         path: "Program.cs"
         value: "getDefaultValue"
+      # Behavior gates (deterministic, network-free): prove the migration preserved
+      # every command and its arguments/options and the parser semantics. These give
+      # the judge OBJECTIVE ground truth that a compile-only check cannot — and hard-fail
+      # any migration that silently drops or renames a command, option, or argument.
+      # (The data commands themselves fetch live CVE data over the network, so we assert
+      # on `--help` and parse errors, which run before any handler.)
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*search <keyword>)(?=[\\s\\S]*severity <level>)(?=[\\s\\S]*product <name>)(?=[\\s\\S]*platform <name>)(?=[\\s\\S]*\\n  list )(?=[\\s\\S]*\\n  date )(?=[\\s\\S]*\\n  summary )"
+        command_timeout: 120
+      # The date command's two DateOnly options (the trickiest part of the migration:
+      # getDefaultValue -> DefaultValueFactory on a DateOnly) must both survive.
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- date --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*--from)(?=[\\s\\S]*--to)"
+        command_timeout: 120
+      # The required positional argument must still be required (parse semantics preserved).
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- severity"
+        expected_exit_code: 1
+        expected_std_error_contains: "Required argument 'level' missing"
+        command_timeout: 120
     rubric:
       - "Bumps System.CommandLine to 3.x in the .csproj"
       - "Replaces Handler.SetHandler with command.SetAction reading values via ParseResult.GetValue"
