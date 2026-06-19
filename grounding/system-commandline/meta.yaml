@@ -5,8 +5,10 @@
 name: system-commandline
 package: System.CommandLine
 description: >-
-  Guidance for System.CommandLine 3.x: what's new in 3.x over 2.x (additive,
-  no breaking changes), how to migrate 2.x to 3.x (drop-in version bump), and how
-  to migrate from 2.0.0-beta to the 2.x/3.x GA API (the large breaking redesign of
-  the invocation and binding stack). Use when creating, updating, or migrating a
-  .NET command-line application that uses System.CommandLine.
+  System.CommandLine migration and gotchas. Use when migrating a .NET CLI from
+  System.CommandLine 2.0.0-beta (beta1–beta4) to the GA / 3.x API — the large
+  breaking redesign of the invocation and binding stack (SetHandler, AddOption,
+  AddGlobalOption, getDefaultValue, BinderBase, IConsole all removed) — and for the
+  silent compile-clean gotchas, especially the Option/Argument constructor whose 2nd
+  positional argument changed from a description to an alias. Also covers the drop-in
+  2.x → 3.x version bump and the additive new members in 3.x.

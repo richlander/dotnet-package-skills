@@ -1,59 +1,51 @@
 ---
 name: system-commandline
-description: "Guidance for System.CommandLine 3.x: what's new in 3.x over 2.x (additive, no breaking changes), how to migrate 2.x to 3.x (drop-in version bump), and how to migrate from 2.0.0-beta to the 2.x/3.x GA API (the large breaking redesign of the invocation and binding stack). Use when creating, updating, or migrating a .NET command-line application that uses System.CommandLine."
+description: "System.CommandLine migration and gotchas. Use when migrating a .NET CLI from System.CommandLine 2.0.0-beta (beta1–beta4) to the GA / 3.x API — the large breaking redesign of the invocation and binding stack (SetHandler, AddOption, AddGlobalOption, getDefaultValue, BinderBase, IConsole all removed) — and for the silent compile-clean gotchas, especially the Option/Argument constructor whose 2nd positional argument changed from a description to an alias. Also covers the drop-in 2.x → 3.x version bump and the additive new members in 3.x."
 ---
 
 <!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
 
-# System.CommandLine 3.x
+# System.CommandLine migration & gotchas (2.0.0-beta → GA / 3.x)
 
-Guidance for **System.CommandLine 3.x**, currently in preview. Use when creating,
-updating, or migrating a .NET CLI that uses System.CommandLine.
+## Migrating System.CommandLine 2.0.0-beta (beta1–beta4) to GA / 3.x
 
-System.CommandLine is most often used with command line or TUI apps. It supports Native AOT publishing and trimming.
-
-You can install the System.CommandLine package via:
-
-```bash
-dotnet add package System.CommandLine --prerelease
-```
-
-## What's new in 3.x
-
-3.x is **additive** over 2.x with **no breaking API changes**. New opt-in members:
-
-| Member | Use |
-| ------ | --- |
-| `Argument<T>.CaptureRemainingTokens` | greedy arg that captures all remaining tokens |
-| `Option<T>` / `Argument<T>` `.AcceptOnlyFromAmong(StringComparer, params string[])` | case-insensitive constrained values (the `params string[]` overload already existed in 2.x) |
-| `RootCommand.HelpName` | custom name for the root command in help output |
-
-## 2.x to 3.x migration
-
-**Drop-in.** Bump the version; no code changes are needed. Then optionally adopt the new
-members above. The only consumer-visible shift is the dropped in-box `net8.0` target. The new package includes `net10.0` and `netstandard2.0` targets.
-
-## 2.x-beta to 2.x migration
-
-Unlike 2 to 3, **beta4 to 2.0 GA was a large breaking redesign**: the old invocation and
-binding stack was removed. Core mappings:
+beta4 → 2.0 GA was a breaking redesign: the old invocation/binding stack was removed, so
+beta code does **not** compile against GA. The same mapping applies when migrating beta
+code to 3.x (3.x is additive over GA). Set the package version, then apply:
 
 | 2.0.0-beta4 | 2.x / 3.x GA |
 | ----------- | ------------ |
 | `AddOption` / `AddArgument` / `AddCommand` | `Options.Add` / `Arguments.Add` / `Subcommands.Add` |
 | `AddGlobalOption(o)` | `o.Recursive = true;` then `Options.Add(o)` |
-| `SetHandler(...)` | `SetAction(parseResult => ...)` |
-| `command.Invoke` / `InvokeAsync` | `command.Parse(args).Invoke()` / `.InvokeAsync()` |
+| `SetHandler(...)` / `Handler.SetHandler(...)` | `command.SetAction(parseResult => ...)` |
+| `command.Invoke(args)` / `InvokeAsync(args)` | `command.Parse(args).Invoke()` / `.InvokeAsync()` |
+| handler params bound by position | `parseResult.GetValue(option)` inside the action |
+| `getDefaultValue: () => v` ctor arg / `SetDefaultValue` / `SetDefaultValueFactory` | `DefaultValueFactory = _ => v` |
 | `IsRequired` | `Required` |
 | `ExistingOnly()` | `AcceptExistingOnly()` |
-| `SetDefaultValue` / `SetDefaultValueFactory` | `DefaultValueFactory` |
 | `ArgumentHelpName` | `HelpName` |
-| `new Option<T>("--n", "desc")` (2nd arg = description) | `new Option<T>("--n") { Description = "desc" }` (2nd ctor arg is now an **alias**) |
 | binding: `BinderBase<T>` / `BindingContext` / `IValueDescriptor` | `parseResult.GetValue(option)` |
 | `IConsole` / `HelpBuilder` | removed; use `Console`, customize help via `HelpAction` |
 
-## Gotchas
+## Gotchas (compile-clean but wrong)
 
-- Options and args are referenced by **identity**: keep the instance to pass to `GetValue`.
-- The 2nd positional ctor arg is an **alias**, not a description (a silent shift since beta4).
-- Bumping 2.x to 3.x needs no code edits; do not "modernize" working 2.x patterns.
+- `new Option<T>("--name", "description")`: the **2nd positional ctor arg is an alias, not a
+  description** (a silent shift since beta4). Keeping the beta form compiles but registers the
+  description as a bogus alias and drops the help text. Use
+  `new Option<T>("--name") { Description = "..." }`; pass real aliases as
+  `new Option<T>("--name", "-n")`. Same rule for `Argument<T>`.
+- Options/arguments are referenced by **identity**: keep the instance you `.Add`ed and pass it
+  to `parseResult.GetValue(instance)`.
+
+## Upgrading 2.x → 3.x (NOT beta)
+
+Drop-in: bump the version, change no code (3.x is additive, no API breaks). Do **not**
+"modernize" working 2.x patterns. The only consumer-visible shift is the dropped in-box
+`net8.0` target; the package targets `net10.0` and `netstandard2.0`.
+
+## New API members in 3.x (additive over 2.x)
+
+- `Argument<T>.CaptureRemainingTokens` — greedy arg capturing all remaining tokens.
+- `Option<T>`/`Argument<T>` `.AcceptOnlyFromAmong(StringComparer, params string[])` —
+  case-insensitive constrained values (the `params string[]` overload already existed in 2.x).
+- `RootCommand.HelpName` — custom root-command name in help output.
