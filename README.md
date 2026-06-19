@@ -56,6 +56,11 @@ Grounding `AGENTS.md` files must stay **concise**: `eng/sync-skill.sh` fails if 
 budget in `eng/agents-line-limit.txt` (currently **60** lines). Keep content tight and prefer a
 short "see also" link over inlining depth. Raise the limit deliberately, not casually.
 
+A grounding doc records **only what an agent is proven to lack** (by eval signal) and is written
+for **section-based RAG retrieval**, not top-to-bottom reading — unlike a README. See
+[docs/authoring-principles.md](docs/authoring-principles.md) for the principles and the empirical
+evidence behind them.
+
 The grounding folder name must match the tests folder name and the skill `name` (e.g.
 `system-commandline`); the
 harness resolves `tests/<name>/eval.yaml`. Fixtures live under `tests/` (never beside

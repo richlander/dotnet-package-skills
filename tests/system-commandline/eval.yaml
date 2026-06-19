@@ -1,84 +1,17 @@
 config:
-  # Two self-contained scenarios; run them in parallel to save wall-clock.
-  max_parallel_scenarios: 2
+  max_parallel_scenarios: 1
 
 scenarios:
   # ---------------------------------------------------------------------------
-  # G1 — Greenfield adoption. The fixture is a fresh `dotnet new console` app that
-  # already references System.CommandLine 3.x but does no parsing yet. The agent
-  # must build a real CLI using the 3.x API.
-  #
-  # This discriminates strongly because almost all System.CommandLine code in the
-  # training data uses the OLD 2.0.0-beta API (Handler.SetHandler, AddOption,
-  # AddCommand, `new Option<T>(aliases, getDefaultValue, description)`,
-  # rootCommand.InvokeAsync(args)). That API was REMOVED before 3.x and does not
-  # compile against it. With web tools blocked, a baseline agent writes beta-style
-  # code from memory and the build fails; the grounded agent knows the current API
-  # (Option<T>(name, ...aliases) + DefaultValueFactory, Options.Add/Subcommands.Add,
-  # SetAction + ParseResult.GetValue, Parse(args).Invoke()) and succeeds.
-  # ---------------------------------------------------------------------------
-
-  - name: "G1: greenfield CLI on System.CommandLine 3.x"
-    prompt: |
-      This is a fresh console app that already references System.CommandLine 3.x
-      (see Greenfield.csproj). Replace the placeholder Program.cs with a real CLI
-      built on System.CommandLine. Requirements:
-
-        - A root command with a description.
-        - A `greet` subcommand with:
-            - a `--name` string option that defaults to `World`.
-            - a `--count` integer option (also available as `-c`) that defaults to 1.
-        - Running `greet` prints `Hello, <name>!` on its own line, repeated `count`
-          times.
-
-      Use the System.CommandLine 3.x API. The project must build and run.
-    setup:
-      files:
-        - path: Greenfield.csproj
-          source: fixtures/console/Greenfield.csproj
-        - path: Program.cs
-          source: fixtures/console/Program.cs
-    reject_tools:
-      - web_search
-      - web_fetch
-    assertions:
-      - type: run_command_and_assert
-        command_to_run: "dotnet"
-        command_arguments: "build"
-        expected_exit_code: 0
-        command_timeout: 600
-      # Default name resolves to World.
-      - type: run_command_and_assert
-        command_to_run: "dotnet"
-        command_arguments: "run --no-build -- greet"
-        expected_exit_code: 0
-        expected_std_output_contains: "Hello, World!"
-      # --name is honoured.
-      - type: run_command_and_assert
-        command_to_run: "dotnet"
-        command_arguments: "run --no-build -- greet --name Ada"
-        expected_exit_code: 0
-        expected_std_output_contains: "Hello, Ada!"
-      # --count and its short alias -c repeat the greeting (>= 3 occurrences).
-      - type: run_command_and_assert
-        command_to_run: "dotnet"
-        command_arguments: "run --no-build -- greet --name Ada -c 3"
-        expected_exit_code: 0
-        expected_std_output_matches: "(Hello, Ada![\\s\\S]*){3}"
-    rubric:
-      - "Builds a CLI on System.CommandLine 3.x that compiles and runs"
-      - "Uses the current 3.x API, NOT the removed beta API (no Handler.SetHandler, AddOption/AddCommand, or `new Option<T>(aliases, getDefaultValue, ...)`)"
-      - "Defines a greet subcommand with --name (default World) and --count/-c (default 1)"
-      - "Reads values via ParseResult.GetValue inside SetAction (not handler-binding by parameter)"
-      - "greet prints `Hello, <name>!` once per count, honouring --name and -c"
-    timeout: 600
-
-  # ---------------------------------------------------------------------------
   # M1 — 2.0.0-beta to 3.x migration of a REAL beta4 CLI (vendored ZeroDaySearch).
-  # The beta API it uses (Handler.SetHandler, AddOption, getDefaultValue, beta
-  # constructors, rootCommand.InvokeAsync(args)) was removed before GA, so a literal
-  # version bump does NOT compile — the agent must know the precise beta -> 3.x
-  # member mapping to migrate every command.
+  #
+  # This unit focuses SOLELY on migration: empirically it is the scenario shape that
+  # produces eval signal. Greenfield authoring and "new-in-3.x member" tasks proved
+  # model-resident (a web-blocked baseline already gets them right) — see
+  # docs/authoring-principles.md. The beta API ZeroDaySearch uses (Handler.SetHandler,
+  # AddOption, getDefaultValue, beta constructors, rootCommand.InvokeAsync(args)) was
+  # REMOVED before GA, so a literal version bump does NOT compile — the agent must know
+  # the precise beta -> 3.x member mapping to migrate every command.
   # ---------------------------------------------------------------------------
 
   - name: "M1: migrate a System.CommandLine 2.0.0-beta4 CLI to 3.x"
