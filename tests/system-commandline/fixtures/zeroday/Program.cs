@@ -11,9 +11,12 @@ var versionsOption = new Option<string[]>(
     AllowMultipleArgumentsPerToken = true
 };
 
-var verboseOption = new Option<bool>(
-    aliases: ["--verbose"],
-    description: "Show detailed CVE information");
+// NOTE (intentional migration trap): this uses the beta4 *positional* constructor
+// where the 2nd argument is the option DESCRIPTION. In 3.x the 2nd positional ctor
+// argument is an ALIAS, so a naive "keep it as-is" migration compiles but silently
+// turns the description into a bogus alias and drops the help text. A single word is
+// used so the break is silent (a multi-word value throws at runtime on the alias).
+var verboseOption = new Option<bool>("--verbose", "detailed");
 
 var tableOption = new Option<bool>(
     aliases: ["--table", "-t"],

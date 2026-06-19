@@ -12,6 +12,14 @@ scenarios:
   # AddOption, getDefaultValue, beta constructors, rootCommand.InvokeAsync(args)) was
   # REMOVED before GA, so a literal version bump does NOT compile — the agent must know
   # the precise beta -> 3.x member mapping to migrate every command.
+  #
+  # It also plants ONE silent-break trap: the --verbose option uses the beta4 positional
+  # ctor `new Option<bool>("--verbose", "detailed")` (2nd arg = description in beta4). In
+  # 3.x the 2nd positional arg is an ALIAS, so a naive migration compiles but silently
+  # turns the description into a bogus alias and drops the help text. This is the one part
+  # of the migration that compile errors + reflection CANNOT recover — only the documented
+  # gotcha in AGENTS.md does — so it is the dimension where grounding should move the
+  # quality/judgment score (which dominates the improvement metric), not just efficiency.
   # ---------------------------------------------------------------------------
 
   - name: "M1: migrate a System.CommandLine 2.0.0-beta4 CLI to 3.x"
@@ -22,8 +30,8 @@ scenarios:
       set the System.CommandLine package version in the .csproj to
       `3.0.0-preview.5.26302.115`, and update Program.cs to the current API.
       Preserve every existing command (list, search, severity, product, platform,
-      date, summary), their options and arguments, and their behavior. The migrated
-      project must compile.
+      date, summary), their options and arguments, their option/argument help
+      descriptions, and their behavior. The migrated project must compile.
     setup:
       files:
         - path: ZeroDaySearch.csproj
@@ -84,6 +92,21 @@ scenarios:
         expected_exit_code: 1
         expected_std_error_contains: "Required argument 'level' missing"
         command_timeout: 120
+      # Silent-break gate (the real discriminator): the beta4 source declares
+      #   new Option<bool>("--verbose", "detailed")
+      # where the 2nd positional arg is a DESCRIPTION. In 3.x the 2nd positional ctor
+      # arg is an ALIAS, so a naive migration compiles but silently registers "detailed"
+      # as a bogus alias and DROPS the description, rendering `detailed, --verbose` with no
+      # help text. A correct migration moves it to `{ Description = "detailed" }`, rendering
+      # `--verbose   detailed`. Compile errors and reflection cannot reveal this — only the
+      # documented alias-vs-description gotcha does. Require the flag to be followed by its
+      # description on the same line (matches correct; fails the silent-break).
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- list --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "--verbose[ \\t]+detailed"
+        command_timeout: 120
     rubric:
       - "Bumps System.CommandLine to 3.x in the .csproj"
       - "Replaces Handler.SetHandler with command.SetAction reading values via ParseResult.GetValue"
@@ -91,4 +114,5 @@ scenarios:
       - "Replaces getDefaultValue: with DefaultValueFactory and updates the option/argument constructors"
       - "Replaces rootCommand.InvokeAsync(args) with rootCommand.Parse(args).Invoke() or InvokeAsync()"
       - "All seven commands and their options/arguments are preserved; the project compiles"
+      - "Preserves the --verbose option's description instead of letting the 2nd positional ctor arg become a bogus alias (the alias-vs-description gotcha)"
     timeout: 900
