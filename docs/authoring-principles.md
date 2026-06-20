@@ -154,6 +154,32 @@ training corpus**. The fixes all amount to *decoupling discovery from model memo
   grounding?" is underspecified without "...for which agent model?" Grounding value is
   **model-relative**; our null results are strictly "the strongest model doesn't need this."
 
+#### Empirical confirmation: the same content flips from −1.0% to +63.3% by changing only the agent
+
+We tested this directly on the Microsoft.Extensions.AI function-invocation scenario (A1) — the
+one we had concluded was "model-resident" at **−1.0%** with Opus 4.6 as both agent and judge.
+We re-ran it changing **only the agent model** to Claude Haiku 4.5, holding the judge at Opus
+4.6, the grounding content, and the fixture constant:
+
+| Agent model (judge = Opus 4.6) | Improvement | Baseline quality (overall) | Baseline cost |
+| --- | --- | --- | --- |
+| Opus 4.6 | **−1.0%** (resident) | 5.0/5 | 66k tok / 7 tools / 26s |
+| Haiku 4.5 | **+63.3%** (CI [+39.7%, +74.0%], significant, g=+100%) | **1.6/5** → grounded 5.0 | **281k tok / 20 tools / 73s** → grounded 87k / 7 / 29s |
+
+The Haiku baseline correctly sensed "tools aren't being invoked" but chose the **wrong fix** (a
+hand-written tool-call loop), produced four compile errors, thrashed on the `ChatResponse` API,
+and **never produced a working app**. With the grounding it added `.UseFunctionInvocation()`,
+built, ran, and finished in 7 tool calls — **correct *and* ~3× cheaper.** A cheap closed-book
+**residency pre-probe predicted this**: asked the gotcha cold, Haiku 4.5 answered *"I don't
+know — I won't speculate,"* whereas Opus knows it cold.
+
+This is the central lesson of the whole exercise: **"model-resident" is a statement about a
+model, not a package.** The exact content we shelved as "the model already knows this" is a
+bar-clearing, money-saving rescue for a weaker (and far more commonly deployed) agent. Grounding
+authored for the strongest model is mostly redundant; grounding authored for the agent fleet
+that actually ships is not. Any verdict in this repo should name the agent model, and the
+honest default target is a *mid/low-tier* agent, not the frontier.
+
 ### 2. The scoring weights are tuned for skills, not grounding
 
 The harness improvement score (documented in `eng/skill-validator/src/README.md` and

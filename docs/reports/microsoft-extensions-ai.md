@@ -7,23 +7,28 @@ developed for the System.CommandLine and System.Text.Json units.
 
 ## TL;DR
 
-Microsoft.Extensions.AI (M.E.AI) **does not need general agent grounding** on the evidence we
-gathered. We probed the package's single most prominent silent footgun — tools registered in
-`ChatOptions.Tools` never run unless the client pipeline includes `.UseFunctionInvocation()` —
-and it **did not clear the 10% improvement bar** against a strong frontier model. It came back
-**−1.0%**, with unusually low variance.
+Microsoft.Extensions.AI (M.E.AI) **does not need general agent grounding _for a frontier-class
+agent_** — but it emphatically **does for a weaker, more commonly deployed agent.** We probed
+the package's single most prominent silent footgun — tools registered in `ChatOptions.Tools`
+never run unless the client pipeline includes `.UseFunctionInvocation()` — and the verdict
+**depends entirely on which agent model runs the task**:
 
-- **Function-invocation wiring** (a tool placed in `ChatOptions.Tools` is silently inert
-  unless a `FunctionInvokingChatClient` is in the pipeline; the call succeeds, `response.Text`
-  is empty, the function never runs, nothing throws): **−1.0%** (runs=5, CI [−1.6%, −1.0%],
-  significant). The baseline agent diagnoses the missing `UseFunctionInvocation` and fixes it
-  in a single edit **every run**. *Silent but famous → model-resident.*
+- **Agent = Opus 4.6** (judge = Opus 4.6): **−1.0%** (runs=5, CI [−1.6%, −1.0%], significant).
+  The strong agent diagnoses the missing `UseFunctionInvocation` and fixes it in one edit every
+  run. *Silent but resident → no signal.*
+- **Agent = Haiku 4.5** (judge = Opus 4.6): **+63.3%** (runs=5, CI [+39.7%, +74.0%],
+  significant, g=+100%). The weaker agent's baseline picks the wrong fix (a hand-written tool
+  loop), fails to compile, and never produces a working app (quality 1.6/5); with grounding it
+  adds `.UseFunctionInvocation()`, builds, runs, and finishes correctly — **and ~3× cheaper**
+  (281k→87k tokens, 20→7 tool calls). *Silent and—for this model—obscure → large signal.*
 
-**Recommendation:** do **not** ship a general M.E.AI `AGENTS.md` on the strength of the
-canonical function-calling gotcha. It is the package's most-demonstrated pattern (every
-tutorial wires `UseFunctionInvocation`), so a strong model already writes it unprompted. If
-M.E.AI grounding is ever shipped, it should target a **genuinely obscure** silent behavior
-(candidates below), not the headline footgun.
+**The gotcha did not change; the agent did.** "Model-resident" is a property of the
+*model*, not the *package*. A cheap closed-book residency pre-probe predicted the split: asked
+the gotcha cold, Haiku 4.5 said *"I don't know,"* while Opus knows it cold.
+
+**Recommendation:** ship M.E.AI grounding for the function-calling footgun **if the target is a
+mid/low-tier agent** (the common production case) — it converts task failure into success and
+cuts cost ~3×. For a frontier agent it is redundant. Always state the target agent model.
 
 ## Why measure instead of assert
 
@@ -72,13 +77,16 @@ own work, leveling the verification-visibility confound observed in the System.T
 
 ## Scenario and result
 
-| # | Scenario | Baseline → Grounded (quality) | Improvement | Interpretation |
+| # | Scenario | Agent model | Improvement | Interpretation |
 | --- | --- | --- | --- | --- |
-| A1 | Fix a weather assistant that prints an empty answer because its `IChatClient` is used directly, without `.UseFunctionInvocation()` in the pipeline (silent break = tools in `ChatOptions.Tools` are never invoked; `response.Text` is empty, no exception) | 5.0 → 5.0 (quality tied) | **−1.0%** (runs=5; iso −0.6%, plugin −1.0%; CI [−1.6%, −1.0%], significant) | The baseline agent reliably identifies the missing `UseFunctionInvocation` and adds it (or a `FunctionInvokingChatClient`) in one edit. Judge winner: **tie**. The package's headline gotcha is **model-resident**. No signal. |
+| A1 | Fix a weather assistant that prints an empty answer because its `IChatClient` is used directly, without `.UseFunctionInvocation()` in the pipeline (silent break = tools in `ChatOptions.Tools` are never invoked; `response.Text` is empty, no exception) | **Opus 4.6** | **−1.0%** (runs=5; iso −0.6%, plugin −1.0%; CI [−1.6%, −1.0%], significant) | Baseline (quality 5.0/5) identifies the missing `UseFunctionInvocation` and adds it in one edit. Judge winner: **tie**. Gotcha is **resident** for this model. No signal. |
+| A1′ | *Same scenario, same grounding, same Opus judge — only the agent model changed* | **Haiku 4.5** | **+63.3%** (runs=5; iso +63.3%, plugin +65.1%; CI [+39.7%, +74.0%], significant, g=+100%) | Baseline (quality **1.6/5**) chooses the wrong fix (manual tool loop), hits 4 compile errors, never builds a working app. Grounded → adds `.UseFunctionInvocation()`, builds, runs, **5.0/5**, in 7 tool calls. Judge: **MuchBetter**. Gotcha is **non-resident** for this model → large signal. |
 
-(Effective score `min(isolated=−0.6%, plugin=−1.0%) = −1.0%`. The grounded arms spent **more**
-tokens — isolated +29%, plugin +35% — reading grounding that restated knowledge the model
-already had, while using slightly fewer tool calls (5 vs 7). Full artifacts in the appendix.)
+(A1 effective score `min(iso=−0.6%, plugin=−1.0%) = −1.0%`; A1′ `min(iso=+63.3%, plugin=+65.1%)
+= +63.3%`. Under Opus the grounded arms spent **more** tokens (+29%/+35%) restating known
+content; under Haiku the grounded arms spent **far fewer** (−69%/−64% tokens, −65%/−60% tool
+calls, −61%/−62% time) by going straight to the fix instead of thrashing. Same content, opposite
+economics — because residency differs. Full artifacts in the appendix.)
 
 ## Analysis
 
@@ -126,30 +134,40 @@ the marginal value of one more probe is low.
 
 ## Conclusion
 
-**Verdict: Microsoft.Extensions.AI does not need general agent grounding for its most prominent
-gotcha (trends toward claim #3).** The function-invocation footgun — the one behavior any
-M.E.AI grounding doc would lead with — is model-resident at **−1.0%** with low variance.
+**Verdict: whether Microsoft.Extensions.AI needs grounding for its headline gotcha depends on
+the agent model — and that dependence is the finding.** With a frontier agent (Opus 4.6) the
+function-invocation footgun is resident (**−1.0%**); with a weaker, more commonly deployed agent
+(Haiku 4.5) the *identical* grounding clears the bar by a wide margin (**+63.3%**), turning task
+failure into success and cutting cost ~3×.
 
-This is the **third** package whose headline silent gotcha turned out to be resident
-(System.Text.Json case-insensitivity; Microsoft.Extensions.AI function invocation), and it
-sharpens the central rule that emerged from the System.CommandLine win:
+This reframes the earlier "third resident gotcha" observation. The *obscurity* axis of the
+authoring rule is **model-relative**: a gotcha that is famous to Opus is genuinely obscure to
+Haiku. So the rule still holds — ground a gotcha only if it is **silent**, **obscure (for the
+target model)**, and **not self-correcting** — but "obscure" must be evaluated against the agent
+you are actually shipping to, not the strongest model available:
 
-> Ground a gotcha only if it is **silent** (compiles *and* runs without error but behaves
-> wrong), **obscure** (rarely written about / demonstrated → genuinely non-resident), **and**
-> not self-correcting at run time. M.E.AI's most famous gotcha fails the second test — it is
-> silent but ubiquitously exampled, so the model has it cold.
+> Ground a gotcha if it is **silent** (compiles *and* runs without error but behaves wrong),
+> **obscure for the target agent model** (that model can't recall the fix cold — check with a
+> closed-book residency pre-probe), **and** not reliably self-correcting at run time. M.E.AI's
+> function-invocation footgun fails "obscure" for Opus 4.6 but passes it decisively for Haiku
+> 4.5 — hence the −1.0% vs +63.3% split on identical content.
 
-The "new package" intuition is not a reliable proxy for "needs grounding." What matters is
-whether a *specific behavior* is silent **and** obscure **and** unrecoverable — a far narrower
-target than a package's overall novelty.
+The "new package" intuition is not a reliable proxy for "needs grounding"; neither is a single
+frontier-model null result a reliable proxy for "no package needs grounding." What matters is
+whether a *specific behavior* is silent and unrecoverable **and non-resident for the agent that
+will consume the grounding** — which for most production agents is not the frontier model.
 
 ## Threats to validity
 
-- **Single scenario.** We tested one (canonical) behavior. The verdict is "the headline gotcha
-  is resident," not an exhaustive package audit; the obscure candidates above are untested.
-- **Single model.** All runs used Opus 4.6 as both agent and judge. A weaker model would likely
-  find more M.E.AI content non-resident. The *shape* of the conclusion should generalize; exact
-  magnitudes will move.
+- **Single scenario.** We tested one (canonical) behavior. The verdict is about that gotcha's
+  residency per agent model, not an exhaustive package audit; the obscure candidates above are
+  untested.
+- **Two agent models, one judge.** We ran the agent as both Opus 4.6 and Haiku 4.5, with the
+  judge fixed at Opus 4.6 (so the +63.3% is not a judge-leniency artifact — the same strict
+  judge scored the Opus agent −1.0%). Other agent models will land between these poles; the
+  *direction* (weaker agent → more grounding value) is the robust result.
+- **Judge is still a single model.** Using Opus 4.6 as the judge for a Haiku agent could carry
+  some same-family bias; a third-party judge would harden the magnitude.
 - **Threshold is a convention.** The 10% bar is the harness default. The qualitative ranking —
   resident vs. loud vs. silent-and-obscure — is the durable result.
 - **Offline stub, not a live model.** The fixture uses a deterministic `StubChatClient` to
@@ -166,6 +184,9 @@ target than a package's overall novelty.
 - Eval spec + fixtures: `tests/microsoft-extensions-ai/`.
 - Versions: Microsoft.Extensions.AI `9.7.0` on `net10.0`.
 - Result artifacts (`.skill-validator-results/`):
-  - `20260619-185226` — A1 function invocation, `--runs 5` (−1.0%, CI [−1.6%, −1.0%]).
+  - `20260619-185226` — A1 function invocation, agent=Opus 4.6, `--runs 5` (−1.0%, CI [−1.6%, −1.0%]).
+  - `20260619-193348` — A1′ function invocation, agent=Haiku 4.5, judge=Opus 4.6, `--runs 5` (+63.3%, CI [+39.7%, +74.0%]).
+- Asymmetric run command:
+  `skill-validator evaluate --tests-dir ./tests --model claude-haiku-4.5 --judge-model claude-opus-4.6 --runs 5 grounding/microsoft-extensions-ai`
 - Authoring principles distilled from this work:
   [`docs/authoring-principles.md`](../authoring-principles.md).

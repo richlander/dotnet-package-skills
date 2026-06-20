@@ -63,8 +63,9 @@ evidence behind them. For a per-package writeup suitable for an upstream PR, see
 under [docs/reports/](docs/reports/)
 ([System.CommandLine](docs/reports/system-commandline.md) — needs grounding for a narrow set
 of topics; [System.Text.Json](docs/reports/system-text-json.md) — does not need general
-grounding; [Microsoft.Extensions.AI](docs/reports/microsoft-extensions-ai.md) — headline
-function-invocation gotcha is model-resident).
+grounding; [Microsoft.Extensions.AI](docs/reports/microsoft-extensions-ai.md) — grounding need
+is **model-relative**: its headline gotcha is resident for Opus 4.6 (−1.0%) but a +63.3%
+rescue for Haiku 4.5).
 
 The grounding folder name must match the tests folder name and the skill `name` (e.g.
 `system-commandline`); the
