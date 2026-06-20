@@ -51,6 +51,29 @@ the whole document. So:
 This is the opposite of how we write `README.md` files, which are authored to be read
 top-to-bottom by a human.
 
+## 3. Stay in your lane: assert only first-party, package-local facts
+
+Grounding is **auto-installed with the package and cannot be uninstalled** (it arrives via
+tooling such as NuGet MCP / `dotnet-inspect`, with no UX surface to inspect or disable it).
+That delivery model is what earns it a stricter authoring discipline than a skill — but the
+discipline is *not* "clear a higher quality bar." It is **scope**:
+
+- A package may speak with authority **only about its own surface**: which overload to prefer,
+  which member is a footgun, which identifiers changed across versions. It must **not** assert
+  how it composes with other components ("use this with ASP.NET + EF like so"). That is a
+  *multi-component workflow* — a **skill's** job, owned by whoever owns the integration.
+- Staying in-lane **bounds the blast radius**. A grounding doc that only ever names its own
+  package literally cannot mislead an agent about a package it never mentions. The harm surface
+  collapses to the package's own truth — which the author actually knows cold.
+- This resolves the "specific yet general" paradox: grounding is **general in applicability,
+  narrow in claims.** It states package-local facts and lets the agent compose them into the
+  hundreds of workflows that touch the package. Cross-component prose is exactly where it would
+  overreach *and* where RAG retrieval breaks down.
+
+> Rule of thumb: the moment a grounding section describes a workflow spanning components, it has
+> stopped being grounding and become a skill — cut it or move it. Grounding asserts *your*
+> facts, nothing else.
+
 ### Cross-package data point (System.Text.Json unit)
 
 | Scenario | Baseline → Grounded | Improvement | Lesson |
@@ -206,3 +229,33 @@ doubling of *output* tokens should be a material signal; today it is nearly free
 The per-arm input/output counts are already collected separately — only the score collapses
 them. The clean fix is a single **cost-weighted scalar** (`input·pᵢ + output·pₒ + reasoning·pᵣ`)
 scored on its reduction, rather than a 1:1 token sum or two parallel token metrics.
+
+### 4. The right scoring model: one utility, tier-priced tokens (Pareto gate)
+
+The "same rubric" (it's all just context — measure it identically) and "different objective per
+tier" views are not actually in conflict. There is **one** objective — quality — but the **price
+of tokens (λ) depends on the target agent tier**, and output/thinking tokens carry almost all of
+that price:
+
+```
+ΔUtility = Δquality − λ_tier · Δcost(output/thinking ≫ input)
+```
+
+- **Frontier tier — λ high.** Quality is near the ceiling, so Δquality is usually small. Ship
+  grounding only when it delivers a *large* quality jump (zero-day / post-cutoff content the
+  strong model genuinely lacks) **or net-reduces output tokens**. A small quality gain bought
+  with significant output tokens is a *fail*. Stated positively, a frontier-justified grounding
+  doc's value is **reduced output/thinking tokens** — you stop the smart model from
+  *deliberating its way around a gap* by simply telling it the fact.
+- **Mini / router-selected tier — λ low.** Tokens are cheap and quality is the binding
+  constraint, so almost any genuine quality gain ships; you are happy to pay tokens for it (the
+  model might otherwise *just fail*).
+
+Because grounding is **auto-installed and un-removable**, the verdict is a **Pareto gate**, not
+a mean: ship iff it **materially helps the tier that needs it (small) AND does no meaningful
+harm to the tier that doesn't (frontier)**; rip it out iff it helps neither. The
+[asymmetric M.E.AI run](reports/microsoft-extensions-ai.md) maps onto this exactly — Opus:
+Δq≈0, output tokens up → ΔU negative (don't ship for frontier); Haiku: Δq huge *and* tokens
+−69% → ΔU large-positive (ship). The case the harness still can't adjudicate well is grounding
+that *adds* output tokens for a *modest* quality gain on the frontier — precisely where λ and
+the cost-weighted token metric stop being cosmetic.
