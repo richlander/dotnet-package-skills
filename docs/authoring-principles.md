@@ -121,3 +121,62 @@ Across every scenario we measured against a strong frontier model (Opus 4.6):
 So the grounding doc's value is **not** "how to use System.CommandLine." It is the short
 list of **non-discoverable hazards**: silent behavioral breaks and gotchas that compile
 fine and look correct but aren't. Author those; let the model handle the rest.
+
+## Methodological limitations (and how to harden the method)
+
+The three "model-resident" verdicts above are real but come with two structural caveats
+that anyone reading these numbers should weigh.
+
+### 1. The discovery–measurement circularity
+
+Our pipeline has two phases: **discovery** (enumerate candidate footguns) and
+**measurement** (baseline-vs-grounded eval, same model family). When candidates are sourced
+from the model's own memory (introspection plus a research agent), discovery can only surface
+gaps the model can already recall — and is blind to exactly the gaps that would move the
+metric. The measurement then "confirms" residency for content we obtained *from* the model.
+This biases the method toward null results: **it is good at falsifying grounding need, weak at
+discovering genuine gaps.**
+
+The System.CommandLine win is the proof the loop is escapable: the alias-vs-description gotcha
+was not recalled from memory, it was a **transient beta-era detail that had washed out of the
+training corpus**. The fixes all amount to *decoupling discovery from model memory*:
+
+- **Source candidates externally**, not introspectively: post-cutoff release notes, GitHub
+  issues labeled "surprising/gotcha," high-upvote Stack Overflow questions, the package's own
+  edge-case tests. Anything dated after the model's training cutoff is non-resident by
+  construction (this is why a zero-day upgrade is the strongest scenario class).
+- **Run a cheap residency pre-probe** before spending a 5-run eval: ask the bare model "what
+  are the gotchas of X?" If it names the candidate, it is resident — skip it. This turns
+  implicit circularity into an explicit, fast gate.
+- **Test an agent weaker than the judge.** `--model` (agent) and `--judge-model` are
+  independent. Running Opus-as-both is the *hardest* residency bar and the *least*
+  representative of the weaker agents most teams actually deploy. "Does package X need
+  grounding?" is underspecified without "...for which agent model?" Grounding value is
+  **model-relative**; our null results are strictly "the strongest model doesn't need this."
+
+### 2. The scoring weights are tuned for skills, not grounding
+
+The harness improvement score (documented in `eng/skill-validator/src/README.md` and
+`src/docs/InvestigatingResults.md`; weights in `DefaultWeights`, `Models.cs`) is:
+Quality 0.40 + OverallJudgment 0.30 + TaskCompletion 0.15 + (Token 0.05 + Error 0.05 +
+ToolCall 0.025 + Time 0.025). Quality dominates by design — *"a skill that improves output
+quality will pass even if it uses more tokens"* — which is correct for a **skill** validator
+(loading a skill always costs tokens; don't punish that).
+
+But grounding's value is frequently **efficiency**: not letting the agent flail through many
+tool calls to rediscover a hazard. That value lands entirely in tokens + tool-calls + time =
+**0.10 combined, clamped** — so the quality-tuned yardstick structurally hides the win
+grounding is meant to deliver. A grounding-specific weight profile that elevates the
+efficiency bucket may surface signal the default masks (weights are not flag-overridable
+today, so this means a local re-score).
+
+### 3. "Tokens" is one number but should be a cost
+
+`tokenEstimate = inputTokens + outputTokens`, summed 1:1 (`MetricsCollector.cs`), clamped so
+≥2× usage maps to only −0.05 final. This is too coarse: output tokens cost ~4–5× input on
+every frontier pricing sheet, and reasoning/thinking tokens (billed as output, currently
+folded invisibly into `outputTokens`) are the most expensive and most variable component. A
+doubling of *output* tokens should be a material signal; today it is nearly free in the score.
+The per-arm input/output counts are already collected separately — only the score collapses
+them. The clean fix is a single **cost-weighted scalar** (`input·pᵢ + output·pₒ + reasoning·pᵣ`)
+scored on its reduction, rather than a 1:1 token sum or two parallel token metrics.
