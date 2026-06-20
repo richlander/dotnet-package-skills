@@ -48,11 +48,12 @@ that `get_package_context` prefers `AGENTS.md` over the README when present
 
 - **Add a resident, per-direct-dependency index to the `get_package_context` tool description,
   built from the project file the host already knows.** This is Channel **D** — the cheapest
-  channel on *every* cell measured (Markout Opus 91k vs 104k MCP/397k raw; multi-package Opus
-  203k vs 723k raw, **−72%**), and the **only** channel that surfaces silent, compile-clean
-  gotchas. The agent self-gates: it declines when it already knows the package and retrieves when
-  it doesn't, at **zero** extra tool calls. Treat discovery as an input; **abstain to on-demand
-  when no project file is given** — one narrow rule, never a heuristic stack.
+  channel on the weak tier and on the harder multi-package task (multi-package Opus **92k IET**
+  vs 188k raw-lookup, **−51%**; Haiku **286k** vs 939k, **−70%**), statistically tied with serving
+  `AGENTS.md` on the easy strong-tier cell, and the **only** channel that surfaces silent,
+  compile-clean gotchas. The agent self-gates: it declines when it already knows the package and
+  retrieves when it doesn't, at **zero** extra tool calls. Treat discovery as an input; **abstain
+  to on-demand when no project file is given** — one narrow rule, never a heuristic stack.
 - **Do *not* add a separate `summarize_package_context` tool.** Gating the index behind an agent
   call makes peeking either an on-ramp (frontier pulls everything) or dead weight (weak models
   ignore it). The resident index gives costless selection and decline-by-default for free.
@@ -78,6 +79,14 @@ beta4→3.x migration with two benign distractor packages).
 Two tiers: **Opus** (frontier — measures *efficiency*) and **Haiku** (weak — measures
 *correctness rescue*).
 
+**Metric — IET (Input-Equivalent Tokens).** All costs below are reported in weighted IET, a
+cost-equivalent measure that normalizes each token class to fresh-input units:
+`IET = fresh + 0.1·cacheRead + 1.25·cacheWrite + 5·output` (recomputed from the raw token classes
+in each `results.json`). This is the honest cost signal: it stops cheap prompt-cache reads from
+inflating the exploration-heavy raw baseline. Tables also show the harness's unweighted
+`tokenEstimate` (`tEst` = `inputTokens + outputTokens`, cache reads at full price) in parentheses
+for traceability.
+
 ---
 
 ## Step 1 — Baseline: raw package and NuGet MCP, with no `AGENTS.md` (A, B)
@@ -92,16 +101,15 @@ the restored package on disk; "NuGet MCP" = one `get_package_context` call retur
 
 | tier | A — raw pkg → README | B — NuGet MCP → README |
 |------|---:|---:|
-| Opus  | 397k IET / 23 tools | **118k IET / 8 tools** (1 MCP call) |
-| Haiku | 172k IET / 12 tools | **147k IET / 8 tools** (1 MCP call) |
+| Opus  | 78k IET (397k tEst) / 23 tools | **38k IET (118k) / 8 tools** (1 MCP call) |
+| Haiku | 49k IET (172k) / 12 tools | **40k IET (147k) / 8 tools** (1 MCP call) |
 
 The headline is the **delivery channel, not the content**: serving the *same* README through one
-MCP call instead of an open-ended filesystem hunt cuts Opus cost ~3.4× (397k→118k) and roughly
+MCP call instead of an open-ended filesystem hunt cuts Opus cost ~2× (78k→38k IET) and roughly
 halves the tool count. The README is where the agent goes by default, and it is a **liability**: in a controlled size sweep ([`readme-liability.md`](reports/readme-liability.md)),
-baseline cost was a high-variance 355k–620k IET (21–27 tools) and *rose with README size*, while
-a too-small/truncated README was *also* expensive (incompleteness → the agent spelunks the nupkg
-and the XML doc). The lesson is not "smaller README" — it is "stop making the README the
-interface."
+baseline cost rose with README size (and a too-small/truncated README was *also* expensive:
+incompleteness → the agent spelunks the nupkg and the XML doc). The lesson is not "smaller
+README" — it is "stop making the README the interface."
 
 ## Step 2 — A shipped `AGENTS.md` is invisible to raw lookup (A′)
 
@@ -113,8 +121,8 @@ interface."
 
 | tier | A — README only | A′ — `AGENTS.md` present, raw lookup | outcome |
 |------|---:|---:|---|
-| Opus  | 397k / 23 tools (✓) | 633k / 26 tools (✓) | AGENTS.md **0 reads**; cost *up* |
-| Haiku | 172k / 12 tools (✓) | 239k / 14 tools (**✗ failed**) | AGENTS.md **0 reads**; task **not completed** |
+| Opus  | 78k IET (397k tEst) / 23 tools (✓) | 124k IET (633k) / 26 tools (✓) | AGENTS.md **0 reads**; cost *up* |
+| Haiku | 49k (172k) / 12 tools (✓) | 62k (239k) / 14 tools (**✗ failed**) | AGENTS.md **0 reads**; task **not completed** |
 
 The agent never opened the curated doc sitting right next to the README, and the weak tier
 actually **failed** the task (`taskCompleted=false`) while drowning in the README.
@@ -134,11 +142,11 @@ job of the MCP.
 
 | tier | A′ — shipped but undelivered | B — MCP → README | C — MCP → `AGENTS.md` |
 |------|---:|---:|---:|
-| Opus  | 633k / 26 (✓) | 118k / 8 (✓) | **104k / 7 (✓)** |
-| Haiku | 239k / 14 (**✗**) | 147k / 8 (✓) | **122k / 9 (✓)** |
+| Opus  | 124k IET (633k tEst) / 26 (✓) | 38k (118k) / 8 (✓) | **28k (105k) / 7 (✓)** |
+| Haiku | 62k (239k) / 14 (**✗**) | 40k (147k) / 8 (✓) | **39k (122k) / 9 (✓)** |
 
 Delivering the `AGENTS.md` flips the weak-tier outcome from **fail → pass** and beats serving the
-README (C < B on both tiers: Opus 104k<118k, Haiku 122k<147k). The concise pattern is legible
+README (C < B on both tiers: Opus 28k<38k, Haiku 39k<40k IET). The concise pattern is legible
 where the 488-line README is not. The selection is the upstream server's own behavior, verified
 by a direct call ([`data/markout/nuget-mcp-delivery-proof.md`](../data/markout/nuget-mcp-delivery-proof.md)):
 it returns `nuget-context://Markout/0.13.6/AGENTS.md` when the package ships `AGENTS.md`, and
@@ -147,19 +155,22 @@ falls back to `nuget-readme://.../README.md` otherwise.
 ## Step 4 — Our custom MCP, with a skill-oriented (resident-index) mode (D)
 
 > *Claim: a faithful "skills" design — a resident per-package index pushed into context for
-> free, plus one body tool — is the strongest channel. The agent self-gates correctly, and the
-> resident index is the only mechanism that catches silent, compile-clean gotchas.*
+> free, plus one body tool — is the strongest channel where it matters most (hard tasks, weak
+> models). The agent self-gates correctly, and the resident index is the only mechanism that
+> catches silent, compile-clean gotchas.*
 
 <!-- DATA: Markout D; multipackage D (resident_index) — triage + silent STJ gotcha -->
-**Markout M1, custom MCP with the resident-index gate (runs=3).** D is the cheapest channel on
-**both** tiers:
+**Markout M1, custom MCP with the resident-index gate (runs=3).** On this easy single-package
+task the two curated channels are close; D wins the weak tier outright and ties C on the strong
+tier:
 
 | tier | C — NuGet MCP → AGENTS | D — custom MCP (resident index) |
 |------|---:|---:|
-| Opus  | 104k / 7 | **91k / 8** |
-| Haiku | 122k / 9 | **106k / 8** |
+| Opus  | **28k IET (105k tEst) / 7** | 31k (91k) / 8 |
+| Haiku | 39k (122k) / 9 | **31k (106k) / 8** |
 
-On the single-package task D edges out C. Its decisive advantage shows on the **multi-package
+On the strong tier the two are within noise (Opus C 28k vs D 31k IET); on the weak tier D is
+clearly cheaper (Haiku 31k vs 39k). D's decisive advantage shows on the **multi-package
 triage** task (quantified in the matrix below), where agents triage with cheap local signals
 (csproj, compiler errors) and pull grounding for **only the load-bearing package**. A bare
 on-demand tool misses a **silent**, compile-clean case-sensitivity gotcha in a distractor (no
@@ -173,22 +184,24 @@ for the full retrieval-gate analysis.
 ## The full channel matrix
 
 <!-- DATA: consolidated A/A'/B/C/D x task x tier -->
-**Markout M1 — all five channels, runs=3 averaged** (IET = harness token estimate; ✓/✗ =
-`taskCompleted`; *save* = IET reduction vs. Channel A):
+**Markout M1 — all five channels, runs=3 averaged.** Primary = weighted IET; (`tEst`) = unweighted
+harness estimate; ✓/✗ = `taskCompleted`; *save* = weighted-IET reduction vs. Channel A:
 
-| Ch | delivery | Opus IET / tools | save | Haiku IET / tools | done |
+| Ch | delivery | Opus IET (tEst) / tools | save | Haiku IET (tEst) / tools | done |
 |----|----------|---:|---:|---:|:--:|
-| **A**  | raw pkg → README | 397k / 23 | — | 172k / 12 | ✓ |
-| **A′** | raw pkg, AGENTS present (invisible) | 633k / 26 | −59% | 239k / 14 | **✗** |
-| **B**  | real NuGet MCP → README | 118k / 8 | 70% | 147k / 8 | ✓ |
-| **C**  | real NuGet MCP → `AGENTS.md` | 104k / 7 | 74% | 122k / 9 | ✓ |
-| **D**  | custom MCP (resident index) | **91k / 8** | **77%** | **106k / 8** | ✓ |
+| **A**  | raw pkg → README | 78k (397k) / 23 | — | 49k (172k) / 12 | ✓ |
+| **A′** | raw pkg, AGENTS present (invisible) | 124k (633k) / 26 | −60% | 62k (239k) / 14 | **✗** |
+| **B**  | real NuGet MCP → README | 38k (118k) / 8 | 51% | 40k (147k) / 8 | ✓ |
+| **C**  | real NuGet MCP → `AGENTS.md` | **28k (105k) / 7** | **64%** | 39k (122k) / 9 | ✓ |
+| **D**  | custom MCP (resident index) | 31k (91k) / 8 | 60% | **31k (106k) / 8** | ✓ |
 
 Two effects compound, in order of magnitude: **(1) channel** — moving from raw filesystem lookup
-to *any* one-shot MCP retrieval is the big win (~3.4× on Opus); **(2) content** — serving the
-curated `AGENTS.md` instead of the README, and adding the resident index, refines it further and
-rescues the weak tier. Channel A′ is the cautionary cell: shipping `AGENTS.md` **without** a
-delivery channel costs more than doing nothing and still fails Haiku.
+to *any* one-shot MCP retrieval is the big win (~2× on Opus, even on weighted IET that discounts
+the baseline's cheap cache reads); **(2) content** — serving the curated `AGENTS.md` instead of
+the README, and adding the resident index, refines it further and rescues the weak tier. On the
+strong tier C and D are within noise; on the weak tier D is cheapest. Channel A′ is the cautionary
+cell: shipping `AGENTS.md` **without** a delivery channel costs more than doing nothing and still
+fails Haiku.
 
 > Multi-package triage channel data (A/B/D) is captured in
 > [`data/multipackage/`](../data/multipackage/); the qualitative resident-index advantage
@@ -199,15 +212,15 @@ delivery channel costs more than doing nothing and still fails Haiku.
 A harder task (the agent must build, localize breakage, and migrate) — so absolute costs are
 higher, but the channel ordering is identical and the resident-index gap *widens*:
 
-| Ch | delivery | Opus IET / tools | save | Haiku IET / tools | save |
+| Ch | delivery | Opus IET (tEst) / tools | save | Haiku IET (tEst) / tools | save |
 |----|----------|---:|---:|---:|---:|
-| **A** | raw pkg → README | 723k / 27 | — | 5,204k / 99 | — |
-| **B** | real NuGet MCP → README | 520k / 22 | 28% | 3,634k / 71 | 30% |
-| **D** | custom MCP (resident index) | **203k / 13** | **72%** | **1,236k / 50** | **76%** |
+| **A** | raw pkg → README | 188k (723k) / 27 | — | 939k (5,204k) / 99 | — |
+| **B** | real NuGet MCP → README | 138k (520k) / 22 | 27% | 665k (3,634k) / 71 | 29% |
+| **D** | custom MCP (resident index) | **92k (204k) / 13** | **51%** | **286k (1,236k) / 50** | **70%** |
 
-The raw-lookup baseline *thrashes* on this task (Haiku: 5.2M tokens, 99 tool calls), and the
-resident-index channel cuts that ~4×. (Channels A′/C are omitted on this task by design — see
-*Method & caveats*.)
+The raw-lookup baseline *thrashes* on this task (Haiku: 99 tool calls, 5.2M unweighted tokens —
+939k IET), and the resident-index channel cuts that ~3.3×. The harder the task, the larger the
+channel gap. (Channels A′/C are omitted on this task by design — see *Method & caveats*.)
 
 ## Recommendation & design implications for the NuGet MCP
 
@@ -229,6 +242,14 @@ resident-index channel cuts that ~4×. (Channels A′/C are omitted on this task
   [`eng/extract-channels.py`](../eng/extract-channels.py).
 - Channels A/A′/B/C are the baseline+plugin arms of the `*-realmcp` evals under two cache states;
   D is the plugin arm of the `*-custommcp` eval (`GROUNDING_GATE=resident_index`).
+- **Metric.** Primary cost is **weighted IET** = `fresh + 0.1·cacheRead + 1.25·cacheWrite +
+  5·output`, where `fresh = inputTokens − cacheReadTokens` (Copilot/OpenAI report `inputTokens`
+  as the *total* prompt, with `cacheReadTokens` a subset). It is recomputed from the raw token
+  classes in each `results.json` by [`eng/extract-channels.py`](../eng/extract-channels.py); it
+  discounts cheap prompt-cache reads so the exploration-heavy raw baseline is not over-counted.
+  Tables also cite the harness's unweighted `tokenEstimate` (`tEst` = `inputTokens + outputTokens`)
+  for traceability. Switching to weighted IET preserves every channel ordering but shrinks the
+  raw-vs-MCP multiplier (Opus ~3.4×→~2×) and tightens C-vs-D to a tie on the strong tier.
 - runs=3, judge=Haiku (quality scores used only for parity checks). Baseline arms are
   high-variance; the **robust signals** are call behavior (which doc), `taskCompleted`, and the
   cross-channel gap — not single-cell IET.

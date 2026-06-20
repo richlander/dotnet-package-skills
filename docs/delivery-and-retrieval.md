@@ -121,9 +121,11 @@ The headline metric here is **not** tokens — it is **what the agent chose to c
 `summarize → ∅`), and the per-arm distribution.
 
 It is the right metric because it is **near-binary, intentional, and low-variance**: the
-agent either retrieves or it doesn't. Input-Equivalent Tokens
-(IET = `fresh_input + 0.1·cacheRead + 1.25·cacheWrite + 5·output`) is a downstream, noisy
-proxy — on a small task, fixed overhead and cache warmup swamp the ~600-token cost of the
+agent either retrieves or it doesn't. Weighted Input-Equivalent Tokens
+(IET = `fresh + 0.1·cacheRead + 1.25·cacheWrite + 5·output`, where
+`fresh = inputTokens − cacheReadTokens`; the repo-wide primary cost metric, recomputed from the
+raw token classes by [`eng/extract-channels.py`](../eng/extract-channels.py)) is a downstream,
+noisy proxy — on a small task, fixed overhead and cache warmup swamp the ~600-token cost of the
 retrieval decision (we observed identical-config baselines swing 19k–34k IET). So we read
 **call behavior + pass/fail** on small/resident tasks, and reserve **IET** for large tasks
 where the body of the cost is real.

@@ -82,7 +82,7 @@ whose grounding competes with the package's own README: do-no-harm + ~3× token 
 the frontier, and a fail→pass correctness rescue at the weak tier;
 [README liability](docs/reports/readme-liability.md) — a README-size sweep showing a lean
 ~3.5 KB targeted doc is **size-invariant** and beats a README of any realistic size (3–74 KB)
-by **3–4×**, while README reliance is a high-variance, high-ceiling regime — so the lever is
+by **~2–3×** (weighted IET), while README reliance is a high-variance, high-ceiling regime — so the lever is
 **completeness + targeting**, not a size ratio).
 
 The grounding folder name must match the tests folder name and the skill `name` (e.g.
