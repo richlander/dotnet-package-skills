@@ -1,0 +1,4 @@
+# Harness-only metadata. The shipped artifact is AGENTS.md, whose YAML frontmatter
+# is the source of truth for name and description (used to generate SKILL.md).
+# This is a package-AGNOSTIC discovery directive, not a per-package grounding unit,
+# so it ships in no single package. `package` is intentionally omitted.

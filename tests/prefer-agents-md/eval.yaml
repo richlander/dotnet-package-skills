@@ -1,0 +1,64 @@
+config:
+  max_parallel_scenarios: 1
+
+scenarios:
+  # ---------------------------------------------------------------------------
+  # P1 — does a resident "prefer AGENTS.md over README.md" directive redirect the
+  # agent to the short, targeted package doc instead of the long README?
+  #
+  # Same task as the markout M1 scenario: render a Markdown report using a niche,
+  # non-resident source-generated serializer (Markout) whose API the model does not
+  # know. The restored package on disk ships BOTH a short AGENTS.md (~3.6 KB, targeted)
+  # and a long README.md (~18.8 KB, tutorial). A frontier baseline succeeds by mining
+  # the long README. The skill under test carries NO Markout API content — only the
+  # general discovery rule "read the package's AGENTS.md before the README". We measure
+  # whether that redirect changes WHICH doc the agent reads and the resulting token/tool
+  # cost (the size-payoff hypothesis), at do-no-harm quality parity.
+  #
+  # NOTE: requires the restored Markout 0.13.6 package to contain AGENTS.md at its root
+  # (models 0.13.6+ shipping it). See docs/reports/markout.md.
+  # ---------------------------------------------------------------------------
+
+  - name: "P1: render a report with a non-resident serializer (AGENTS.md vs README discovery)"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds scan data in plain objects. Using that library, print a GitHub-flavored
+      Markdown report to the console with:
+        - an H1 title: "Security Report"
+        - a two-column field table for the summary values: Scanned (42) and Vulnerable (2)
+        - a "## Advisories" section rendered as a table with columns Package, Severity, Cve,
+          one row per advisory
+      Produce the output through that library's serializer (do not hand-write the Markdown
+      strings). Build and run the project to confirm it prints the expected report.
+    setup:
+      files:
+        - path: SecurityReport.csproj
+          source: fixtures/report/SecurityReport.csproj
+        - path: Program.cs
+          source: fixtures/report/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "MarkoutSerializer.Serialize"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Security Report)(?=[\\s\\S]*\\| Scanned \\| 42 \\|)(?=[\\s\\S]*## Advisories)(?=[\\s\\S]*\\| Contoso\\.Data \\| Critical \\| CVE-2025-0001 \\|)"
+        command_timeout: 120
+    rubric:
+      - "Reads the package's own on-disk guidance to recover the API (AGENTS.md preferred over README.md)"
+      - "Annotates the report model(s) with [MarkoutSerializable]; List<T> renders as a table, scalars as fields"
+      - "Declares a partial MarkoutSerializerContext registering every type via [MarkoutContext(typeof(T))] and calls MarkoutSerializer.Serialize(value, Console.Out, Context.Default)"
+      - "Uses TitleProperty for the H1 and [MarkoutSection(Name = \"Advisories\")] for the section; does not hand-write Markdown"
+      - "The project builds and prints the required Markdown report"
+    timeout: 900
