@@ -1,0 +1,12 @@
+{
+  "name": "nuget-mcp",
+  "version": "0.1.0",
+  "description": "External-validity unit: registers the REAL NuGet.Mcp.Server (get_package_context) so we can compare its delivery against our controlled MCP gates on the same scenario.",
+  "skills": ["./"],
+  "mcpServers": {
+    "nuget": {
+      "command": "dnx",
+      "args": ["NuGet.Mcp.Server", "--yes"]
+    }
+  }
+}

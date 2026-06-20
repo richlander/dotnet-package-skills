@@ -1,0 +1,11 @@
+# Metadata for the MCP-delivery experiment unit (resident-API probe).
+# Ships NO AGENTS.md (no forced inline grounding). The System.Text.Json grounding
+# content is served on demand by the get_package_context MCP tool (see plugin.json +
+# ../_mcp/grounding_mcp.py). `package` is what the agent passes to resolve content.
+name: system-text-json-mcp
+package: System.Text.Json
+description: >-
+  Inert shell unit for the MCP delivery environment, resident-API scenario. Measures
+  whether a confident agent retrieves (and how much of) the System.Text.Json grounding
+  via summarize_package_context / get_package_context on a greenfield task the model
+  already knows, where the migration grounding is irrelevant. Not a content unit.

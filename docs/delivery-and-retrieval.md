@@ -20,19 +20,35 @@ behavior** across packages and model tiers. Findings:
   package" gate and a strict "call only when unsure / the version may post-date your training"
   gate produced **the same retrieval decisions** at both extremes. Model confidence dominates
   the description.
-- **Progressive disclosure (a cheap summary tool + a full-body tool) is the right shape.** It
-  mirrors how skills work (always-available frontmatter, body on demand), gives the agent a
-  cheap way to *confirm relevance before paying for the body*, and yields an observable,
-  graded retrieval signal.
+- **Agents self-gate at *package granularity*, not just per-task.** On a multi-package project
+  where only one package is load-bearing and the others are benign distractors, agents retrieve
+  grounding for **only the load-bearing package** — the compiler localizes the breakage, and
+  they don't over-pull the rest to rule them out. They triage with cheap local signals (csproj,
+  prompt, compiler errors) *before* touching the grounding tool.
+- **A progressive "summary" *tool* does NOT act as a filter — and can backfire.** We expected a
+  cheap summary tool to let agents *peek and decline* the distractors. It didn't. Opus treats it
+  as an **on-ramp** (peeks *all* packages, then pulls *all* bodies, incl. the benign one); Haiku
+  ignores it and stays myopic on the build blocker. Across every scenario **progressive never
+  beat the single tool.** The fix is *not* a summary tool — it is a **resident index** (below).
+- **The faithful skills design — a *resident* index + one body tool — is the good end.** Skills
+  work because every skill's description is **pushed into context for free** (a resident index);
+  only the body is gated. We ported that as a single `get_package_context` whose description
+  carries a free per-package manifest. For weak models this is the **only** delivery that
+  surfaces a **silent, compile-clean** gotcha the agent would otherwise miss (Haiku retrieved
+  `System.Text.Json` *only* under the resident index; under the bare tool and progressive it
+  triaged solely on the compiler error and never looked). It strictly dominates the two-tool
+  progressive.
 - **"Call behavior" is a free pre-screen.** Whether (and which) tool the agent calls predicts
-  where grounding pays — without running an expensive graded evaluation.
+  where grounding pays — without running an expensive graded evaluation. It is also far less
+  noisy than pass/fail deltas, which flip run-to-run at small n.
 
-**Design implication for the NuGet MCP:** expose grounding as **two tools** — a cheap
-`summarize_package_context` (returns the `AGENTS.md` YAML frontmatter) and a
-`get_package_context` (returns the body) — and let the model self-select. Don't try to
-engineer the perfect WHEN-TO-CALL string; expose a cheap summary and the model does the
-gating for you. Because the model only pays for the body when it pays off, auto-delivered
-grounding is **Pareto-safe**.
+**Design implication for the NuGet MCP:** expose grounding as **one `get_package_context` body
+tool**, and pair it with a **resident index** — push a one-line-per-installed-package manifest
+(the `AGENTS.md` frontmatter) into context from the known package set. **Ship `AGENTS.md` in the
+package.** Do *not* add a separate `summarize_package_context` *tool*: gating the index behind a
+call makes peeking an on-ramp (frontier models pull everything) or dead weight (weak models
+ignore it). The resident index gives costless selection + decline-by-default, and is the only
+channel that surfaces silent gotchas the compiler can't flag.
 
 ## Why measure delivery, not just content
 
@@ -69,6 +85,7 @@ package's grounding by resolving `packageName` to that unit's `AGENTS.md`. The r
 | `task_type` | 1 (`get_package_context`) | "call whenever the user asks about a package" — mimics today's NuGet MCP |
 | `uncertainty_version` | 1 (`get_package_context`) | "call when not confident of the current API for the installed version, or the version may post-date your training" |
 | `progressive` | 2 (`summarize_package_context` + `get_package_context`) | a cheap summary tool and a full-body tool; the agent decides after reading the summary |
+| `resident_index` | 1 (`get_package_context`) | the body tool's description carries a free, always-in-context manifest (one line per package, from `AGENTS.md` frontmatter); the agent reads the index for free and calls only for a relevant package — the faithful skills mechanic (§8) |
 
 The unit that attaches the server ships **no inline grounding** (an inert `SKILL.md`), so the
 content arrives *only* if the agent chooses to call a tool. Every call is logged (tool name,
@@ -87,6 +104,12 @@ The `progressive` gate ports skills' progressive disclosure to MCP:
 This is why `AGENTS.md` now carries **YAML frontmatter** (`name` + `description`): it is the
 shipped artifact, and that frontmatter *is* the cheap summary channel. The decision moves out
 of the tool description and into the agent's judgement after a cheap peek.
+
+> **We tested this hypothesis and it did not hold.** The summary channel does *not* function as
+> a selective filter — agents either pull everything after peeking (Opus) or ignore the summary
+> (Haiku). See [§4](#4-agents-self-triage-at-package-granularity-multi-package) and
+> [§5](#5-the-progressive-summary-is-an-on-ramp-not-a-filter) below. The mechanic is described
+> here because it is the design under evaluation, not because it won.
 
 ## Metric: "call behavior" as the pre-screen
 
@@ -198,25 +221,202 @@ Aggregate but clean — "taken" = full-calls > 0; "rewarded" = task-completion d
 
 The model self-gates on its own uncertainty, and the gate is correct at **both** ends.
 
+### 4. Agents self-triage at package granularity (multi-package)
+
+Poles A/B used single-package scenarios. The decisive test of whether a *summary* channel adds
+value is a **multi-package** project: a realistic solution referencing several packages where
+only one is load-bearing. We built **T1** — a `System.CommandLine` `beta4→3.x` migration
+(load-bearing: the removed API won't compile) shipped alongside `System.Text.Json` and
+`Microsoft.Extensions.AI` as **benign distractors** (referenced, but their documented gotcha is
+never exercised, so their grounding bodies are dead weight). The prompt is **symmetric** — all
+three packages are listed with target versions, with no hint that `System.CommandLine` is
+special.
+
+**Finding:** both Opus and Haiku, under both gates, retrieved grounding for
+**`System.CommandLine` only** — never the distractors. The compiler localizes the breakage to
+`System.CommandLine`, and the agent triages on that local signal *before* reaching for the
+grounding tool. **Agents self-gate at package granularity already**, using cheap local signals
+(csproj, prompt, compiler errors). The hoped-for progressive benefit — "peek all, decline the
+irrelevant ones" — never had to fire, because the agent never considered the distractors at
+all.
+
+### 5. The progressive summary is an on-ramp, not a filter
+
+To give the summary channel a real job, we built **T2b** — an *ambiguous* multi-package
+scenario where a distractor is *not* benign: a naive `System.Text.Json` deserialization
+silently mis-binds camelCase JSON into a PascalCase record (case-sensitive by default →
+silently empty), **fixable from the one-line summary alone**. Now a smart progressive agent
+*should* peek `System.Text.Json`, recognize the fix from the summary, and **decline** the full
+body. `Microsoft.Extensions.AI` remains a benign skip.
+
+**Opus, runs=3:**
+
+| Gate | Retrieval behavior |
+| --- | --- |
+| `task_type` (single tool) | pulled `System.CommandLine` ×7 full, STJ ×1 full, M.E.AI ×0 — mostly self-solved |
+| `progressive` (two tools) | **summarized all 3 AND pulled the full body for all 3** (M.E.AI 0% → ~50% of arm-runs) |
+
+The summary tool behaved as an **on-ramp, not a filter**: Opus peeked everything and then
+pulled everything — *including* the benign `Microsoft.Extensions.AI` distractor it had ignored
+under the single tool. It did **not** decline after peeking. So the second tool *increased*
+retrieval breadth rather than enabling selective decline.
+
+**Haiku, runs=3:** under **both** gates Haiku retrieved **`System.CommandLine` only** (4
+summarize + 4 get on the progressive gate; never peeked the distractors). The weak model stays
+myopic on the build blocker and ignores the summary channel entirely. So the peek-all/pull-all
+enumeration is **Opus-specific**; Haiku derives no triage benefit from the summary either.
+
+**Why it was harmless here (and why that won't generalize):** the grounding bodies are small
+(~40–60 lines), so Opus's extra pulls cost little and `taskCompletionImprovement` was 0 (Opus
+self-solves T2b regardless). With *large* bodies, peek-all/pull-all would be **actively worse**
+than the single tool — paying full-body cost for packages the agent would otherwise have
+skipped. Across M1, R1, T1, and T2b, **progressive never beat the single tool.**
+
+### 6. Validation against the real NuGet MCP server
+
+We ran T1 against the **real `NuGet.Mcp.Server`** (`dnx NuGet.Mcp.Server --yes`; 6 tools incl.
+`get_package_context(solutionDirectory, packageName, packageVersion)`) to validate the
+instrument. Three confirmations:
+
+- **Content:** `get_package_context` for `System.CommandLine` returns a `nuget-readme://…`
+  resource — the **package README**, *not* an `AGENTS.md` (these packages ship none, so the
+  server falls back to the README). The README shows the 3.x API shape but **none of the
+  curated gotcha** — i.e. the real server under-delivers exactly the silent/obscure content our
+  authoring principles target.
+- **Self-triage holds:** when Opus called it, it queried **`System.CommandLine` only** — no
+  distractor over-pull, matching §4.
+- **Under-firing on coding tasks:** Opus's `skilledPlugin` arm called the server **0 times**;
+  Haiku called it **0 times in both arms** (it used `web_fetch` + its own knowledge, and the
+  harness logged "Skill NOT activated"). The harness wiring works (Opus's isolated arm did call
+  it once), so this is genuine **call-avoidance**: the real server's **task-type gate
+  under-fires on coding tasks**, the dominant grounding use case. This is the strongest single
+  piece of feedback for the NuGet team: the gate wording targets "the user asks about a
+  package," which a coding TODO is not.
+
+### 7. Why §5 backfired: we gated the *index*, not just the body
+
+The progressive scheme was meant to *be* the skills mechanic. It isn't — and the gap explains
+the §5 failure. Skills push **every** skill's frontmatter (`name` + `description`) into context
+**up front**: an always-on, zero-cost, *resident* index. The agent reads the whole index for
+free and *acts* (activates the body) only on the relevant entry. Two properties fall out:
+
+- **Selection is a free read, not an action.** Skimming a candidate costs nothing and commits
+  to nothing.
+- **Decline is the default.** You skip a skill by simply *not acting*; skipping is free and is
+  never externalized as a decision.
+
+Our `progressive` gate exposed the summaries as a **tool** (`summarize_package_context`,
+grounding_mcp.py:223–232): the per-package descriptions are **not** in context — the agent must
+*call* a tool to see one. So we gated **both** the index *and* the body behind calls, destroying
+both properties:
+
+- **Peeking became an action.** Once Opus spends a call to summarize a package, it is already
+  "investigating" it — so it continues to `get_full`. The summary is an **on-ramp**, not a
+  glance. (Hence peek-all → pull-all.)
+- **Decline stopped being free.** You only learn a package is irrelevant *after* paying to
+  summarize it. Haiku's response is the opposite failure: it won't pay the peek toll, so it
+  ignores the channel entirely.
+
+So §5's two failure modes are **rational responses to gating the index behind a call**, not
+model error. The faithful port keeps the index **resident** and gates only the body:
+
+| Layer | Skills | Broken `progressive` MCP | Faithful port (`resident_index`) |
+| --- | --- | --- | --- |
+| Index (per-package summary) | **pushed, resident, free** | behind `summarize` tool call | **pushed, resident, free** |
+| Body | activated on demand | behind `get` tool call | behind `get_package_context` call |
+
+The MCP host already knows the installed set (csproj / lockfile), so it can push a
+one-line-per-installed-package manifest into context with **no agent action**, and expose a
+single `get_package_context` for bodies. That restores costless passive selection +
+decline-by-default + gated bodies — the real skills mechanic — *without* a summarize tool.
+
+**The spectrum collapses to two viable ends, with a broken middle:**
+
+| Design | Index | Body | Verdict |
+| --- | --- | --- | --- |
+| **All-or-nothing single tool** | none | one tool | works; agent self-triages on the package name — but only as well as its triage *signal* (the compiler), so it misses **silent** non-compiling gotchas (§8) |
+| Two-tool `progressive` | gated (tool) | gated (tool) | **broken middle** — on-ramp (Opus) / ignored (Haiku) |
+| **Resident index + body tool** (skills) | pushed, free | one tool | **best for weak models** — the manifest surfaces silent gotchas the bare tool misses (§8) |
+
+The all-or-nothing tool works because the agent self-triages on the *package name* it already
+has (§4) — but its triage is only as good as the **compiler**, so it misses gotchas that
+compile clean and fail silently. The resident-index design is the only one that surfaces those
+**without** a peek toll. §8 tests it directly.
+
+### 8. The faithful skills design: resident index + one body tool
+
+We implemented the faithful port as the `resident_index` gate: **one** `get_package_context`
+tool, with the per-package manifest (each `AGENTS.md`'s frontmatter `description`) baked into
+the tool's description — so it is always in context, free, no agent action. We re-ran **T2b**
+(`System.CommandLine` build break + `System.Text.Json` *silent* case bug + benign
+`Microsoft.Extensions.AI`) at runs=3. Call behavior (the robust signal) is decisive:
+
+| Tier · gate | SCL (build break) | STJ (**silent** bug) | M.E.AI (benign) |
+| --- | --- | --- | --- |
+| Opus · bare single tool (`task_type`) | 7 | 1 | **0** |
+| Opus · `progressive` | 6 (+6 peek) | 6 (+6 peek) | 3 (+4 peek) |
+| **Opus · `resident_index`** | 6 | 6 | **6** |
+| Haiku · bare single tool | 7 | **0** | 0 |
+| Haiku · `progressive` | 4 (+4 peek) | **0** | 0 |
+| **Haiku · `resident_index`** | 11 | **10** | **2** |
+
+Two findings, split by tier:
+
+- **Weak model (Haiku): the resident index is the win.** Under the bare tool *and* under
+  progressive, Haiku triaged only to the **compile error** (`System.CommandLine`) and **never
+  retrieved `System.Text.Json`** — so it could not have known about the silent case bug. Under
+  `resident_index` the free manifest **surfaced STJ** (SCL ×11, STJ ×10) while Haiku **declined
+  the benign M.E.AI** (×2). The resident manifest is the *only* channel that put the silent,
+  compile-clean gotcha in front of the model that needed it. Both skilled arms completed the
+  task; baseline thrashed (74 tools).
+- **Frontier model (Opus): the manifest broadens retrieval.** Opus pulled **all three** bodies
+  every run (incl. benign M.E.AI), where the *bare* tool had it triage surgically to SCL
+  (×7, STJ ×1, MEAI ×0). A confident, thorough model treats the advertised manifest as a
+  checklist and pulls everything referenced. Harmless here — small bodies, all runs complete,
+  tokens still below the noisy baseline, and Opus self-solves regardless
+  (`taskCompletionImprovement` = 0) — but **less surgical** than the bare tool.
+
+**Why call behavior, not the completion delta.** Haiku's `resident_index` arms show
+`taskCompletionImprovement` = +1 (fail→pass), but the `progressive` baseline *also* passed
+(delta 0): the Haiku baseline flips pass/fail run-to-run at n=3 (`varianceCV` 1.2–6.9). The
+completion delta is baseline-noise; the **retrieval targeting** (which packages the model
+pulled) is the stable, intentional signal — and it cleanly separates the designs.
+
+**Net.** `resident_index` **strictly dominates** the two-tool `progressive`: same-or-better
+targeting, no peek toll, none of progressive's wasted summarize round-trips. Versus the bare
+single tool it is a **wash for confident models** (slightly broader pulls) and a **clear win
+for weak models on silent bugs** (it surfaces compile-clean gotchas the compiler can't flag).
+The good end of the spectrum is the **resident index + one body tool**; the two-tool
+progressive is the broken middle.
+
 ## Implications for NuGet MCP design
 
-1. **Ship grounding as two tools (progressive disclosure), not one all-or-nothing tool.** A
-   cheap `summarize_package_context` (the `AGENTS.md` frontmatter) + a `get_package_context`
-   (the body). The summary lets a model confirm relevance before paying for the body, and caps
-   the cost of a wrong guess at the summary.
-2. **Make `AGENTS.md` self-contained with YAML frontmatter** (`name` + `description`). It is
-   the shipped artifact and the summary channel; it should not depend on harness-only metadata.
-3. **Don't engineer the WHEN-TO-CALL string.** Across permissive and strict gates the
-   retrieval decision was the same — the model gates on its own confidence. Keep the
-   description honest and mechanical; invest in the *summary*, not the gate prose.
-4. **Keep agent instructions clean.** No "use the NuGet MCP" prompt. Register the tools; the
-   model self-selects from normal tool context.
-5. **Auto-delivered grounding is Pareto-safe** *because* the model only pays for the body when
-   it pays off: declines on resident tasks (where taking it would only cost), retrieves on
+1. **Ship grounding as one `get_package_context` body tool — *not* a `summarize` + `get`
+   pair.** A separate summary *tool* gates the index behind a call, which makes peeking an
+   on-ramp (frontier models pull everything) or dead weight (weak models ignore it). It never
+   beat the single tool across M1/R1/T1/T2b.
+2. **Pair the body tool with a *resident* index — push it, don't gate it.** Push a
+   one-line-per-installed-package manifest (the `AGENTS.md` frontmatter) into context from the
+   known package set; keep the single `get_package_context` for bodies. This is the actual
+   skills mechanic. Validated in §8: it strictly dominates the two-tool progressive and is the
+   **only** delivery that surfaces a silent, compile-clean gotcha to a weak model (which
+   otherwise triages on the compiler alone and never looks at the offending package).
+3. **Make `AGENTS.md` self-contained with YAML frontmatter** (`name` + `description`). It is the
+   shipped artifact and the resident-summary channel; it should not depend on harness-only
+   metadata.
+4. **Don't engineer the WHEN-TO-CALL string.** Across permissive and strict gates the retrieval
+   decision was the same — the model gates on its own confidence and the package name. The one
+   place wording demonstrably *hurts* is the real server's **task-type** gate ("call when the
+   user asks about a package"), which **under-fires on coding tasks** (§6) — the dominant
+   grounding case. Prefer an uncertainty/version-delta framing.
+5. **Keep agent instructions clean.** No "use the NuGet MCP" prompt. Register the tool / push
+   the manifest; the model self-selects from normal context.
+6. **Auto-delivered grounding is Pareto-safe** *because* the model only pays for the body when
+   it pays off: it declines on resident tasks (where taking it would only cost) and retrieves on
    non-resident tasks (where it rescues correctness). This is the strongest argument for
    shipping `AGENTS.md` in core packages by default.
-6. **Log call behavior in production.** P(summary)/P(full) per package and per model tier is a
-   cheap, continuous read on whether a package's grounding is earning its cost.
+7. **Log call behavior in production.** P(full) per package and per model tier is a cheap,
+   continuous read on whether a package's grounding is earning its cost.
 
 ## Threats to validity
 
@@ -237,8 +437,13 @@ The model self-gates on its own uncertainty, and the gate is correct at **both**
 ```sh
 BIN=.tools/skill-validator-5d717dbdd1998cdf88e7542eef52c5517cbefdb9/skill-validator
 
+# One-time after clone: generate each MCP unit's plugin.json (absolute paths) from the
+# committed plugin.json.in templates. The harness drops cwd, so the MCP path must be absolute;
+# the generated plugin.json files are gitignored.
+./eng/gen-plugins.sh
+
 # Pick a gate, then run a scenario. The MCP attaches to the skilled arms only.
-export GROUNDING_GATE=progressive          # or task_type | uncertainty_version
+export GROUNDING_GATE=resident_index       # or task_type | uncertainty_version | progressive
 : > .tools/mcp-calls.log                    # clear the call log first
 
 # Pole A — skip justified (resident):
@@ -249,11 +454,16 @@ export GROUNDING_GATE=progressive          # or task_type | uncertainty_version
 "$BIN" evaluate --tests-dir tests --model claude-haiku-4.5 \
   --judge-model claude-opus-4.6 --runs 5 grounding/system-commandline-mcp
 
-# Read P(summary)/P(full):
+# §8 — resident index surfaces a silent gotcha to a weak model (multi-package, ambiguous):
+"$BIN" evaluate --tests-dir tests --model claude-haiku-4.5 \
+  --judge-model claude-opus-4.6 --runs 3 grounding/multi-package-ambiguous-mcp
+
+# Read which packages were pulled (the robust signal):
 cat .tools/mcp-calls.log
 ```
 
-The MCP server, the inert attach units (`grounding/system-commandline-mcp`,
-`grounding/system-text-json-mcp`) and the scenarios (`tests/system-commandline-mcp`,
-`tests/system-text-json-mcp`) carry the full setup. `.skill-validator-results/` and
-`.tools/` are gitignored; results live locally per run.
+The MCP server (`grounding/_mcp/grounding_mcp.py`), the inert attach units
+(`grounding/*-mcp/`, generated `plugin.json` from `plugin.json.in`) and the scenarios
+(`tests/*-mcp/`) carry the full setup. `.skill-validator-results/` and `.tools/` are
+gitignored; results live locally per run. Run gates **sequentially** — concurrent runs share
+`.tools/mcp-calls.log`.

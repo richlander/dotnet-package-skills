@@ -1,0 +1,14 @@
+# External-validity unit for the MCP-delivery experiment.
+# Unlike the other -mcp units (which register our controlled grounding_mcp.py), this
+# one registers the REAL upstream NuGet.Mcp.Server (run via `dnx NuGet.Mcp.Server`).
+# Its get_package_context returns the INSTALLED package's AGENTS.md if present, else
+# the README (these packages ship no AGENTS.md, so README). It is single-tool,
+# all-or-nothing, task-type gated. Used to validate that an independently-built MCP
+# reproduces the self-triage call behavior we measure with our task_type gate.
+name: nuget-mcp
+package: System.CommandLine
+description: >-
+  Inert shell unit that attaches the real NuGet MCP server to the multi-package triage
+  scenario. Measures the upstream server's actual call behavior (which packages the
+  agent queries) and the content it delivers (README vs curated grounding). Not a
+  content unit.

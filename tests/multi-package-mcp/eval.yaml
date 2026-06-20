@@ -1,0 +1,130 @@
+config:
+  max_parallel_scenarios: 1
+
+scenarios:
+  # ---------------------------------------------------------------------------
+  # T1 — MULTI-PACKAGE TRIAGE.
+  #
+  # Same load-bearing migration as M1 (system-commandline-mcp): a real beta4 CLI
+  # (vendored ZeroDaySearch) whose System.CommandLine 2.0.0-beta4 API was REMOVED
+  # before GA, so the project does not compile until migrated to 3.x — including the
+  # silent alias-vs-description trap on `new Option<bool>("--verbose","detailed")`.
+  #
+  # The difference from M1: the project now references THREE grounded packages —
+  # System.CommandLine (load-bearing) plus two DISTRACTORS, System.Text.Json and
+  # Microsoft.Extensions.AI. The distractors are real dependencies (see Diagnostics.cs)
+  # but are used only benignly: STJ serializes a PascalCase record (no case trap) and
+  # M.E.AI constructs a ChatMessage value (no IChatClient / no function-calling trap).
+  # Their grounding bodies are therefore DEAD WEIGHT for this task.
+  #
+  # The MCP serves grounding for all three packages by name. The prompt lists all four
+  # dependencies SYMMETRICALLY (target versions only, no hint that System.CommandLine is
+  # special) so the agent faces genuine triage uncertainty: it must discover from the
+  # build errors that only System.CommandLine has breaking API changes, and decide which
+  # packages' grounding is worth retrieving. This scenario measures whether the tool
+  # SHAPE changes retrieval cost:
+  #   * single-tool gate (task_type / uncertainty_version): the only way to inspect a
+  #     package's guidance is to pull its FULL body — so ruling out a distractor costs
+  #     a full retrieval.
+  #   * progressive gate: a cheap summarize_package_context lets the agent peek each
+  #     distractor's one-line summary and DECLINE its body, pulling the full body only
+  #     for System.CommandLine.
+  # The win condition is fewer full-body pulls (and fewer delivered retrieval tokens)
+  # under progressive at equal task quality — mini-RAG triage. Call behavior (which
+  # packages got summarized vs fully pulled) is the primary signal; IET is secondary.
+  # ---------------------------------------------------------------------------
+
+  - name: "T1: modernize a multi-package CLI (the agent must triage which package needs deep guidance)"
+    prompt: |
+      This project (ZeroDaySearch) is a .NET 10 console app that currently does NOT
+      build. It references several NuGet packages, and we want it brought up to date
+      and compiling cleanly.
+
+      Update the project to these package versions and make it build and behave
+      correctly:
+        - System.CommandLine        -> 3.0.0-preview.5.26302.115
+        - System.Text.Json          -> 10.0.0
+        - Microsoft.Extensions.AI   -> 9.7.0
+        - Newtonsoft.Json           -> 13.0.4
+
+      Make whatever source changes are required for the project to compile against
+      those versions while preserving all existing behavior: every command (list,
+      search, severity, product, platform, date, summary), their options and
+      arguments, and their option/argument help descriptions. The project must compile.
+    setup:
+      files:
+        - path: ZeroDaySearch.csproj
+          source: fixtures/zeroday/ZeroDaySearch.csproj
+        - path: Program.cs
+          source: fixtures/zeroday/Program.cs
+        - path: CveDataSource.cs
+          source: fixtures/zeroday/CveDataSource.cs
+        - path: CveFormatter.cs
+          source: fixtures/zeroday/CveFormatter.cs
+        - path: Models.cs
+          source: fixtures/zeroday/Models.cs
+        - path: Diagnostics.cs
+          source: fixtures/zeroday/Diagnostics.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "ZeroDaySearch.csproj"
+        value: "3.0.0-preview"
+      - type: file_not_contains
+        path: "Program.cs"
+        value: "SetHandler"
+      - type: file_not_contains
+        path: "Program.cs"
+        value: "AddOption"
+      - type: file_not_contains
+        path: "Program.cs"
+        value: "getDefaultValue"
+      # Behavior gates (deterministic, network-free): prove the migration preserved
+      # every command and its arguments/options and the parser semantics.
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*search <keyword>)(?=[\\s\\S]*severity <level>)(?=[\\s\\S]*product <name>)(?=[\\s\\S]*platform <name>)(?=[\\s\\S]*\\n  list )(?=[\\s\\S]*\\n  date )(?=[\\s\\S]*\\n  summary )"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- date --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*--from)(?=[\\s\\S]*--to)"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- severity"
+        expected_exit_code: 1
+        expected_std_error_contains: "Required argument 'level' missing"
+        command_timeout: 120
+      # Silent-break gate (the real discriminator): the beta4 source declares
+      #   new Option<bool>("--verbose", "detailed")
+      # where the 2nd positional arg is a DESCRIPTION. In 3.x the 2nd positional ctor
+      # arg is an ALIAS, so a naive migration compiles but silently registers "detailed"
+      # as a bogus alias and DROPS the description. Only the documented alias-vs-description
+      # gotcha (System.CommandLine grounding) recovers it.
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- list --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "--verbose[ \\t]+detailed"
+        command_timeout: 120
+    rubric:
+      - "Bumps System.CommandLine to 3.x in the .csproj"
+      - "Replaces Handler.SetHandler with command.SetAction reading values via ParseResult.GetValue"
+      - "Replaces AddOption/AddArgument/AddCommand with Options.Add/Arguments.Add/Subcommands.Add"
+      - "Replaces getDefaultValue: with DefaultValueFactory and updates the option/argument constructors"
+      - "Replaces rootCommand.InvokeAsync(args) with rootCommand.Parse(args).Invoke() or InvokeAsync()"
+      - "All seven commands and their options/arguments are preserved; the project compiles"
+      - "Preserves the --verbose option's description instead of letting the 2nd positional ctor arg become a bogus alias (the alias-vs-description gotcha)"
+      - "Does NOT introduce unnecessary changes to the System.Text.Json or Microsoft.Extensions.AI code, which already work"
+    timeout: 900

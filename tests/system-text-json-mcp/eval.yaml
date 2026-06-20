@@ -1,0 +1,77 @@
+config:
+  max_parallel_scenarios: 1
+
+scenarios:
+  # ---------------------------------------------------------------------------
+  # R1 (resident-API probe) — greenfield System.Text.Json serialize/roundtrip.
+  #
+  # PURPOSE: the INVERSE of the SCL M1 version-delta test. This task uses only the
+  # long-stable, model-RESIDENT core of System.Text.Json (JsonSerializer.Serialize /
+  # Deserialize with DEFAULT options) on a current, in-training-window version
+  # (net9.0 + System.Text.Json 9.0.0). A web-blocked frontier baseline already gets
+  # this right with no help.
+  #
+  # The unit ships NO inline grounding; it only ATTACHES the package-grounding MCP
+  # (plugin.json). The System.Text.Json grounding that the MCP would serve is about
+  # Newtonsoft -> STJ MIGRATION and the camelCase/PascalCase case-INSENSITIVITY gotcha
+  # — both IRRELEVANT here: this is greenfield (no Newtonsoft) and uses default options
+  # with PascalCase keys on both write and read, so the case gotcha cannot bite.
+  #
+  # WHAT WE MEASURE (not quality lift — quality is at parity): the retrieval decision.
+  #   - task_type gate           -> expected to OVER-fire (calls get_package_context,
+  #                                 pays the token tax for nothing).
+  #   - uncertainty_version gate -> expected to stay QUIET (confident, resident API,
+  #                                 version within training).
+  #   - progressive gate         -> expected: maybe summarize_package_context (cheap),
+  #                                 then DECLINE get_package_context (the mini-RAG win).
+  # P(summary)/P(full) come from .tools/mcp-calls.log (per-tool); IET should be at
+  # parity with baseline (nothing to cut). A confident model should not be taxed.
+  # ---------------------------------------------------------------------------
+
+  - name: "R1: greenfield System.Text.Json serialize + roundtrip (resident)"
+    prompt: |
+      Implement the TODO in Program.cs. Using System.Text.Json with default options
+      (do NOT configure a custom naming policy or case-insensitive matching), serialize
+      the `products` list to an indented file named `products.json`, then read that file
+      back, deserialize it into a `List<Product>`, and print one line per product in the
+      exact form:
+        Name: <Name>, Price: <Price>, InStock: <InStock>
+      The project must build and run.
+    setup:
+      files:
+        - path: Catalog.csproj
+          source: fixtures/products/Catalog.csproj
+        - path: Program.cs
+          source: fixtures/products/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*Name: Widget, Price: 9.99, InStock: True)(?=[\\s\\S]*Name: Gadget, Price: 19.95, InStock: False)(?=[\\s\\S]*Name: Gizmo, Price: 4.50, InStock: True)"
+        command_timeout: 120
+      # Default options => PascalCase JSON keys. Confirms no naming policy was set
+      # (which is what keeps the case-insensitivity gotcha out of scope here).
+      - type: file_contains
+        path: "products.json"
+        value: "\"Name\""
+      - type: file_contains
+        path: "products.json"
+        value: "\"InStock\""
+      - type: file_not_contains
+        path: "products.json"
+        value: "\"name\""
+    rubric:
+      - "Serializes the products to products.json using System.Text.Json with default options (no custom naming policy)"
+      - "Reads products.json back and deserializes into List<Product>"
+      - "Prints each product as 'Name: <Name>, Price: <Price>, InStock: <InStock>'"
+      - "The project builds and runs"
+    timeout: 600

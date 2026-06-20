@@ -1,0 +1,12 @@
+{
+  "name": "dotnet-package-grounding-mcp-stj",
+  "version": "0.1.0",
+  "description": "MCP delivery environment for package grounding (resident-API probe): registers the get_package_context server so the agent self-selects retrieval.",
+  "skills": ["./"],
+  "mcpServers": {
+    "package-grounding": {
+      "command": "python3",
+      "args": ["__REPO_ROOT__/grounding/_mcp/grounding_mcp.py"]
+    }
+  }
+}

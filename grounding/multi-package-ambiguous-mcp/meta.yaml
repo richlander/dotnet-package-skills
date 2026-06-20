@@ -1,0 +1,23 @@
+# Metadata for the MCP-delivery experiment unit (ambiguous multi-package scenario, T2b).
+# Like the other -mcp units it ships NO AGENTS.md: it registers the get_package_context
+# MCP server (plugin.json + ../_mcp/grounding_mcp.py), which serves grounding for ALL
+# packages in the index by name.
+#
+# This scenario references THREE grounded packages that each need a DIFFERENT retrieval
+# depth:
+#   * System.CommandLine     -> needs the FULL body (loud beta4->3.x migration map).
+#   * System.Text.Json       -> needs only the SUMMARY (a silent case-sensitivity break
+#                               on deserialize; the one-line frontmatter summary already
+#                               states the rule + the PropertyNameCaseInsensitive fix).
+#   * Microsoft.Extensions.AI -> needs NOTHING (benign use; pure skip distractor).
+# It measures whether the tool SHAPE lets the agent RIGHT-SIZE retrieval depth: a
+# single-tool gate can only return full bodies (so checking STJ costs a full pull),
+# whereas the progressive gate can serve STJ's fix from the cheap summary and skip
+# M.E.AI entirely. Not a content unit.
+name: multi-package-ambiguous-mcp
+package: System.CommandLine
+description: >-
+  Inert shell unit for the MCP delivery environment (ambiguous multi-package triage).
+  Measures whether single-tool vs progressive (summary + full) retrieval lets an agent
+  match retrieval depth to need across three packages: full body, summary-only, and
+  skip. Not a content unit.

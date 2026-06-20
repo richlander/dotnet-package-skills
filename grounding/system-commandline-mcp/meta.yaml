@@ -1,0 +1,11 @@
+# Metadata for the MCP-delivery experiment unit.
+# Unlike the other units, this one ships NO AGENTS.md (no forced inline grounding).
+# The same System.CommandLine grounding content is served on demand by the
+# get_package_context MCP tool (see plugin.json + ../_mcp/grounding_mcp.py).
+name: system-commandline-mcp
+package: System.CommandLine
+description: >-
+  Inert shell unit for the MCP delivery environment. Measures whether an agent
+  retrieves System.CommandLine grounding via the get_package_context tool, and how
+  the tool's WHEN-TO-CALL description (the retrieval gate) affects call rate,
+  quality, and cost. Not a content unit.
