@@ -65,7 +65,9 @@ under [docs/reports/](docs/reports/)
 of topics; [System.Text.Json](docs/reports/system-text-json.md) — does not need general
 grounding; [Microsoft.Extensions.AI](docs/reports/microsoft-extensions-ai.md) — grounding need
 is **model-relative**: its headline gotcha is resident for Opus 4.6 (−1.0%) but a +63.3%
-rescue for Haiku 4.5).
+rescue for Haiku 4.5; [Markout](docs/reports/markout.md) — a genuinely non-resident package
+whose grounding competes with the package's own README: do-no-harm + ~3× token efficiency at
+the frontier, and a fail→pass correctness rescue at the weak tier).
 
 The grounding folder name must match the tests folder name and the skill `name` (e.g.
 `system-commandline`); the
