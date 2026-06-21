@@ -137,6 +137,13 @@ estimate, shown for traceability); full tables, method, and caveats are in
    and looks right but behaves wrong). That is the general shape of grounding's value: the model carries
    the bulk; grounding carries the **footguns the model can't recover by compiling**.
 
+   This shapes *who* writes grounding and *how*. Because the payload is the non-obvious delta, you
+   can't auto-generate it from the public API surface — it's a combination of **expert view** (a
+   maintainer's judgment of what actually trips people up) and **hard-won experience** (the silent
+   gotchas surfaced by real bug reports and migrations). The role of our harness is to **keep that
+   instinct honest** — measuring each candidate fact so only the lines that change agent behavior
+   ship, and the merely-nice-to-know ones don't.
+
 2. **The clean mechanism, isolated.** On the controlled Markout probe we can run all five delivery
    channels (same task, same content, varying only delivery). runs=3:
 
