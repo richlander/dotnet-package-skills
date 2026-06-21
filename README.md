@@ -144,6 +144,18 @@ estimate, shown for traceability); full tables, method, and caveats are in
    instinct honest** — measuring each candidate fact so only the lines that change agent behavior
    ship, and the merely-nice-to-know ones don't.
 
+   There is a **circularity** to watch for when *generating* grounding. You can't use Opus 4.8 to
+   author `AGENTS.md` *for* Opus 4.8 — if Opus can produce the fact on request, it already knows it,
+   so the act of writing it down only proves it's redundant. The productive direction is
+   **asymmetric**: use the strong model to author grounding for the *weaker* ones (Sonnet, and
+   especially Haiku). That is essentially **distillation** — the frontier model's resident knowledge
+   becomes the weak model's shipped context — and it almost certainly helps the tier that needs it.
+   The constraint is the other half of the asymmetry: **don't harm the strong tier in the process.**
+   Opus tokens are far more expensive, so grounding that bloats or misleads the frontier to rescue
+   the weak tier is a bad trade. Help the weak, no harm to the strong — the
+   [Pareto gate](#grounding-vs-skills-our-policy), and the asymmetry, restated as a generation
+   recipe.
+
 2. **The clean mechanism, isolated.** On the controlled Markout probe we can run all five delivery
    channels (same task, same content, varying only delivery). runs=3:
 
