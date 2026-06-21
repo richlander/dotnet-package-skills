@@ -11,26 +11,40 @@ that ships *inside the package* (the `<PackageReadmeFile>` the NuGet MCP and nug
 - **Microsoft-owned** — id prefix `System.` / `Microsoft.` / `Azure.`
 - **Community** — everything else
 
-Download ranks come from the NuGet search service (empty query is download-ordered); sizes are read
-with [`dotnet-inspect`](https://github.com/richlander/dotnet-inspect) (`package <id> --readme`, byte
-length), which resolves the *declared* readme regardless of filename. Latest stable, 2026-06-20.
-Stratifying avoids the bias of a hand-picked list — a flat "top 40" is dominated by Microsoft infra
-packages and hides the community distribution. Raw data:
+Download ranks come from the NuGet search service (empty query is download-ordered); the declared
+readme's name and byte size are read in one shot with
+[`dotnet-inspect`](https://github.com/richlander/dotnet-inspect) —
+`package <id> --path @readme --json` emits `{path, size, is_readme}`, resolving the *declared*
+readme regardless of filename ([added in dotnet-inspect #891](https://github.com/richlander/dotnet-inspect/pull/891)).
+Latest stable, 2026-06-20. Stratifying avoids the bias of a hand-picked list — a flat "top 40" is
+dominated by Microsoft infra packages and hides the community distribution. Raw data
+(`package`, `readme_file`, `size`, `is_readme`):
 [`data/readme-survey-microsoft.tsv`](../../data/readme-survey-microsoft.tsv),
 [`data/readme-survey-community.tsv`](../../data/readme-survey-community.tsv).
 
-> **Naming gotcha (worth knowing on its own).** The in-package readme is *not* always `README.md`.
-> The .NET runtime packages use **`PACKAGE.md`** (System.Text.Json, EF Core); Polly uses
-> **`package-readme.md`**. The displayed readme is whatever the `.nuspec` `<readme>` element points
-> at. A survey that greps for `README.md` undercounts; resolve the *declared* readme instead.
+> **Naming gotcha (worth knowing on its own).** The in-package readme is *not* always `README.md` —
+> it is whatever the `.nuspec` `<readme>` element points at. Across the 57 surveyed packages that
+> ship one, **only 48 (84%) use `README.md` or `PACKAGE.md`**; the other **9 (~16%) deviate**:
+>
+> - **`PACKAGE.md`** (18 pkgs) — the .NET runtime / `System.*` convention (System.Text.Json, EF Core).
+> - **`package-readme.md`** (Polly, the Swashbuckle sub-packages).
+> - **lowercase `readme.md`** (Moq, Dapper) — bites case-sensitive filesystems and `==` checks.
+> - **subdirectory paths** — `docs/package-readme.md` (Swashbuckle.AspNetCore),
+>   `_content/README.md` (xunit). A root-only or `README.md`-literal scan misses these entirely:
+>   our earlier `--readme`-based pass counted Swashbuckle.AspNetCore as *no readme*; resolving the
+>   declared path found its `docs/package-readme.md`.
+> - **a non-readme-named file** — coverlet.collector declares `VSTestIntegration.md` as its readme.
+>
+> A survey (or an agent) that greps for `README.md` undercounts and mispaths; resolve the *declared*
+> readme (`--path @readme`) instead.
 
 ## Findings
 
 | | Microsoft-owned (top 40) | Community (top 40) |
 |---|---|---|
-| Ship an in-package README | 29 / 39 | 27 / 39 |
-| Ship **none** | 10 | 12 |
-| Median size (of those that ship one) | **5.1 kB** | **4.0 kB** |
+| Ship an in-package README | 29 / 39 | 28 / 39 |
+| Ship **none** | 10 | 11 |
+| Median size (of those that ship one) | **5.1 kB** | **3.9 kB** |
 | Over 10 kB | 6 | 4 |
 | Largest | Azure.Identity **25.9 kB** | OpenTelemetry.Api **25.4 kB** |
 
@@ -171,9 +185,9 @@ Ratio = README bytes ÷ a 3.5 kB (3584 B) targeted `AGENTS.md`.
 | Swashbuckle.AspNetCore.SwaggerUI | 1.2 | 0.3× |
 | Swashbuckle.AspNetCore.SwaggerGen | 1.2 | 0.3× |
 | Swashbuckle.AspNetCore.Swagger | 1.2 | 0.3× |
+| Swashbuckle.AspNetCore | 1.2 | 0.3× |
 | StackExchange.Redis | 0.6 | 0.2× |
 | Grpc.Core.Api | 0.1 | 0.0× |
-| Swashbuckle.AspNetCore | none | — |
 | runtime.win-x86.runtime.native.System.Data.SqlClient.sni | none | — |
 | runtime.win-x64.runtime.native.System.Data.SqlClient.sni | none | — |
 | runtime.win-arm64.runtime.native.System.Data.SqlClient.sni | none | — |

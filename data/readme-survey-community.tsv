@@ -1,40 +1,40 @@
-package	readme_bytes
-Newtonsoft.Json	1964
-Serilog	7965
-AWSSDK.Core	0
-Castle.Core	0
-Polly	1266
-Swashbuckle.AspNetCore.SwaggerGen	1222
-Swashbuckle.AspNetCore.Swagger	1222
-Newtonsoft.Json.Bson	0
-Google.Protobuf	0
-Swashbuckle.AspNetCore.SwaggerUI	1222
-Moq	7970
-Swashbuckle.AspNetCore	0
-Serilog.Sinks.File	8490
-AutoMapper	3907
-Serilog.Sinks.Console	7762
-StackExchange.Redis	629
-Grpc.Core.Api	115
-Serilog.Extensions.Logging	9322
-Humanizer.Core	0
-FluentValidation	2001
-xunit	5082
-coverlet.collector	12402
-Serilog.Settings.Configuration	19917
-Serilog.Formatting.Compact	7628
-Npgsql	2100
-Pipelines.Sockets.Unofficial	1450
-Grpc.Net.Common	0
-Serilog.Extensions.Hosting	4064
-Grpc.Net.Client	6821
-Serilog.AspNetCore	12456
-FluentAssertions	0
-runtime.win-x86.runtime.native.System.Data.SqlClient.sni	0
-runtime.win-x64.runtime.native.System.Data.SqlClient.sni	0
-runtime.win-arm64.runtime.native.System.Data.SqlClient.sni	0
-Dapper	1341
-OpenTelemetry.Api	26019
-Serilog.Sinks.Debug	2725
-NUnit	5874
-CsvHelper	0
+package	readme_file	size	is_readme
+Newtonsoft.Json	README.md	1963	true
+Serilog	README.md	7964	true
+AWSSDK.Core	(none)	0	false
+Castle.Core	(none)	0	false
+Polly	package-readme.md	1265	true
+Swashbuckle.AspNetCore.SwaggerGen	package-readme.md	1221	true
+Swashbuckle.AspNetCore.Swagger	package-readme.md	1221	true
+Newtonsoft.Json.Bson	(none)	0	false
+Google.Protobuf	(none)	0	false
+Swashbuckle.AspNetCore.SwaggerUI	package-readme.md	1221	true
+Moq	readme.md	7969	true
+Swashbuckle.AspNetCore	docs/package-readme.md	1221	true
+Serilog.Sinks.File	README.md	8489	true
+AutoMapper	README.md	3906	true
+Serilog.Sinks.Console	README.md	7761	true
+StackExchange.Redis	README.md	628	true
+Grpc.Core.Api	README.md	114	true
+Serilog.Extensions.Logging	README.md	9321	true
+Humanizer.Core	(none)	0	false
+FluentValidation	README.md	2000	true
+xunit	_content/README.md	5081	true
+coverlet.collector	VSTestIntegration.md	12401	true
+Serilog.Settings.Configuration	README.md	19916	true
+Serilog.Formatting.Compact	README.md	7627	true
+Npgsql	README.md	2099	true
+Pipelines.Sockets.Unofficial	README.md	1449	true
+Grpc.Net.Common	(none)	0	false
+Serilog.Extensions.Hosting	README.md	4063	true
+Grpc.Net.Client	README.md	6820	true
+Serilog.AspNetCore	README.md	12455	true
+FluentAssertions	(none)	0	false
+runtime.win-x86.runtime.native.System.Data.SqlClient.sni	(none)	0	false
+runtime.win-x64.runtime.native.System.Data.SqlClient.sni	(none)	0	false
+runtime.win-arm64.runtime.native.System.Data.SqlClient.sni	(none)	0	false
+Dapper	readme.md	1340	true
+OpenTelemetry.Api	README.md	26021	true
+Serilog.Sinks.Debug	README.md	2724	true
+NUnit	README.md	5873	true
+CsvHelper	(none)	0	false

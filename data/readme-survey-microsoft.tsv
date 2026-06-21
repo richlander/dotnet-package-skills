@@ -1,40 +1,40 @@
-package	readme_bytes
-Microsoft.Extensions.DependencyInjection	2306
-Microsoft.Extensions.Logging	5690
-System.Text.Json	8583
-Microsoft.Bcl.AsyncInterfaces	2329
-Azure.Core	14198
-System.Drawing.Common	2528
-Microsoft.IdentityModel.Abstractions	6351
-Microsoft.Identity.Client	7965
-Microsoft.Win32.SystemEvents	3165
-Microsoft.Extensions.Http	4569
-System.Diagnostics.EventLog	4922
-Microsoft.EntityFrameworkCore	3567
-System.Windows.Extensions	3024
-System.Security.Cryptography.Pkcs	0
-Azure.Identity	26564
-System.Memory.Data	3308
-Microsoft.Identity.Client.Extensions.Msal	7965
-System.Threading.Channels	2193
-Microsoft.OpenApi	6585
-Microsoft.Extensions.Diagnostics.Abstractions	0
-Microsoft.Data.SqlClient	9595
-Microsoft.Extensions.Hosting	2777
-System.Formats.Asn1	5251
-System.Runtime.Caching	2325
-System.CodeDom	4557
-Microsoft.ApplicationInsights	0
-System.Diagnostics.PerformanceCounter	10418
-Microsoft.Extensions.Logging.EventLog	0
-Azure.Storage.Blobs	14283
-Microsoft.Data.SqlClient.SNI.runtime	0
-Microsoft.Extensions.ApiDescription.Server	0
-Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions	0
-Microsoft.Extensions.Diagnostics.HealthChecks	0
-System.ClientModel	19932
-Microsoft.NET.Sdk.Aspire.Manifest-8.0.100	0
-Microsoft.Extensions.Diagnostics	0
-Azure.Security.KeyVault.Secrets	16705
-Microsoft.AspNetCore.Mvc.NewtonsoftJson	3405
-Azure.Storage.Common	6879
+package	readme_file	size	is_readme
+Microsoft.Extensions.DependencyInjection	PACKAGE.md	2305	true
+Microsoft.Extensions.Logging	PACKAGE.md	5689	true
+System.Text.Json	PACKAGE.md	8582	true
+Microsoft.Bcl.AsyncInterfaces	PACKAGE.md	2328	true
+Azure.Core	README.md	14197	true
+System.Drawing.Common	PACKAGE.md	2527	true
+Microsoft.IdentityModel.Abstractions	README.md	6350	true
+Microsoft.Identity.Client	README.md	7964	true
+Microsoft.Win32.SystemEvents	PACKAGE.md	3164	true
+Microsoft.Extensions.Http	PACKAGE.md	4568	true
+System.Diagnostics.EventLog	PACKAGE.md	4921	true
+Microsoft.EntityFrameworkCore	PACKAGE.md	3566	true
+System.Windows.Extensions	PACKAGE.md	3023	true
+System.Security.Cryptography.Pkcs	(none)	0	false
+Azure.Identity	README.md	26563	true
+System.Memory.Data	PACKAGE.md	3307	true
+Microsoft.Identity.Client.Extensions.Msal	README.md	7964	true
+System.Threading.Channels	PACKAGE.md	2192	true
+Microsoft.OpenApi	README.md	6584	true
+Microsoft.Extensions.Diagnostics.Abstractions	(none)	0	false
+Microsoft.Data.SqlClient	README.md	9594	true
+Microsoft.Extensions.Hosting	PACKAGE.md	2776	true
+System.Formats.Asn1	PACKAGE.md	5250	true
+System.Runtime.Caching	PACKAGE.md	2324	true
+System.CodeDom	PACKAGE.md	4556	true
+Microsoft.ApplicationInsights	(none)	0	false
+System.Diagnostics.PerformanceCounter	PACKAGE.md	10417	true
+Microsoft.Extensions.Logging.EventLog	(none)	0	false
+Azure.Storage.Blobs	README.md	14282	true
+Microsoft.Data.SqlClient.SNI.runtime	(none)	0	false
+Microsoft.Extensions.ApiDescription.Server	(none)	0	false
+Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions	(none)	0	false
+Microsoft.Extensions.Diagnostics.HealthChecks	(none)	0	false
+System.ClientModel	README.md	19931	true
+Microsoft.NET.Sdk.Aspire.Manifest-8.0.100	(none)	0	false
+Microsoft.Extensions.Diagnostics	(none)	0	false
+Azure.Security.KeyVault.Secrets	README.md	16704	true
+Microsoft.AspNetCore.Mvc.NewtonsoftJson	PACKAGE.md	3404	true
+Azure.Storage.Common	README.md	6878	true
