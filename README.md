@@ -8,9 +8,10 @@ Use it two ways:
 
 - **As a how-to.** Practical instruction for authoring package grounding — what to write, what to
   leave out, and how to validate it — grounded in worked examples for real packages.
-- **As a record of our approach.** How we think about **context injection and management** for AI
-  agents: which delivery channel surfaces grounding, how agents retrieve it, when it helps versus
-  hurts, and the evidence behind each call.
+- **As a record of our approach.** These patterns form our approach to **context engineering** —
+  which we mean concretely as *what to add to an agent's context, and how to limit it*: which
+  delivery channel surfaces grounding, how agents retrieve it, when it helps versus hurts, and the
+  evidence behind each call.
 
 It reuses the [`dotnet/skills`](https://github.com/dotnet/skills) **skill-validator** harness to
 run a **baseline vs enriched** evaluation: the agent attempts each task once *without* the
