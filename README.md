@@ -127,6 +127,16 @@ estimate, shown for traceability); full tables, method, and caveats are in
    calls — and the resident-index channel is also the **only** one that surfaces silent, compile-clean
    gotchas the agent wouldn't know to ask for.
 
+   *Is this a one-off, or repeatable?* Repeatable — because of **where the value sits**. We measured
+   five scenario shapes for System.CommandLine ([report](docs/reports/system-commandline.md)) and the
+   pattern was consistent: general API shape, greenfield authoring, idiomatic usage, and the
+   command-line-parser domain itself are **already in the model** — grounding moves the needle −2% to
+   +1% there (i.e. not at all). The signal concentrates almost entirely in the **non-resident delta**:
+   version-specific breakages and *silent* gotchas (the canonical one being the `Option<T>` constructor
+   whose second argument flipped from *description* to *alias* between beta and GA — code that compiles
+   and looks right but behaves wrong). That is the general shape of grounding's value: the model carries
+   the bulk; grounding carries the **footguns the model can't recover by compiling**.
+
 2. **The clean mechanism, isolated.** On the controlled Markout probe we can run all five delivery
    channels (same task, same content, varying only delivery). runs=3:
 
