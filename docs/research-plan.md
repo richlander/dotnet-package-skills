@@ -33,7 +33,8 @@ demand**.
   survey + composition spot check. Data in `data/readme-survey-*.tsv`.
 - **dotnet-inspect tooling landed** (used for efficient research): file sizes + `--path` (#875/#882),
   `--path @readme` + numeric `size` + `is_readme` (#889/#891), multi-package args (#898/#930),
-  empty-row preservation for multi-package row modes (#946/#949).
+  empty-row preservation for multi-package row modes (#946/#949). **Open asks filed**: `@agents`
+  presence (#951), file-content print with separator (#952), frontmatter/body scoping (#953).
 
 ## The core limitation: evidence is shallow, and the method risks overfitting
 
@@ -45,26 +46,40 @@ same prompts we report on**. That is hypothesis-generating, not confirming. Fixi
 
 ## Workstream A — dotnet-inspect research tooling
 
-Landed (above). Remaining asks (file as issues on `richlander/dotnet-inspect`):
+Landed (above). Remaining asks — **filed**:
 
-1. **Report `AGENTS.md` presence** alongside the README row — a `@agents` path token mirroring
-   `@readme`, plus an `is_agents` marker. Lets the survey answer "does this package already ship
-   grounding."
-2. **Streaming multi-file content print** — query a package and print the contents of requested
-   markdown files, with a machine-splittable separator, e.g. `------------AGENTS.md------------`.
-   Enables bulk research (read AGENTS.md + README across N packages in one call). Consider also
-   exposing the same via `--jsonl` (content as a field) for robust parsing.
-3. **Limit / scope printing** — first-N-lines (note: `--head` already exists) and
-   **frontmatter / yaml-header-only**. The frontmatter is especially valuable: it *is* the resident
-   layer, so a header-only mode measures resident-index cost directly across a project's direct deps.
+1. **#951** — report `AGENTS.md` presence: a `@agents` path token mirroring `@readme`, plus an
+   `is_agents` marker. Lets the survey answer "does this package already ship grounding."
+2. **#952** — streaming multi-file content print with a machine-splittable separator
+   (`------------ <pkg> :: <path> ------------`), and a `--jsonl` `{package,path,content}` alternative.
+   Enables bulk research (read `AGENTS.md` + README across N packages in one call).
+3. **#953** — scoped markdown output: `--frontmatter`/`--yaml-header` and `--body` (first-N already via
+   `--head`). The frontmatter *is* the resident layer, so header-only measures resident-index cost
+   directly across a project's direct deps.
 
 Expect to discover more gaps as the corpus grows; treat tooling as an ongoing enabler, not a phase.
 
 ## Workstream B — prompt corpus (the believability gap)
 
-Target **≥ 12 work prompts per package**, authored from real-world sources (GitHub issues, Stack
-Overflow, release notes) — *not* synthetically, and respecting the circularity caveat: do not let one
-model author the gotcha, the test, and the answer.
+**Due-diligence minimum (agreed scope): 12 packages × 12 prompts each = 144 prompts.** Authored from
+real-world sources (GitHub issues, Stack Overflow, release notes) — *not* synthetically, and
+respecting the circularity caveat: do not let one model author the gotcha, the test, and the answer.
+
+**Package slate (12)** — three deliberate ingredients:
+
+- **Out-of-training anchors (2)** — `markout` and `NuGetFetch` (both author-controlled, *not* in any
+  model's training data). These are the cleanest possible test: any competence must come from the
+  grounding, not residency. They bound the "pure net-new value" end of the spectrum.
+- **Sibling cluster in `Microsoft.Extensions.*` (5)** — `Microsoft.Extensions.AI`,
+  `.DependencyInjection`, `.Logging`, `.Hosting`, `.Configuration`. These co-occur constantly as
+  direct dependencies, so they specifically test **how sibling `AGENTS.md` descriptions merge in the
+  resident index** — the multi-dependency projection behavior, not just single-package value.
+- **Worked examples + community diversity (5)** — `System.Text.Json`, `System.CommandLine` (existing
+  worked gotchas), plus `Polly` (v8 redesign), `Microsoft.EntityFrameworkCore`, and `Serilog`
+  (top-downloaded, real version-delta gotchas).
+
+*(Slate is a strong default, adjustable — the constraints are: include markout + NuGetFetch, and a
+`Microsoft.Extensions.*` sibling cluster for the merge demonstration.)*
 
 **Split into a dev set (tune metric/thresholds/descriptions) and a held-out test set (the reported
 numbers).** This is the single most important change for credibility.
@@ -101,10 +116,14 @@ and fixtures. Today the harness (`eng/run-channel-matrix.sh`) is hardcoded per t
 
 Cross-cutting requirements:
 
-- **Model coverage** Haiku / Sonnet / Opus — required to demonstrate the distillation/Pareto story
-  (value on weak models, no harm on Opus).
-- **Cost budget & sampling** — a dozen prompts × 5 packages × 3 models × ~5 channels × N runs is
-  large and Opus-expensive; pick a sampling/stratification strategy up front.
+- **Model spectrum (agreed): 5 models, two providers.** Three from one provider to form a
+  capability spectrum — **Anthropic Haiku / Sonnet / Opus** — plus two from another provider —
+  **OpenAI GPT-5.5 and a GPT mini** (e.g. GPT-5 mini). The within-provider spectrum demonstrates the
+  distillation/Pareto story (value on weak models, no harm on Opus); the second provider guards
+  against single-provider overfit and tests whether grounding generalizes across model families.
+- **Cost budget & sampling** — the full grid is 12 packages × 12 prompts × 5 models × ~3–5 channels ×
+  N runs. That is large and Opus/GPT-5.5-expensive; pick a sampling/stratification strategy up front
+  (e.g. full grid on the cheap models, a stratified subsample on the expensive ones).
 - **Reproducibility** — pinned package versions, fixed judge model, clean cache-injection hygiene
   (the repo `grounding/*/AGENTS.md` is separate from the `~/.nuget` cache copy the eval injects).
 
@@ -119,10 +138,12 @@ Cross-cutting requirements:
 
 ## Immediate next steps (resume here)
 
-1. File the three dotnet-inspect asks (Workstream A: `@agents`/presence, streaming print, header-only).
+1. ~~File the three dotnet-inspect asks~~ — **done: #951 (`@agents`), #952 (content print), #953
+   (header/body scoping).** Next: implement/track them, and use `@agents` to survey how many popular
+   packages already ship grounding.
 2. Draft the prompt taxonomy into concrete prompts for **one** package (STJ is the richest) as a
-   template; establish the dev/test split and the rubric format.
-3. Generalize the harness to data-driven task definitions.
+   template; establish the dev/test split and the rubric format. Then scale to the 12-package slate.
+3. Generalize the harness to data-driven task definitions (required before 144 prompts × 5 models).
 4. (Queued) the Haiku-only Channel-D `multipackage` re-run to measure the §2a description trims —
    low value for cost (analytic) but validates self-selection didn't regress.
 
