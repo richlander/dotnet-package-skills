@@ -45,6 +45,20 @@ same prompts we report on**. That is hypothesis-generating, not confirming. Fixi
 
 ---
 
+## Phase 0 — trim large in-package READMEs (no-regrets first move)
+
+Before (and independent of) any `AGENTS.md` adoption: **find large in-package READMEs and trim them**,
+moving human-onboarding prose to docs/Learn. This is the lowest-controversy intervention — it stands
+on the survey data, introduces no new file/convention, no new attack surface, and no per-version
+authoring burden, yet delivers value on its own. It de-risks the whole program: even if grounding
+never lands, "don't ship a 24 kB in-package README" is defensible. Precision: this targets the
+*in-package* `<PackageReadmeFile>`, not the (separate, often larger) GitHub README. It is fine to
+ship **no** `AGENTS.md`; it is much less fine to ship a 24 kB README.
+
+*Complementary with the convention, across the adoption timeline:* trimming reduces the liability
+**now** and serves the long tail that ships no `AGENTS.md` (and human readers); the convention later
+resolves it by **redirection** — see the flywheel under pushback #1.
+
 ## Workstream A — dotnet-inspect research tooling
 
 Landed (above). Remaining asks — **filed**:
@@ -143,15 +157,94 @@ Cross-cutting requirements:
 - (Stretch) prototype the **resident subset = direct dependencies** ideal that `recommendation.md`
   argues for but does not yet build.
 
+## Anticipated team pushback (and our positions)
+
+**Framing.** The question is *not* "is package context-management a valid engineering area." You are
+always at a point in time: you either accept model-resident knowledge or augment it — that is the
+entire space of skills. Augmenting means becoming an **eval engineer** (costly), so the real question
+is **"what is the metric, and the minimum value on it, that justifies participating — and at what
+package scale."** Deeper lesson: `README.md` and `AGENTS.md` are **equal to code** — authoring them is
+an engineering task — because the model doesn't only learn your syntax/APIs/workflows, it learns
+**where the knowledge treasures are hidden**.
+
+1. **"Models will obsolete this / you're betting against the frontier."** The durable, obsolescence-
+   proof asset isn't any single gotcha — it's the **convention**: the model learns *where to look*
+   (prefer `AGENTS.md`), which survives model improvement. New packages/versions manufacture fresh
+   non-resident delta continuously; training cutoffs lag releases. Commercially the bet holds
+   regardless: **.NET loses if it's expensive to develop, and Microsoft sells tokens and agents** —
+   reducing dev-token-cost is core business. And **agents already read `README.md`** whether we
+   participate or not; the only question is whether the ecosystem does it well. *Residual:* the
+   minimum-value bar rises as models improve, so it is re-evaluated per point-in-time (the accepted
+   eval-engineering cost).
+
+   *Flywheel (the compounding payoff):* once the convention is resident, agents **look for and prefer
+   `AGENTS.md`** — so they stop reading the big `README.md`, and **its liability evaporates by
+   redirection** (no edit required). This also restores a clean **division of labor**: `README.md`
+   reverts to `HUMANS.md` once authors no longer cram agent/installation/API content into it "just in
+   case," which is part of what bloated it. The return is **convention-level, not per-package-linear**
+   — establishing the convention drops the whole README-reading cost ecosystem-wide, which is the
+   "minimum value *at scale*" argument. *Honest caveat:* this is the payoff *structure* of the
+   convention succeeding, not proof it will — adoption is still earned by the evals + a real delivery
+   mechanism; do not deploy it circularly ("it works once it works").
+
+2. **Maintenance / staleness — who authors these, and they rot across versions.** *Our weakest point.*
+   Mitigated, not solved: **Phase 0 starts with trimming, not authoring** (no new burden); grounding
+   content is small (≤60 lines), targets only the breaking-change delta, and can be strong-model-
+   drafted. Open: authoring + per-release upkeep at ecosystem scale.
+
+3. **"The numbers are overfit / the metric is self-invented."** Push on commercial grounds:
+   in a capacity/cost-constrained moment **"quality at all costs" is indefensible**. The unweighted
+   `dotnet/skills` `tokenEstimate` **merges cost buckets that differ ~50× in real price** (cache-read
+   ≪ fresh ≪ cache-write ≪ output) — it is *factually wrong about cost*, not merely a different
+   choice. Weighted IET is a **cost proxy grounded in real token pricing** (dotnet/sdk#54417); the
+   burden is on the unweighted metric to justify pricing a cache-read token equal to an output token.
+   *Discipline:* freeze the weights before the held-out test (kills the metric-shopping optics); tone
+   is *extend/correct a sibling team*, not reject.
+
+4. **"Package-shipped instructions = supply-chain prompt injection."** Overplayed for *pushed* package
+   grounding: **you have already agreed to run the package's code**, which can inject context more
+   directly and powerfully than a markdown file. `AGENTS.md` is strictly *less* capable than code you
+   already trust — it makes injection easier/sooner, but only marginally. The sharper vector is a
+   **pulled third-party skill marketplace** (no code-trust relationship). *Nuance kept:* **transitive**
+   deps (code may never run; you didn't choose them) are the residual concern — a second reason to
+   **scope the resident index to direct dependencies** (a security boundary, not just a cost one).
+
+5. **"Just improve the README / just tell the agent to read it."** `README.md` is really **`HUMANS.md`**:
+   it needs an introduction and narrative flow, and assumes an *untrained* reader — so RAG over it
+   risks serving context-free fragments. `AGENTS.md` is eponymous: written for a **trained reader**, it
+   can be authored as **independently retrievable sections with no flow dependency** → section-based /
+   progressive projection is **safe by construction**. That is a structural justification for the
+   format *and* the MCP projection, not just "it's shorter." (The README half is answered by Phase 0.)
+   → promote to a principle in `authoring-principles.md`.
+
+6. **"Is the problem big enough?"** Lead with **correctness on weak/cheap models** (the gotcha delta),
+   not README-byte avoidance — our own survey shows typical in-package READMEs are small. But the
+   **24 kB tail is a real liability**, which is exactly Phase 0.
+
+7. **Standards alignment.** We **align** with the `agents.md` convention — same format, new *location*
+   (in-package) and *delivery* (MCP projection). Divergence is minimal-to-none. *Action:* confirm our
+   frontmatter fields (esp. `description`, which we use as the resident index) are spec-compliant.
+
+8. **Resident-index token tax at scale.** Direct-dep scoping bounds it; quantify empirically with the
+   `--frontmatter` sizing from #953 across real projects.
+
+**Net:** responses neutralize #4 (security) and largely neutralize #1 (obsolescence) via the
+convention + commercial reframe. **#2 (maintenance/staleness) remains the genuine open gap** — Phase 0
+de-risks it by starting with trimming rather than authoring.
+
 ## Immediate next steps (resume here)
 
-1. ~~File the dotnet-inspect asks~~ — **done: #951 (`@agents`), #952 (content print), #953
+1. **Phase 0 (no-regrets):** survey large *in-package* READMEs (use `@readme` sizing already built)
+   and pilot trimming a couple, moving human-onboarding prose to docs. Stands alone; de-risks the rest.
+2. ~~File the dotnet-inspect asks~~ — **done: #951 (`@agents`), #952 (content print), #953
    (header/body scoping), #954 (file-resolution/search mode).** Next: implement/track them, and use
    `@agents` / #954 to survey how many popular packages already ship grounding.
-2. Draft the prompt taxonomy into concrete prompts for **one** package (STJ is the richest) as a
+3. Draft the prompt taxonomy into concrete prompts for **one** package (STJ is the richest) as a
    template; establish the dev/test split and the rubric format. Then scale to the 12-package slate.
-3. Generalize the harness to data-driven task definitions (required before 144 prompts × 5 models).
-4. (Queued) the Haiku-only Channel-D `multipackage` re-run to measure the §2a description trims —
+4. Generalize the harness to data-driven task definitions (required before 144 prompts × 5 models).
+5. Add the **retrievable-by-construction** principle (README=HUMANS.md / AGENTS.md=trained reader) to
+   `authoring-principles.md`; confirm frontmatter fields are `agents.md`-spec compliant.
+6. (Queued) the Haiku-only Channel-D `multipackage` re-run to measure the §2a description trims —
    low value for cost (analytic) but validates self-selection didn't regress.
 
 ## Open questions
