@@ -175,7 +175,11 @@ estimate, shown for traceability); full tables, method, and caveats are in
    shipped README from 3 KB → 74 KB (24×) while holding `AGENTS.md` at 3.5 KB: the README path
    tracks its own bloat (72k–117k IET, high-variance), while the `AGENTS.md` path stays **flat at
    ~36–42k IET / 9–11 tools** — a **48–69% saving** that *widens* as the README grows. Full sweep:
-   [`docs/reports/readme-liability.md`](docs/reports/readme-liability.md).
+   [`docs/reports/readme-liability.md`](docs/reports/readme-liability.md). And the liability isn't
+   hypothetical: a [download-ranked survey of popular packages](docs/reports/readme-size-survey.md)
+   (top 40 Microsoft-owned + top 40 community) finds a median in-package README of ~4–5 kB with a
+   real tail to ~26 kB (Azure.Identity, OpenTelemetry.Api) — and **~25–30% that ship no README at
+   all**, net-new ground for targeted grounding.
 
 5. **For weak models it's correctness, not just cost.** The README-without-MCP path *fails* the weak
    tier; the delivered `AGENTS.md` flips it to a pass. Grounding rescues the tier that needs it
