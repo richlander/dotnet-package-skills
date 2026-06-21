@@ -44,9 +44,23 @@ anyway, and Haiku fails — Channel A′, Step 2). Writing it only pays off when
 
 The current `NuGet.Mcp.Server` is already most of the way there: we **verified by direct call**
 that `get_package_context` prefers `AGENTS.md` over the README when present
-(`nuget-context://…/AGENTS.md` vs `nuget-readme://…/README.md`). **Keep that.** What should change:
+(`nuget-context://…/AGENTS.md` vs `nuget-readme://…/README.md`). **Keep that.**
 
-- **Add a resident, per-direct-dependency index to the `get_package_context` tool description,
+**The shape of the proposal:** make the NuGet MCP a small, *skill-inspired* delivery system —
+grounding **progressively projected** into agent context in two layers, exactly as a skill is. A
+skill is cheap at rest (its `name` + `description` are always loaded) and expensive only on
+activation (its body loads when the agent chooses it). The MCP can mirror that:
+
+| Skill layer | NuGet-MCP equivalent (what we recommend) |
+|-------------|-------------------------------------------|
+| `SKILL.md` frontmatter — always loaded, free | a **resident, per-direct-dependency index** in the `get_package_context` tool description (which packages have grounding, one line each) |
+| `SKILL.md` body — loaded only on activation | the package's **`AGENTS.md` body**, fetched on demand when the agent self-selects |
+
+The agent thus sees *what grounding exists* for free and pulls *the grounding itself* only when it
+decides it needs it — package-granular progressive disclosure, no always-on context tax. What should
+change concretely:
+
+- **Add the resident, per-direct-dependency index to the `get_package_context` tool description,
   built from the project file the host already knows.** This is Channel **D** — the cheapest
   channel on the weak tier and on the harder multi-package task (multi-package Opus **92k IET**
   vs 188k raw-lookup, **−51%**; Haiku **286k** vs 939k, **−70%**), statistically tied with serving
@@ -54,9 +68,11 @@ that `get_package_context` prefers `AGENTS.md` over the README when present
   compile-clean gotchas. The agent self-gates: it declines when it already knows the package and
   retrieves when it doesn't, at **zero** extra tool calls. Treat discovery as an input; **abstain
   to on-demand when no project file is given** — one narrow rule, never a heuristic stack.
-- **Do *not* add a separate `summarize_package_context` tool.** Gating the index behind an agent
-  call makes peeking either an on-ramp (frontier pulls everything) or dead weight (weak models
-  ignore it). The resident index gives costless selection and decline-by-default for free.
+- **Do *not* add a separate `summarize_package_context` tool.** That is the *naive* port of the
+  skills mechanic — projecting the summary layer as its own **tool call** rather than as a resident
+  description. Gating the index behind an agent call makes peeking either an on-ramp (frontier pulls
+  everything) or dead weight (weak models ignore it). The resident index is the **faithful** port:
+  it gives costless selection and decline-by-default for free.
 
 ---
 
@@ -229,11 +245,14 @@ channel gap. (Channels A′/C are omitted on this task by design — see *Method
 - **Ship** it in the `.nupkg` (root). It is size-invariant value; the README stays for humans.
 - **Deliver** it via one `get_package_context` **body tool** whose description carries a
   **resident, per-direct-dependency index** built from the **project file** the host already
-  knows. Treat discovery as an input; **abstain to on-demand when no project is given** — one
-  narrow rule, never a heuristic stack.
+  knows — the *summary layer* of a skill-style progressive disclosure, projected for free; the
+  body is pulled on demand. Treat discovery as an input; **abstain to on-demand when no project is
+  given** — one narrow rule, never a heuristic stack.
 - **Do not** add a separate `summarize_package_context` *tool*: gating the index behind an agent
   call makes peeking an on-ramp (frontier pulls everything) or dead weight (weak models ignore
-  it). The resident index gives costless selection + decline-by-default.
+  it). The resident index gives costless selection + decline-by-default. (Why the resident index is
+  the *faithful* port of the skills mechanic and the summarize-tool is the broken one:
+  [`delivery-and-retrieval.md`](delivery-and-retrieval.md).)
 
 ## Method & caveats
 
