@@ -46,13 +46,14 @@ harness `SKILL.md` here is only a test toggle. Everything below is about package
 Skills and grounding both reduce to *context* for an agent, so they are easy to conflate. Our
 policy is that the **axis that separates them is installation, not content**:
 
-- **A skill is *pulled*.** It is UX-present and **opt-in**: the user installs it (the
+- **A skill is *pulled*.** It is **opt-in and user-visible**: the user installs it (the
   `marketplace.json` + `plugin.json` dance, or makes it repo-resident) and can **remove it** if it
   misbehaves. Pull works because the *need is visible* — the agent recognizes "this is a
   NuGet-publishing task" and loads the publishing skill. Skills are typically *procedures* /
   multi-component workflows ("how *we* do CI here").
 - **Grounding is *pushed*.** It rides along **with the package** the consumer already depends on,
-  is surfaced automatically by the NuGet MCP, and is **UX-absent**. Its highest-value content is
+  is surfaced automatically by the NuGet MCP, and is **invisible to the user** — it never appears
+  in any install list or toggle. Its highest-value content is
   the *silent* gaps the agent doesn't know it has — which is exactly why pull is self-defeating
   for it (the agent has no trigger to go fetch it) and why it must be pushed.
 
