@@ -179,11 +179,14 @@ an engineering task — because the model doesn't only learn your syntax/APIs/wo
 
    *Flywheel (the compounding payoff):* once the convention is resident, agents **look for and prefer
    `AGENTS.md`** — so they stop reading the big `README.md`, and **its liability evaporates by
-   redirection** (no edit required). This also restores a clean **division of labor**: `README.md`
-   reverts to `HUMANS.md` once authors no longer cram agent/installation/API content into it "just in
-   case," which is part of what bloated it. The return is **convention-level, not per-package-linear**
-   — establishing the convention drops the whole README-reading cost ecosystem-wide, which is the
-   "minimum value *at scale*" argument. *Honest caveat:* this is the payoff *structure* of the
+   redirection** (no edit required). Note *why* this works: `README.md` is **already `HUMANS.md`** and
+   is not bloated by misplaced agent content — it is an appropriately progressive narrative for an
+   *untrained human*, which **necessarily restates model-resident basics** (install, first API, the
+   intuition ramp). That restatement is essential for a human and **pure waste for an agent**, which
+   pays for the entire ramp to extract a few peripheral facts. Redirection lets the agent skip the ramp
+   it doesn't need; no one has to gut the README. The return is **convention-level, not per-package-
+   linear** — establishing the convention drops the whole README-reading cost ecosystem-wide, which is
+   the "minimum value *at scale*" argument. *Honest caveat:* this is the payoff *structure* of the
    convention succeeding, not proof it will — adoption is still earned by the evals + a real delivery
    mechanism; do not deploy it circularly ("it works once it works").
 
@@ -209,12 +212,17 @@ an engineering task — because the model doesn't only learn your syntax/APIs/wo
    deps (code may never run; you didn't choose them) are the residual concern — a second reason to
    **scope the resident index to direct dependencies** (a security boundary, not just a cost one).
 
-5. **"Just improve the README / just tell the agent to read it."** `README.md` is really **`HUMANS.md`**:
-   it needs an introduction and narrative flow, and assumes an *untrained* reader — so RAG over it
-   risks serving context-free fragments. `AGENTS.md` is eponymous: written for a **trained reader**, it
-   can be authored as **independently retrievable sections with no flow dependency** → section-based /
-   progressive projection is **safe by construction**. That is a structural justification for the
-   format *and* the MCP projection, not just "it's shorter." (The README half is answered by Phase 0.)
+5. **"Just improve the README / just tell the agent to read it."** This misreads the asymmetry.
+   `README.md` is **`HUMANS.md`**: it assumes an *untrained human* who wants a progressive narrative to
+   build intuition, so it **necessarily restates model-resident basics** and depends on flow — RAG over
+   it serves context-free fragments. `AGENTS.md` is eponymous: it assumes a **trained agent** whose
+   sight on the problem fades only at the **periphery** (gotchas, niche scenarios, post-cutoff
+   features), so it should carry **only that delta** — and can be authored as **independently
+   retrievable sections with no flow dependency** → section-based / progressive projection is **safe by
+   construction**. The two files are **asymmetric in content selection, not just tone**: same topic,
+   opposite reader priors. "Improving the README" cannot produce `AGENTS.md` because the README's job is
+   to include exactly the basics the agent must skip. That is a structural justification for the format
+   *and* the MCP projection, not just "it's shorter." (The README-size half is answered by Phase 0.)
    → promote to a principle in `authoring-principles.md`.
 
 6. **"Is the problem big enough?"** Lead with **correctness on weak/cheap models** (the gotcha delta),
