@@ -51,6 +51,26 @@ the whole document. So:
 This is the opposite of how we write `README.md` files, which are authored to be read
 top-to-bottom by a human.
 
+### 2a. The `description` frontmatter is the resident summary layer — make it a hook, not a copy
+
+The `AGENTS.md` YAML `description` is not part of the body; it is the **always-resident summary
+layer** of skill-style progressive disclosure (see
+[`delivery-and-retrieval.md`](delivery-and-retrieval.md)). Under the recommended NuGet-MCP design it
+is projected into the resident index for **every direct dependency, on every restore** — paid
+whether or not the agent ever pulls the body. So author it as a **discovery hook**, not a synopsis
+of the doc:
+
+- Carry exactly three things: **identity** (what the package is), **when to reach for it**, and the
+  **single differentiator that signals the model doesn't already know this** (for Markout: "looks
+  like System.Text.Json source generation but has no reflection fallback"). That hook is what drives
+  correct self-selection — and a *sharper* discovery description measurably lifted the gating arm
+  (§1 table, the M1 +9.6% → +15.1% refocus).
+- **Do not reproduce the body** in the description — no full code pattern, method signatures, or
+  exhaustive attribute/API enumerations. Those belong in the body, which is fetched on demand. A
+  description that already contains the how-to makes the body pull pointless and taxes the resident
+  layer for content most restores never use.
+- Sharper, not longer: a few sentences. The body carries the detail.
+
 ## 3. Stay in your lane: assert only first-party, package-local facts
 
 Grounding is **auto-installed with the package and cannot be uninstalled** (it arrives via

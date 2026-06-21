@@ -1,15 +1,12 @@
 ---
 name: markout
 description: >-
-  Markout is a source-generated .NET serializer that projects objects into Markdown (and
-  ANSI terminal, plain text, pretty tables, TSV). Use it whenever a CLI/tool needs
-  structured human- or agent-readable output instead of hand-built strings. It LOOKS like
-  System.Text.Json source generation but its rules differ: there is NO reflection fallback,
-  so every Serialize call requires a MarkoutSerializerContext — you must annotate each model
-  with [MarkoutSerializable] and register it on a partial context with [MarkoutContext(typeof(T))],
-  then call MarkoutSerializer.Serialize(value, Console.Out, MyContext.Default). The attribute
-  vocabulary is Markout-specific ([MarkoutSection], TitleProperty, [MarkoutIgnoreInTable]),
-  not the System.Text.Json one.
+  Source-generated .NET serializer that renders objects as Markdown (also ANSI terminal,
+  plain text, pretty tables, TSV). Reach for it when a CLI or tool needs structured, human-
+  or agent-readable output instead of hand-built strings. It looks like System.Text.Json
+  source generation but the rules differ — there is NO reflection fallback, so it requires a
+  generated MarkoutSerializerContext and Markout-specific attributes. See the body for the
+  required pattern.
 ---
 
 # Markout — produce Markdown/structured output from objects
