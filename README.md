@@ -19,6 +19,29 @@ grounding and once *with* it, and the harness compares accuracy, token usage, an
 using pairwise LLM judging. The harness mechanics live in [`docs/harness.md`](docs/harness.md);
 this page is about the *concept* and the *findings*.
 
+## How we measure cost: IET
+
+Our measuring stick is **IET — Input-Equivalent Tokens**, a single cost-equivalent number that
+normalizes each token class to fresh-input units:
+
+```
+IET = fresh + 0.1·cacheRead + 1.25·cacheWrite + 5·output
+```
+
+where `fresh = inputTokens − cacheReadTokens`. This **diverges from the `dotnet/skills` harness
+metric**, which reports an unweighted `tokenEstimate = inputTokens + outputTokens` (cache reads
+counted at full price, output counted the same as input). We diverged because that estimate
+inflates the exploration-heavy raw baseline — the channel that does the most cheap prompt-cache
+reads looks the most expensive — and undercounts output, which is the dominant real cost. IET
+prices each token class closer to what it actually costs (see
+[dotnet/sdk#54417](https://github.com/dotnet/sdk/issues/54417) on model token pricing), so the
+weights also expose the **arbitrage** between classes — spending cheap cached input to avoid
+expensive output is a win the unweighted metric can't see. Cross-channel comparisons then reflect
+spend rather than cache-read volume. Tables still cite the harness's raw `tokenEstimate` (`tEst`)
+in parentheses for traceability. Full derivation:
+[`docs/recommendation.md`](docs/recommendation.md) (Metric) and
+[`docs/delivery-and-retrieval.md`](docs/delivery-and-retrieval.md).
+
 ## What "grounding" is — and what it is not
 
 Several different files get called `AGENTS.md` or `SKILL.md`. They live in different places,
@@ -94,7 +117,7 @@ and the per-package reports in [`docs/reports/`](docs/reports/).
 ## How a grounding doc is written
 
 A grounding doc records **only what an agent is proven to lack** (by eval signal) and is written
-for **section-based RAG retrieval**, not top-to-bottom reading — unlike a README. It must stay
+for the **section-based RAG retrieval** paradigm, not top-to-bottom reading — unlike a README. It must stay
 **concise** (the harness enforces a per-file line budget). See
 [`docs/authoring-principles.md`](docs/authoring-principles.md) for the principles and the
 empirical evidence behind them.
