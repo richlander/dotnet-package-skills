@@ -36,10 +36,41 @@ feature.
 | **Harness `SKILL.md`** | `grounding/<slug>/SKILL.md`, **generated** | the `skill-validator` harness, locally | a *togglable* skill the harness adds/removes between the baseline and enriched arms — an **implementation detail of measurement** | Yes, but generated/internal — see [`docs/harness.md`](docs/harness.md) |
 | **Marketplace `SKILL.md`** | published as a `plugin.json` plugin in a **skills marketplace** (the `dotnet/skills` distribution model) | an agent *host* that installs marketplace plugins globally | a distributable, installable capability/instruction set | **No — explicitly out of scope.** This repo has no `plugin.json` marketplace machinery |
 
-The distinction that matters: **package grounding travels *with the dependency* and is pulled
+The distinction that matters: **package grounding travels *with the dependency* and is surfaced
 per-package, on demand**, when an agent touches a project that references it. A repo `AGENTS.md`
 is scoped to one working repository; a marketplace skill is installed globally into the host; the
 harness `SKILL.md` here is only a test toggle. Everything below is about package grounding.
+
+## Grounding vs. skills: our policy
+
+Skills and grounding both reduce to *context* for an agent, so they are easy to conflate. Our
+policy is that the **axis that separates them is installation, not content**:
+
+- **A skill is *pulled*.** It is UX-present and **opt-in**: the user installs it (the
+  `marketplace.json` + `plugin.json` dance, or makes it repo-resident) and can **remove it** if it
+  misbehaves. Pull works because the *need is visible* — the agent recognizes "this is a
+  NuGet-publishing task" and loads the publishing skill. Skills are typically *procedures* /
+  multi-component workflows ("how *we* do CI here").
+- **Grounding is *pushed*.** It rides along **with the package** the consumer already depends on,
+  is surfaced automatically by the NuGet MCP, and is **UX-absent**. Its highest-value content is
+  the *silent* gaps the agent doesn't know it has — which is exactly why pull is self-defeating
+  for it (the agent has no trigger to go fetch it) and why it must be pushed.
+
+The consequence — and the reason grounding gets a **stricter, differently-shaped discipline** than
+a skill: **grounding can't be turned off the way a skill can.** A user opts into the *delivery
+channel* (the NuGet MCP / `dotnet-inspect`), but not into any *individual package's* grounding —
+it cannot be uninstalled short of dropping a dependency they need. Because it is pushed to everyone
+and un-removable, two rules follow (full treatment in
+[`docs/authoring-principles.md`](docs/authoring-principles.md)):
+
+1. **Stay in your lane.** Assert only **first-party, package-local facts** — your overloads, your
+   footguns, your beta→stable renames. The moment a doc describes a workflow *across* components,
+   it has become a skill and left its lane. This bounds the blast radius: a doc that only ever
+   names its own package cannot mislead about one it never mentions.
+2. **Pass a Pareto gate, not an average.** Ship grounding iff it **materially helps the tier that
+   needs it** (often a weaker model) **and does no meaningful harm to the tier that doesn't** (the
+   frontier). What you can't opt out of must be judged on its worst case across the fleet, not its
+   mean.
 
 ## Start here: the recommendation
 
