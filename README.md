@@ -4,6 +4,14 @@ A repo dedicated to **NuGet package grounding** — `AGENTS.md` files that ship 
 root and make the package *self-teaching* for an AI agent — and to **measuring** whether that
 content actually helps.
 
+Use it two ways:
+
+- **As a how-to.** Practical instruction for authoring package grounding — what to write, what to
+  leave out, and how to validate it — grounded in worked examples for real packages.
+- **As a record of our approach.** How we think about **context injection and management** for AI
+  agents: which delivery channel surfaces grounding, how agents retrieve it, when it helps versus
+  hurts, and the evidence behind each call.
+
 It reuses the [`dotnet/skills`](https://github.com/dotnet/skills) **skill-validator** harness to
 run a **baseline vs enriched** evaluation: the agent attempts each task once *without* the
 grounding and once *with* it, and the harness compares accuracy, token usage, and tool calls
