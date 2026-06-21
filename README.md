@@ -102,6 +102,42 @@ and un-removable, two rules follow (full treatment in
 > model tiers — a doc earns its place only if it lifts the tier that needs it without dragging down
 > the tier that doesn't.
 
+## What we found
+
+The headline results, in weighted [IET](#how-we-measure-cost-iet) (`tEst` = unweighted harness
+estimate, shown for traceability). Full tables, method, and caveats are in
+[`docs/recommendation.md`](docs/recommendation.md).
+
+1. **A shipped `AGENTS.md` beats serving the README — on both tiers.** Same task, same content,
+   varying only delivery. Markout single-package, runs=3:
+
+   | Channel | what the agent gets | Opus IET | Haiku IET |
+   |---------|---------------------|---------:|----------:|
+   | **A** raw package, no MCP | finds + reads the **README** | 78k | 49k |
+   | **A′** raw package, `AGENTS.md` present | *still reads the README* — `AGENTS.md` is **invisible** | 124k | 62k |
+   | **B** NuGet MCP, no `AGENTS.md` | server returns the **README** | 38k | 40k |
+   | **C** NuGet MCP, `AGENTS.md` present | server returns the **`AGENTS.md`** | **28k** | 39k |
+   | **D** MCP + resident index | curated grounding, self-gated | 31k | **31k** |
+
+2. **Content alone is worthless without a delivery channel.** Channel A′ — `AGENTS.md` shipped but
+   no MCP — is the *most* expensive cell on both tiers: the agent never sees it and reads the README
+   anyway. Writing grounding only pays off when the MCP delivers it.
+
+3. **The README is a measurable liability, and targeted value is size-invariant.** Sweeping the
+   shipped README from 3 KB → 74 KB (24×) while holding `AGENTS.md` at 3.5 KB: the README path
+   tracks its own bloat (72k–117k IET, high-variance), while the `AGENTS.md` path stays **flat at
+   ~36–42k IET / 9–11 tools** — a **48–69% saving** that *widens* as the README grows. Full sweep:
+   [`docs/reports/readme-liability.md`](docs/reports/readme-liability.md).
+
+4. **The win grows with task difficulty.** On a harder multi-package triage task (one relevant
+   package + two distractors), the resident-index channel cuts the most: multi-package Opus **92k vs
+   188k** raw lookup (**−51%**), Haiku **286k vs 939k** (**−70%**). It is also the *only* channel
+   that surfaces silent, compile-clean gotchas the agent wouldn't know to ask for.
+
+5. **For weak models it's correctness, not just cost.** The README-without-MCP path *fails* the weak
+   tier; the delivered `AGENTS.md` flips it to a pass. Grounding rescues the tier that needs it
+   while costing the frontier tier nothing — the Pareto gate above, met in the data.
+
 ## Start here: the recommendation
 
 **[`docs/recommendation.md`](docs/recommendation.md)** — the executive summary for the NuGet
