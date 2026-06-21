@@ -4,6 +4,18 @@ A repo dedicated to **NuGet package grounding** — `AGENTS.md` files that ship 
 root and make the package *self-teaching* for an AI agent — and to **measuring** whether that
 content actually helps.
 
+**Why this is needed.** When an agent touches a package today, the best it gets is the package's
+README — a median of ~4–5 kB across popular packages, with a substantial tail to **~26 kB**
+([survey of the top 40 Microsoft-owned and top 40 community packages](docs/reports/readme-size-survey.md)).
+That prose is
+written to **onboard a human browsing nuget.org**: install steps, prerequisites, "key concepts,"
+contributing boilerplate (2–4 kB on its own in the Azure-SDK template), and broad usage examples —
+*most of which the model already knows*. Installation is the clearest case of waste: by the time an
+agent is working in a project that *references* the package, installation is **solved by
+definition** — the dependency is already there. Little of a README is the non-obvious, version-
+specific gotcha an agent actually needs. Grounding inverts that ratio: a small, targeted doc
+(~3.5 kB) carrying only what the model is proven to lack.
+
 Use it two ways:
 
 - **As a how-to.** Practical instruction for authoring package grounding — what to write, what to

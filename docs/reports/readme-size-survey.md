@@ -72,7 +72,31 @@ displace is already cheap.
 - A few ranked entries are runtime shims / SNI / manifest packages with no human-facing content;
   they count as "none."
 
-## Survey — Microsoft-owned (top 40 by downloads)
+## What's *in* the large READMEs? (composition spot check)
+
+Size alone doesn't prove the content is low-value for an agent, so we read the section structure of
+the four largest in the survey. The byte split (level-2 sections):
+
+| Package | total | install / framing / boilerplate | usage & examples |
+|---------|------:|-------------------------------:|-----------------:|
+| Azure.Identity | 25.9 kB | ~30% (incl. **Contributing 4.5 kB**) | ~70% |
+| Azure.Storage.Blobs | 13.9 kB | ~48% (incl. **Contributing 2.7 kB**) | ~52% |
+| OpenTelemetry.Api | 24.9 kB | ~33% | ~67% |
+| System.Text.Json | 8.1 kB | ~16% | ~84% |
+
+Two things stand out, and they refine the naive "it's mostly installation" intuition:
+
+- **Installation itself is tiny** — Azure.Identity's whole "Getting started" (with install) is
+  ~0.8 kB; OpenTelemetry's `## Installation` is **68 bytes**. Install is the *clearest* waste for an
+  agent (the dependency is already referenced), but it is not where the bytes go.
+- **The bulk is human-onboarding prose, not agent-actionable gotchas.** A meaningful slice is
+  framing/boilerplate — "Getting started," "Key concepts," "Next steps," and especially
+  **Contributing** (2–4 kB of fixed boilerplate in the Azure-SDK template) — and *most of the rest is
+  general usage/examples the model is already resident on*. Across these READMEs, the fraction that
+  is a non-obvious, version-specific footgun (the thing grounding targets) is small. That is the
+  liability: an agent pays for the whole document to reach the thin slice it actually needed — if any
+  of it is even present.
+
 
 Ratio = README bytes ÷ a 3.5 kB (3584 B) targeted `AGENTS.md`.
 
