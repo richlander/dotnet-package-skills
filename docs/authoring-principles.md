@@ -60,6 +60,12 @@ is projected into the resident index for **every direct dependency, on every res
 whether or not the agent ever pulls the body. So author it as a **discovery hook**, not a synopsis
 of the doc:
 
+> *Spec note:* the `agents.md` standard itself defines **no** frontmatter — an `AGENTS.md` is plain
+> markdown with conventional headings. Our YAML `name`/`description` are therefore **additive and
+> spec-compatible**, not a divergence: they are the skill-style projection inputs the NuGet-MCP
+> resident index consumes, and a spec-only consumer simply ignores them.
+
+
 - Carry exactly three things: **identity** (what the package is), **when to reach for it**, and the
   **single differentiator that signals the model doesn't already know this** (for Markout: "looks
   like System.Text.Json source generation but has no reflection fallback"). That hook is what drives
@@ -71,7 +77,35 @@ of the doc:
   layer for content most restores never use.
 - Sharper, not longer: a few sentences. The body carries the detail.
 
-## 3. Stay in your lane: assert only first-party, package-local facts
+### 2b. `README.md` is `HUMANS.md`; `AGENTS.md` is retrievable by construction (the asymmetry)
+
+The reason §2's "disjoint sections are fine" rule is *safe* — and not just a stylistic preference — is
+that `README.md` and `AGENTS.md` address **different readers with opposite priors**, so they are
+asymmetric in **content selection**, not merely tone:
+
+- **`README.md` is `HUMANS.md`.** It assumes an *untrained human* who wants a progressive narrative to
+  build intuition. It therefore **necessarily restates model-resident basics** (install, first API, the
+  conceptual ramp) and **depends on flow** — earlier sections set up later ones. That restatement is
+  *essential for a human* and *pure waste for an agent*, which already knows the basics and pays to read
+  past them. RAG over a README serves context-free fragments precisely because its meaning lives in the
+  flow.
+- **`AGENTS.md` is eponymous.** It assumes a *trained agent* whose sight on the problem fades only at the
+  **periphery** — gotchas, niche scenarios, and post-cutoff features the model was never trained on. So
+  it carries **only that non-resident delta** (§1) and can be authored as **independently retrievable
+  sections with no flow dependency**. Section-based / progressive projection is therefore **safe by
+  construction**, not a compromise.
+
+Two consequences for authoring:
+
+- **Do not try to make `README.md` "agentic."** "Improving the README" cannot produce `AGENTS.md`,
+  because the README's job is to include exactly the basics the agent must skip. Collapsing the two
+  wrecks the human document (the failure mode of size-culling + RAG-fragmenting a README under cost
+  pressure). Keep them separate and let each serve its reader.
+- **Author every `AGENTS.md` section as if it will be retrieved alone.** Assume the agent already has the
+  resident baseline; never write a section whose correctness depends on a human having read the section
+  above it.
+
+
 
 Grounding is **auto-installed with the package and cannot be uninstalled** (it arrives via
 tooling such as NuGet MCP / `dotnet-inspect`, with no UX surface to inspect or disable it).

@@ -289,8 +289,10 @@ de-risks it by starting with trimming rather than authoring.
 3. Draft the prompt taxonomy into concrete prompts for **one** package (STJ is the richest) as a
    template; establish the dev/test split and the rubric format. Then scale to the 12-package slate.
 4. Generalize the harness to data-driven task definitions (required before 144 prompts × 5 models).
-5. Add the **retrievable-by-construction** principle (README=HUMANS.md / AGENTS.md=trained reader) to
-   `authoring-principles.md`; confirm frontmatter fields are `agents.md`-spec compliant.
+5. ~~Add the **retrievable-by-construction** principle (README=HUMANS.md / AGENTS.md=trained reader) to
+   `authoring-principles.md`; confirm frontmatter fields are `agents.md`-spec compliant.~~ **Done:**
+   §2b added; frontmatter confirmed spec-compatible (the `agents.md` standard mandates no frontmatter,
+   so `name`/`description` are additive projection inputs).
 6. (Queued) the Haiku-only Channel-D `multipackage` re-run to measure the §2a description trims —
    low value for cost (analytic) but validates self-selection didn't regress.
 
