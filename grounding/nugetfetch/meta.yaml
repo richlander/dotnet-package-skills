@@ -1,0 +1,8 @@
+# Harness-only metadata. The shipped artifact is AGENTS.md, whose YAML frontmatter
+# is the source of truth for name and description (used to generate SKILL.md).
+# package is the NuGet package this grounding ships in; it is not part of AGENTS.md.
+#
+# CANDIDATE grounding: NuGetFetch does not yet ship AGENTS.md. This unit exists to PROVE
+# the grounding text (baseline web-archaeology vs grounded) before we publish it to the
+# package at github.com/richlander/nuget-fetch.
+package: NuGetFetch
