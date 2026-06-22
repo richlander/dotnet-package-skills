@@ -1,0 +1,4 @@
+# EXPERIMENT unit: grounding doc = System.CommandLine shipped README.md (verbatim).
+# Used to test whether a purpose-built AGENTS.md is more effective + efficient than
+# the package's own large, human-audience README delivered as grounding.
+package: System.CommandLine
