@@ -83,6 +83,63 @@ def arm_iet(m: dict, w_out: float) -> float:
             + out * w_out)
 
 
+# HIET - Haiku-Equivalent IET (cross-model cost view)
+# ---------------------------------------------------
+# IET normalizes the token *classes* within one model (output=5x input etc.), so it is a
+# within-model cost proxy in units of that model's own input tokens - it does NOT capture
+# that an Opus input token costs far more dollars than a Haiku one. HIET adds exactly that
+# missing dimension: multiply IET by the model's input list-price relative to Haiku, so the
+# result is expressed in *Haiku input-token equivalents* and is directly dollar-comparable
+# across tiers. Anthropic list input price per MTok: Opus $15, Sonnet $3, Haiku $1.
+#   HIET = IET * (input_price_model / input_price_haiku)
+# Keep IET for same-model arm comparisons; read HIET when comparing Opus/Sonnet against the
+# Haiku tier (e.g. "is the cheaper-IET Opus run actually cheaper in dollars?" - usually no).
+HAIKU_PRICE_RATIO = {
+    "opus": 15.0,
+    "sonnet": 3.0,
+    "haiku": 1.0,
+}
+
+
+def haiku_ratio(model: str) -> float:
+    """Input-price multiplier of `model` relative to Claude Haiku (1.0). Unknown -> 1.0."""
+    s = model.lower()
+    for tier, ratio in HAIKU_PRICE_RATIO.items():
+        if tier in s:
+            return ratio
+    return 1.0
+
+
+def arm_hiet(m: dict, w_out: float, model: str) -> float:
+    """Haiku-Equivalent IET: arm_iet scaled by the model's input price vs Haiku."""
+    return arm_iet(m, w_out) * haiku_ratio(model)
+
+
+# Delivery-normalized IET (fair cross-channel delivery cost)
+# ----------------------------------------------------------
+# Resident delivery is under-measured: an MCP server's tool schema (and the system prompt) is
+# cache-*written* during an UNMEASURED setup phase (session.mcp_servers_loaded / tools_updated emit
+# no usage event), so the arm only ever pays 0.1x cacheRead for it. A skill/directive instead lands
+# as 1x *fresh* input on turn 1. Net: the same resident payload costs 0.1x via MCP but 1x via a
+# directive - an apples-to-oranges discount that can be larger than the whole channel gap.
+# The fix is convention, not new data: charge every arm's turn-1 resident prefix once at full price.
+# The only unfairly-discounted quantity is each arm's turn-1 cacheRead (its pre-warmed prefix), so:
+#   IET_norm = IET + (1 - CACHE_READ_MULT) * turn1_cacheRead      # move turn-1 cacheRead 0.1x -> 1x
+# turn1_cacheRead is read from the per-turn assistant.usage events (metrics["events"]). An arm whose
+# delivery is genuinely fresh on turn 1 (directive/skill) has turn1_cacheRead==0 and is unchanged.
+def turn1_cache_read(m: dict) -> float:
+    """cacheRead on the FIRST assistant.usage turn = the pre-warmed (setup-cached) resident prefix."""
+    for e in m.get("events", []) or []:
+        if isinstance(e, dict) and e.get("type") == "assistant.usage":
+            return e.get("data", {}).get("cacheReadTokens", 0) or 0
+    return 0.0
+
+
+def arm_iet_norm(m: dict, w_out: float) -> float:
+    """Delivery-normalized IET: reported IET with the turn-1 resident prefix re-priced 0.1x -> 1x."""
+    return arm_iet(m, w_out) + (1.0 - CACHE_READ_MULT) * turn1_cache_read(m)
+
+
 def load_scenario(path: str):
     if os.path.isdir(path):
         path = os.path.join(path, "results.json")
@@ -123,6 +180,8 @@ def analyze(model: str, path: str, w_out: float):
         model=model,
         base_q=base_q,
         base_iet=base_iet,
+        base_hiet=base_iet * haiku_ratio(model),
+        hiet_ratio=haiku_ratio(model),
         base_out=base["metrics"]["outputTokens"],
         base_completed=base["metrics"]["taskCompleted"],
         gate_name=gate_name,
@@ -169,9 +228,10 @@ def main(argv):
     print("=" * 100)
     print("GROUNDING RE-SCORE  (one scenario, varying agent model; judge fixed)")
     print(f"IET = fresh_in + 0.1*cacheRead + 1.25*cacheWrite + {w_out:g}*output   (units: base-input-tokens)")
+    print("HIET = IET x input-price-vs-Haiku (Opus 15x / Sonnet 3x / Haiku 1x): dollar-comparable across tiers")
     print("Our score = 0.70*dQuality + 0.30*costReduction(IET)")
     print("=" * 100)
-    hdr = f"{'agent model':<20}{'baseQ/5':>8}{'gate dQ':>9}{'base IET':>11}{'gate IET':>11}{'costRed':>9}{'OUR':>8}{'harness':>9}"
+    hdr = f"{'agent model':<20}{'baseQ/5':>8}{'gate dQ':>9}{'base IET':>11}{'gate IET':>11}{'gate HIET':>12}{'costRed':>9}{'OUR':>8}"
     print(hdr)
     print("-" * len(hdr))
     for r in runs:
@@ -181,11 +241,11 @@ def main(argv):
               f"{fmt_pct(g['dq']):>9}"
               f"{r['base_iet']:>11.0f}"
               f"{g['iet']:>11.0f}"
+              f"{g['iet']*r['hiet_ratio']:>12.0f}"
               f"{fmt_pct(g['cost_reduction']):>9}"
-              f"{fmt_pct(g['score']):>8}"
-              f"{fmt_pct(r['harness_score']):>9}")
+              f"{fmt_pct(g['score']):>8}")
     print("-" * len(hdr))
-    print("(IET in base-input-token units; 'gate' = worse of isolated/plugin under OUR score)")
+    print("(IET in base-input-token units; HIET in Haiku-input-token equivalents; 'gate' = worse arm under OUR score)")
     print()
 
     print("CURVE  (weakest -> strongest by baseline quality):")

@@ -112,6 +112,27 @@ inflating the exploration-heavy raw baseline. Tables also show the harness's unw
 `tokenEstimate` (`tEst` = `inputTokens + outputTokens`, cache reads at full price) in parentheses
 for traceability.
 
+**Cross-tier metric — HIET (Haiku-Equivalent IET).** IET is a *within-model* cost proxy: it
+normalizes token classes in units of *that model's own* input tokens, deliberately cancelling the
+per-model base price so same-model arm comparisons are clean. That cancellation also hides that an
+Opus input token costs far more dollars than a Haiku one. **HIET** restores it — scale IET by the
+model's input list-price relative to Haiku (Anthropic per-MTok input: Opus $15 / Sonnet $3 / Haiku
+$1 → **15× / 3× / 1×**), giving a dollar-comparable figure in Haiku-input-token equivalents:
+`HIET = IET × (input_price_model / input_price_haiku)`. Use IET to compare arms *within* a tier; use
+HIET to compare *across* tiers. HIET is what prices grounding's biggest lever — running a **cheaper
+model at frontier quality**: on Markout M1, Opus *baseline* hits 4.7/5 at **1.16M HIET** while
+Haiku **+ grounding** hits the same 4.7/5 at **31k HIET** (~38× cheaper). See
+[`dotnet-inspect-channel.md`](reports/dotnet-inspect-channel.md) for the full cross-tier table.
+
+**Delivery-normalized metric — IET\* (fair MCP-vs-directive).** Resident delivery is under-measured:
+an MCP tool schema is cache-*written* during an unmeasured setup phase (no usage event), so the arm
+pays only `0.1×` `cacheRead` for it, while a skill/directive lands as `1×` fresh on turn 1 — the same
+resident payload, discounted only for MCP. IET\* re-prices each arm's turn-1 resident prefix once at
+full price: `IET* = IET + 0.9·turn1_cacheRead`. Directive/CLI arms (turn1 fresh) are unchanged; MCP
+arms move up ~8–11k and the NuGet-MCP cost advantage over the CLI flips to a CLI win. Use IET\* only
+when comparing a *resident* channel (MCP) against a *loaded* one (skill/CLI). See
+[`dotnet-inspect-channel.md`](reports/dotnet-inspect-channel.md#fixing-the-measurement-delivery-normalized-iet-iet).
+
 ---
 
 ## Step 1 — Baseline: raw package and NuGet MCP, with no `AGENTS.md` (A, B)

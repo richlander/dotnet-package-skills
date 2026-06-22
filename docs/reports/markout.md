@@ -93,3 +93,9 @@ eng/run-evals.sh markout   # or:
 > Caveat: runs=3 here (varianceCV up to 1.7). The two robust claims — Haiku baseline
 > `taskCompleted=false` vs grounded `true`, and the frontier efficiency gap — should be firmed at
 > runs=5. The quality tie (do-no-harm) is already stable.
+
+## Related: delivery via the `dotnet-inspect` CLI
+
+The same Markout content delivered through `dotnet-inspect package <id> --readme` (instead of the
+NuGet MCP) lands in the MCP's cost regime when it serves `AGENTS.md`, with the same README liability
+when it falls back — see [`dotnet-inspect-channel.md`](./dotnet-inspect-channel.md).
