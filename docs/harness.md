@@ -89,6 +89,21 @@ That makes only two baseline conditions physically meaningful:
    has model knowledge only. But this is only achievable for **advisory scenarios that never build**;
    the moment a task requires `dotnet build`, restore warms the cache and condition (1) returns.
 
+### Why "empty NuGet cache" is not an eval state worth measuring
+
+A reasonable question is whether the *starting* cache state — empty vs. pre-warmed — is its own
+experimental variable. For build-based scenarios it is **not**, and we deliberately do not measure it.
+The agent restores the package itself, almost immediately, as a natural first step toward the task.
+Empirically, across all **18** Markout baseline sessions (6 scenarios × 3 runs) the agent's first
+`dotnet build`/`restore` landed at tool-call **#5–11**, and **every** cache-doc read happened *after*
+that first build — in **0/18** sessions did the baseline read a package doc before restoring. So an
+empty starting cache collapses to the warm condition within the agent's first few actions; it cannot
+persist through a build-based run. Measuring "empty cache at t=0" would therefore measure a transient
+that the agent erases before it does any package-specific work — the package is effectively *always
+present* by the time it matters. The only setup in which an empty cache is a stable, observable state
+is an advisory task that never builds, which is condition (2) above. Treat starting cache state as
+fixed (warm), not as a variable.
+
 Stripping the docs out of a *restored* cache entry (lib kept) is therefore an **artificial third
 state** that corresponds to no real developer setup — you would never have a restored, buildable
 package on disk with its `README.md` surgically deleted. It is useful only as an upper-bound probe of
