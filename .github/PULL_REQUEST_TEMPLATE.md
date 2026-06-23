@@ -16,7 +16,8 @@ Unit: `grounding/<unit>` · Package: `<Name> <version>` · `AGENTS.md` body line
 <!-- Paste BOTH `--card` dumps verbatim: the mini-tier WIN card and the frontier-tier NO-HARM card.
      python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.haiku.json   # mini WIN
      python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.opus.json    # frontier NO-HARM
-Each card prints its metrics table + the tier-appropriate gate (PASS/FAIL per threshold). -->
+Each card prints its metrics table, a term Legend, and the tier gate (PASS/FAIL per threshold).
+Keep the Legend — outside readers need it to interpret IET / output tok / func / the arm names. -->
 
 <!-- mini-tier (WIN) card here -->
 
