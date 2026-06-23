@@ -50,7 +50,7 @@ import json, sys, glob, os
 
 ARMS = [("baseline", "baseline"), ("skilledIsolated", "isolated"), ("skilledPlugin", "plugin")]
 
-# --- Ship gate thresholds. See docs/eval-grounding-prs.md. ---
+# --- Ship gate thresholds. See docs/grounding-eval-methodology.md. ---
 # Pareto gate (authoring-principles §4), modeled on the decompiler quality-diff card:
 # require a real WIN on the tier that needs grounding (mini, λ low — quality is the
 # binding constraint, tokens are cheap), and tolerate ~ZERO HARM on the tier that does
@@ -328,7 +328,7 @@ def print_card(path):
                   "NO-HARM run (zero output-token inflation, no quality regression)._")
         print("\n> Quality Δ is a **lower bound** — the web-blocked baseline self-grounds from the "
               "NuGet cache (docs are packed in the nupkg), so it understates grounding's value. "
-              "Starting cache state is not a variable. See docs/eval-grounding-prs.md.\n")
+              "Starting cache state is not a variable. See docs/grounding-eval-methodology.md.\n")
 
 
 if __name__ == "__main__":

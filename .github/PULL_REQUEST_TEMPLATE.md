@@ -1,5 +1,5 @@
 <!--
-Grounding content PR? Follow the standard: docs/eval-grounding-prs.md
+Grounding content PR? Follow the methodology: docs/grounding-eval-methodology.md
 A grounding change is a claim — it ships with its evidence. Fill every section.
 For non-grounding PRs, delete this template and describe your change normally.
 -->
@@ -54,4 +54,4 @@ cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # comm
 - [ ] Required caveats present; cache reads attributed per arm (not grepped)
 - [ ] `docs/reports/<unit>.md` updated
 
-<sub>Standard: [docs/eval-grounding-prs.md](../docs/eval-grounding-prs.md)</sub>
+<sub>Methodology: [docs/grounding-eval-methodology.md](../docs/grounding-eval-methodology.md)</sub>

@@ -29,9 +29,9 @@ It reuses the [`dotnet/skills`](https://github.com/dotnet/skills) **skill-valida
 run a **baseline vs enriched** evaluation: the agent attempts each task once *without* the
 grounding and once *with* it, and the harness compares accuracy, token usage, and tool calls
 using pairwise LLM judging. The harness mechanics live in [`docs/harness.md`](docs/harness.md);
-this page is about the *concept* and the *findings*. How we propose and review a grounding change —
-the evidence bar, required caveats, and PR format — is the
-[eval-based grounding PR standard](docs/eval-grounding-prs.md).
+this page is about the *concept* and the *findings*. How we evaluate a grounding change and decide
+whether it ships — the methodology, terms, threshold gate, and evidence dump — is the
+[grounding eval methodology](docs/grounding-eval-methodology.md).
 
 ## How we measure cost: IET
 

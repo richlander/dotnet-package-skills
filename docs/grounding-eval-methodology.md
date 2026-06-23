@@ -1,9 +1,9 @@
-# Eval-based grounding content PRs — methodology, terms, and the ship gate
+# Grounding eval methodology — measuring, deciding, and shipping package grounding
 
-This is the standalone reference for proposing and reviewing a change to package **grounding
-content** (an `AGENTS.md` that ships in a package root). It covers (1) the methodology, (2) the terms
-we use or redefine, (3) the **threshold gate** that decides whether a change ships, and (4) the
-copy-paste eval dump every PR carries.
+This is the standalone reference for how we evaluate package **grounding content** (an `AGENTS.md`
+that ships in a package root) and decide whether it ships. It covers (1) the methodology, (2) the
+terms we use or redefine, (3) the **threshold gate** that decides whether a change ships, and (4) the
+copy-paste eval dump that carries the evidence (e.g. into a PR).
 
 Core rule: **a grounding change is a claim, and a claim ships with its evidence.** An `AGENTS.md` edit
 without a reproducible eval behind it is not reviewable. This matches the rigor we hold code PRs to —
