@@ -305,10 +305,17 @@ def print_card(path):
         print(f"| cost (mean) | {b['cost']:.2f} | {iso['cost']:.2f} | {plg['cost']:.2f} |")
         print(f"| gross tok (mean) | {b['tok']:.0f} | {iso['tok']:.0f} | {plg['tok']:.0f} |")
         print(f"| web calls | {b['web']} | {iso['web']} | {plg['web']} |")
-        print("\n**Legend**")
-        print("- **Baseline** — no grounding (web blocked). **Isolated** / **Plugin** — grounding "
-              "delivered inline vs. as an auto-loaded skill; **Plugin** is closest to a packed "
-              "`AGENTS.md`, so the gate is read off it.")
+        print("\n**Legend**\n")
+        print("_Columns — the three arms run the **same** task; they differ only in how (or whether) "
+              "the grounding reaches the agent:_")
+        print("- **Baseline** — no grounding, and web search disabled: the agent relies on model "
+              "knowledge alone (what happens today for a package the model doesn't know).")
+        print("- **Isolated** — the grounding text is handed to the agent directly as context for "
+              "the task.")
+        print("- **Plugin** — the grounding is auto-discovered the way a packed `AGENTS.md` is found "
+              "in the shipped package. This best matches production, so the ship decision is judged "
+              "on this column.")
+        print("\n_Rows — the metrics:_")
         print("- **quality** — pairwise-judge rubric score, 1–5 (higher better).")
         print("- **func passed** — functional assertions met (build + file + run-output checks); "
               "100% is the target.")
