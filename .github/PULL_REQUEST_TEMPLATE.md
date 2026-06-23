@@ -13,16 +13,14 @@ Unit: `grounding/<unit>` · Package: `<Name> <version>` · `AGENTS.md` body line
 
 ## Metrics
 
-<!-- n>=3. Name model + judge. Computed from the committed dataset. NORMATIVE on the left, SIGNALS
-on the right. State the grounding investment (~tok of the loaded SKILL.md). -->
+<!-- Paste BOTH `--card` dumps verbatim: the mini-tier WIN card and the frontier-tier NO-HARM card.
+     python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.haiku.json   # mini WIN
+     python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.opus.json    # frontier NO-HARM
+Each card prints its metrics table + the tier-appropriate gate (PASS/FAIL per threshold). -->
 
-`n=<runs>` · `model=claude-haiku-4.5` · `judge=claude-haiku-4.5` · grounding `~<tok>`
+<!-- mini-tier (WIN) card here -->
 
-| arm      | qual | func | tok | iet | cost | ‖ | web | turns | cache |
-| -------- | ---- | ---- | --- | --- | ---- | - | --- | ----- | ----- |
-| baseline |      |      |     |     |      | ‖ |     |       |       |
-| isolated |      |      |     |     |      | ‖ |     |       |       |
-| plugin   |      |      |     |     |      | ‖ |     |       |       |
+<!-- frontier-tier (NO-HARM) card here -->
 
 ## Representative check
 
@@ -33,8 +31,9 @@ what the grounding makes it do. -->
 
 ```bash
 eng/sync-skill.sh --check
-RUNS=3 eng/run-<unit>-6q.sh                       # -> data/<unit>-6q/<unit>.haiku.json
-python3 eng/analyze-6q.py data/<unit>-6q/<unit>.haiku.json
+RUNS=3 eng/run-<unit>-6q.sh                                   # -> data/<unit>-6q/<unit>.haiku.json (mini WIN)
+RUNS=3 MODELS=claude-opus-4.8 eng/run-<unit>-6q.sh           # frontier NO-HARM run
+python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.haiku.json
 cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # commit matched n=3
 ```
 
@@ -46,9 +45,10 @@ cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # comm
 ## Checklist
 
 - [ ] `AGENTS.md` within line limit; `sync-skill.sh --check` passes
-- [ ] Dataset committed under `data/<unit>-6q/`; table matches `analyze-6q.py`
-- [ ] n ≥ 3; model + judge named
-- [ ] Grounded ≥ baseline on **quality** and **func**; cost shown as `tok`/`iet`/`cost`
+- [ ] Datasets committed under `data/<unit>-6q/`; both `--card` dumps match them
+- [ ] n ≥ 3; model + judge named, for **both** tiers
+- [ ] **mini WIN** gate passes (real cost/IET or quality win; no func/quality/web regression)
+- [ ] **frontier NO-HARM** gate passes (zero output-token inflation; no quality/func regression)
 - [ ] Claims cite normative metrics; signals only explain
 - [ ] Grounding text is package-specific, justified by the package's trap
 - [ ] Required caveats present; cache reads attributed per arm (not grepped)

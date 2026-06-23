@@ -44,10 +44,40 @@ It characterizes the intervention mode (compact AGENTS ~0.8k tok vs a broad skil
 Usage:
   eng/analyze-6q.py data/markout-6q/*.json
   eng/analyze-6q.py .skill-validator-results/m6q-*/**/results.json
+  eng/analyze-6q.py --card data/markout-6q/markout.n3.haiku.json   # copy-paste PR dump + gate
 """
 import json, sys, glob, os
 
 ARMS = [("baseline", "baseline"), ("skilledIsolated", "isolated"), ("skilledPlugin", "plugin")]
+
+# --- Ship gate thresholds. See docs/eval-grounding-prs.md. ---
+# Pareto gate (authoring-principles §4), modeled on the decompiler quality-diff card:
+# require a real WIN on the tier that needs grounding (mini, λ low — quality is the
+# binding constraint, tokens are cheap), and tolerate ~ZERO HARM on the tier that does
+# not (frontier, λ high). Frontier harm is the direct analog of the decompiler's "no
+# drop in recovery, no increase in malformed": no quality regression and no output/
+# thinking-token inflation. Correctness (func) may never regress on either tier.
+GATE = dict(
+    iet_win_frac=0.25,        # mini WIN: >=25% IET reduction vs baseline, OR
+    cost_win_frac=0.25,       # mini WIN: >=25% cost reduction vs baseline, OR
+    qual_win_delta=0.3,       # mini WIN: >=+0.3 quality lift vs baseline
+    qual_regress_max=0.1,     # HARM (both tiers): quality may not drop more than this
+    out_inflate_frac=0.05,    # FRONTIER HARM: output tokens may not rise more than 5%
+)
+
+FRONTIER_HINTS = ("opus", "sonnet", "gpt-5", "gpt5", "gemini-3", "gemini-2.5-pro")
+MINI_HINTS = ("haiku", "mini", "flash", "small", "lite")
+
+
+def model_tier(model):
+    m = (model or "").lower()
+    if any(h in m for h in FRONTIER_HINTS):
+        return "frontier"
+    if any(h in m for h in MINI_HINTS):
+        return "mini"
+    return "mini"  # default: treat unknown as the needs-it tier
+
+
 
 
 def grounding_tokens(skill_name):
@@ -118,6 +148,7 @@ def arm_row(arm):
         bash=tb.get("bash", 0),
         tok=tok,
         iet=iet,
+        out=(m.get("outputTokens", 0) or 0),
         cost=round(m.get("cost", 0) or 0, 1),
         secs=round((m.get("wallTimeMs", 0) or 0) / 1000),
     )
@@ -160,7 +191,158 @@ def main(paths):
                 print("-" * len(HDR))
 
 
+def _num(x):
+    return x if isinstance(x, (int, float)) else None
+
+
+def aggregate(scenarios):
+    """Mean-per-scenario aggregates for each arm: qual, func, iet, cost, tok, out, web."""
+    acc = {k: dict(quals=[], fp=0, ft=0, iet=0.0, cost=0.0, tok=0.0, out=0.0, web=0, n=0)
+           for k, _ in ARMS}
+    for sc in scenarios:
+        for key, _ in ARMS:
+            r = arm_row(sc.get(key))
+            if not r:
+                continue
+            a = acc[key]; a["n"] += 1
+            q = _num(r["qual"])
+            if q is not None:
+                a["quals"].append(q)
+            fp, ft = r["func"].split("/")
+            a["fp"] += int(fp); a["ft"] += int(ft)
+            a["iet"] += r["iet"]; a["cost"] += r["cost"]; a["tok"] += r["tok"]
+            a["out"] += r["out"]; a["web"] += r["web"]
+    out = {}
+    for key, _ in ARMS:
+        a = acc[key]; n = max(a["n"], 1)
+        out[key] = dict(
+            qual=(sum(a["quals"]) / len(a["quals"])) if a["quals"] else None,
+            fp=a["fp"], ft=a["ft"],
+            iet=a["iet"] / n, cost=a["cost"] / n, tok=a["tok"] / n, out=a["out"] / n,
+            web=a["web"], n=a["n"],
+        )
+    return out
+
+
+def gate_mini(base, grnd):
+    """WIN tier (mini, λ low): require a real win; correctness may never regress."""
+    harm, win = [], []
+    ok = True
+    dfunc = grnd["fp"] - base["fp"]
+    h_func = dfunc >= 0; ok &= h_func
+    harm.append(f"{'PASS' if h_func else 'FAIL'}  func no regression "
+                f"(Δ {dfunc:+d}; {grnd['fp']}/{grnd['ft']} vs {base['fp']}/{base['ft']})")
+    if base["qual"] is not None and grnd["qual"] is not None:
+        dq = grnd["qual"] - base["qual"]
+        h_q = dq >= -GATE["qual_regress_max"]; ok &= h_q
+        harm.append(f"{'PASS' if h_q else 'FAIL'}  quality no regression "
+                    f"(Δ {dq:+.2f}; floor −{GATE['qual_regress_max']})")
+    h_web = grnd["web"] == 0; ok &= h_web
+    harm.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']})")
+    iet_frac = (base["iet"] - grnd["iet"]) / base["iet"] if base["iet"] else 0
+    cost_frac = (base["cost"] - grnd["cost"]) / base["cost"] if base["cost"] else 0
+    w_iet = iet_frac >= GATE["iet_win_frac"]
+    w_cost = cost_frac >= GATE["cost_win_frac"]
+    w_q = (base["qual"] is not None and grnd["qual"] is not None
+           and (grnd["qual"] - base["qual"]) >= GATE["qual_win_delta"])
+    win.append(f"{'WIN ' if w_iet else '--  '}  IET reduction {iet_frac*100:.0f}% "
+               f"(bar {GATE['iet_win_frac']*100:.0f}%)")
+    win.append(f"{'WIN ' if w_cost else '--  '}  cost reduction {cost_frac*100:.0f}% "
+               f"(bar {GATE['cost_win_frac']*100:.0f}%)")
+    if base["qual"] is not None and grnd["qual"] is not None:
+        win.append(f"{'WIN ' if w_q else '--  '}  quality lift Δ "
+                   f"{grnd['qual']-base['qual']:+.2f} (bar +{GATE['qual_win_delta']})")
+    return (ok and (w_iet or w_cost or w_q)), harm, win
+
+
+def gate_frontier(base, grnd):
+    """HARM tier (frontier, λ high): ZERO tolerance. The decompiler analog — no drop in
+    recovery (func), no increase in malformed (quality), no output-token inflation."""
+    rows = []
+    ok = True
+    dfunc = grnd["fp"] - base["fp"]
+    h_func = dfunc >= 0; ok &= h_func
+    rows.append(f"{'PASS' if h_func else 'FAIL'}  no correctness/recovery drop "
+                f"(func Δ {dfunc:+d})")
+    if base["qual"] is not None and grnd["qual"] is not None:
+        dq = grnd["qual"] - base["qual"]
+        h_q = dq >= -GATE["qual_regress_max"]; ok &= h_q
+        rows.append(f"{'PASS' if h_q else 'FAIL'}  no quality regression "
+                    f"(Δ {dq:+.2f}; floor −{GATE['qual_regress_max']})")
+    out_frac = (grnd["out"] - base["out"]) / base["out"] if base["out"] else 0
+    h_out = out_frac <= GATE["out_inflate_frac"]; ok &= h_out
+    rows.append(f"{'PASS' if h_out else 'FAIL'}  no output/thinking-token inflation "
+                f"(Δ {out_frac*100:+.0f}%; cap +{GATE['out_inflate_frac']*100:.0f}%)")
+    h_web = grnd["web"] == 0; ok &= h_web
+    rows.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']})")
+    return ok, rows
+
+
+def _fmt_q(q):
+    return f"{q:.2f}" if isinstance(q, (int, float)) else "-"
+
+
+def print_card(path):
+    d = json.load(open(path))
+    model = d.get("model", "?"); judge = d.get("judgeModel", model)
+    tier = model_tier(model)
+    for v in d.get("verdicts", []):
+        sn = v.get("skillName", "?")
+        gtok = grounding_tokens(sn)
+        scs = v.get("scenarios", [])
+        agg = aggregate(scs)
+        b, iso, plg = agg["baseline"], agg["skilledIsolated"], agg["skilledPlugin"]
+        print(f"### Grounding eval — {sn} (model={model}, judge={judge}, tier={tier})\n")
+        if gtok:
+            print(f"Grounding: `grounding/{sn}/AGENTS.md` (~{gtok} tok loaded per grounded arm). "
+                  f"{b['n']} scenarios; means across scenarios.\n")
+        print("| Metric | Baseline | Isolated | Plugin |")
+        print("| --- | ---: | ---: | ---: |")
+        print(f"| quality (1–5) | {_fmt_q(b['qual'])} | {_fmt_q(iso['qual'])} | {_fmt_q(plg['qual'])} |")
+        print(f"| func passed | {b['fp']}/{b['ft']} | {iso['fp']}/{iso['ft']} | {plg['fp']}/{plg['ft']} |")
+        print(f"| IET (mean) | {b['iet']:.0f} | {iso['iet']:.0f} | {plg['iet']:.0f} |")
+        print(f"| output tok (mean) | {b['out']:.0f} | {iso['out']:.0f} | {plg['out']:.0f} |")
+        print(f"| cost (mean) | {b['cost']:.2f} | {iso['cost']:.2f} | {plg['cost']:.2f} |")
+        print(f"| gross tok (mean) | {b['tok']:.0f} | {iso['tok']:.0f} | {plg['tok']:.0f} |")
+        print(f"| web calls | {b['web']} | {iso['web']} | {plg['web']} |")
+        # Gate evaluated on plugin (auto-delivered channel, closest to a packed AGENTS.md).
+        if tier == "frontier":
+            passed, rows = gate_frontier(b, plg)
+            print(f"\n**Frontier HARM gate (plugin vs baseline): "
+                  f"{'✅ NO HARM' if passed else '❌ HARM'}** — zero tolerance.\n")
+            for line in rows:
+                print(f"- {line}")
+            print("\n_This tier measures harm, not win: frontier quality is near the ceiling, so "
+                  "grounding need not improve it — it must not damage it. A full ship decision also "
+                  "needs a mini-tier WIN run._")
+        else:
+            passed, harm, win = gate_mini(b, plg)
+            print(f"\n**Mini WIN gate (plugin vs baseline): {'✅ PASS' if passed else '❌ FAIL'}**\n")
+            print("_Guards (must hold):_")
+            for line in harm:
+                print(f"- {line}")
+            print("\n_Win (at least one must clear):_")
+            for line in win:
+                print(f"- {line}")
+            print("\n_This tier measures the win. A full ship decision also needs a frontier-tier "
+                  "NO-HARM run (zero output-token inflation, no quality regression)._")
+        print("\n> Quality Δ is a **lower bound** — the web-blocked baseline self-grounds from the "
+              "NuGet cache (docs are packed in the nupkg), so it understates grounding's value. "
+              "Starting cache state is not a variable. See docs/eval-grounding-prs.md.\n")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    args = sys.argv[1:]
+    if not args:
         print(__doc__); sys.exit(1)
-    main(sys.argv[1:])
+    if args[0] == "--card":
+        rest = args[1:]
+        if not rest:
+            print("--card needs a results.json path"); sys.exit(1)
+        files = []
+        for p in rest:
+            files.extend(glob.glob(p, recursive=True))
+        for f in sorted(set(files)):
+            print_card(f)
+        sys.exit(0)
+    main(args)

@@ -1,147 +1,186 @@
-# Standard: eval-based grounding content PRs
+# Eval-based grounding content PRs — methodology, terms, and the ship gate
 
-How the team proposes and reviews a change to package **grounding content** (an `AGENTS.md` that
-ships in a package root). The rule is simple: **grounding changes are claims, and a claim ships with
-its evidence.** A PR that edits `AGENTS.md` without a reproducible eval behind it is not reviewable.
+This is the standalone reference for proposing and reviewing a change to package **grounding
+content** (an `AGENTS.md` that ships in a package root). It covers (1) the methodology, (2) the terms
+we use or redefine, (3) the **threshold gate** that decides whether a change ships, and (4) the
+copy-paste eval dump every PR carries.
 
-This mirrors the rigor we now hold ordinary code PRs to — see
-[dotnet-inspect#1209](https://github.com/richlander/dotnet-inspect/pull/1209) for the shape we are
-matching (a *Changes* summary, a `Baseline | PR | Delta` metrics table, a representative check, and an
-explicit *Validation* block of reproducible commands). It adapts that shape to grounding evals, where
-the "delta" is **baseline (ungrounded) vs grounded** rather than before/after a code fix. External
-context for the broader grounding effort:
+Core rule: **a grounding change is a claim, and a claim ships with its evidence.** An `AGENTS.md` edit
+without a reproducible eval behind it is not reviewable. This matches the rigor we hold code PRs to —
+see [dotnet-inspect#1209](https://github.com/richlander/dotnet-inspect/pull/1209) for the shape we are
+matching: a *Changes* summary, a `Baseline | … | Delta` table, a representative check, and an explicit
+*Validation* block. Broader context:
 [aspire#18437 (comment)](https://github.com/microsoft/aspire/pull/18437#issuecomment-4782880736).
 
 ---
 
-## 1. What a grounding PR contains
+## 1. Methodology
 
-A grounding content PR is **not** just the `AGENTS.md` diff. It carries its own proof:
+We reuse the [`dotnet/skills`](https://github.com/dotnet/skills) **skill-validator** harness to run a
+**baseline vs. grounded** evaluation over a fixed set of scenarios (a "6-question unit", e.g. N1–N6
+for NuGetFetch, M1–M6 for Markout). Each scenario runs three **arms**:
 
-| Artifact | Path | Why |
+- **baseline** — no grounding; model knowledge only, web tools rejected.
+- **skilled-isolated** — grounding delivered inline.
+- **skilled-plugin** — grounding delivered as an auto-loaded plugin skill.
+
+A pairwise LLM judge scores rubric quality; the harness also records tokens, cost, tool calls, and
+assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read results with
+`eng/analyze-6q.py` (full table) or `eng/analyze-6q.py --card` (the PR dump, §4).
+
+**Why grounded must be compared carefully.** The baseline is *not* a clean "model ignorance" control:
+a package's `README.md`/`AGENTS.md` are packed inside its nupkg, so any `dotnet build` restores them
+to `~/.nuget/packages`, where the web-blocked baseline can read them. So **the baseline is partly
+self-grounded and the measured gap understates grounding's value** (see [harness.md](./harness.md) for
+the per-arm read attribution and the empty-cache analysis). Treat every quality delta as a *lower
+bound*.
+
+---
+
+## 2. Terms we use or redefine
+
+| Term | Meaning here |
+| --- | --- |
+| **Grounding** | A compact, package-specific `AGENTS.md` that ships in the package root and makes the package self-teaching for an agent. Records only what the model is *proven to lack* — not model-resident knowledge. |
+| **`AGENTS.md` vs `SKILL.md`** | `AGENTS.md` is the source of truth (it ships in the package). `SKILL.md` is generated from it by `eng/sync-skill.sh` purely so the harness can toggle grounding on/off. Never hand-edit `SKILL.md`. |
+| **isolated / plugin** | The two grounded delivery channels the harness simulates. **plugin** (auto-loaded) is closest to a packed `AGENTS.md` that is always present, so the ship gate is evaluated on the **plugin** arm. |
+| **qual** | Judge quality, rubric-weighted `overallScore` 1–5. A **value** metric. |
+| **func** | Functional assertions passed (build + file + run-output regex). A **value** metric. The correctness/recovery analog. |
+| **tok** | Gross tokens (`input + output`); `input` *includes* cache reads. Inflated by cache re-reads, so not the harm by itself. |
+| **IET** | **Input-Equivalent Tokens** — cache-excluded effective tokens, `(input − cacheRead) + output`. Our headline cost stick (see `README.md`). `tok` and `iet` bracket the real spend; `cost` sits between. |
+| **cost** | Premium-request multiplier (cache-discounted). The truest single harm proxy. |
+| **output tok** | Output/thinking tokens. The most expensive, most variable component and the key **frontier-harm** signal (§3). |
+| **Normative metric** | A quantity we *claim* as value or harm: `qual`, `func`, `tok`, `iet`, `cost`, `secs`. A conclusion may rest only on these. |
+| **Informative signal** | Corroborating behavioral data that *explains* a metric move but is never the claim: `web`, `tools`, `turns`, `cache` (bash rummaging `~/.nuget/packages`), `di`, `mcp`, `bash`. A tool call adds nothing to the bill on its own; many signals together trace the narrative arc (archaeology, cache-reflection, retry loops). |
+| **warm / cold cache** | Whether the package is restored on disk. For build-based scenarios the agent restores it within its first few tool calls, so **starting cache state is not a variable** — treat it as warm (see harness.md). |
+| **verify-close** | A package-specific grounding line that makes the agent surface the final code/API calls, fixing a *verifiability artifact* where the judge underscores efficient grounded runs it can't see (see [nugetfetch report](./reports/nugetfetch.md)). |
+| **Pareto gate / tier** | The ship rule (§3). **mini tier** (λ low — weaker/cheaper model that *needs* grounding): quality is the binding constraint, tokens are cheap → seek the **win** here. **frontier tier** (λ high — strong model that doesn't need it): quality is near ceiling → require **zero harm** here. |
+
+---
+
+## 3. The ship gate — win on the tier that needs it, zero harm on the tier that doesn't
+
+Grounding is **auto-installed and un-removable**, so the verdict is a **Pareto gate**, not an average
+(authoring-principles §4). Modeled directly on the decompiler quality-diff card — which **requires a
+real win** (recovery up, malformed down) while holding harm rows (semantic defects, fidelity, pass
+bugs) at **zero tolerance** — the grounding gate is two-sided:
+
+> **Ship iff** the change **materially helps the tier that needs grounding (mini)** **AND does no
+> meaningful harm to the tier that doesn't (frontier).** Rip it out iff it helps neither.
+
+A complete decision therefore needs **two runs**: a mini-tier run (default `claude-haiku-4.5`) for the
+win, and a frontier-tier run (e.g. `claude-opus-*`) for the no-harm check. Each is n ≥ 3, model and
+judge named. The gate is evaluated on the **plugin** arm vs **baseline**, on means across the unit's
+scenarios.
+
+### Mini tier — the WIN (thresholds)
+
+Correctness may never regress; then at least one win axis must clear:
+
+| Axis | Type | Threshold |
 | --- | --- | --- |
-| The grounding edit | `grounding/<unit>/AGENTS.md` | The change itself. Body ≤ the line limit (`eng/agents-line-limit.txt`, currently 60). |
-| The regenerated wrapper | `grounding/<unit>/SKILL.md` | Generated from `AGENTS.md` by `eng/sync-skill.sh`; must be in sync (`--check` passes). |
-| The dataset | `data/<unit>-6q/<unit>.n3.haiku.json` | The matched n≥3 results the table is computed from. Commit it. |
-| The report | `docs/reports/<unit>.md` | The narrative: what the agent gets wrong unaided, what the grounding fixes, the numbers, the caveats. |
+| `func` | guard (hard) | Δ ≥ 0 — no functional regression |
+| `qual` | guard (hard) | Δ ≥ −0.1 — no regression beyond n=3 noise |
+| `web` | guard (hard) | grounded web calls = 0 (no `reject_tools` breach) |
+| `iet` | **win** | ≥ 25% reduction vs baseline, **or** |
+| `cost` | **win** | ≥ 25% reduction vs baseline, **or** |
+| `qual` | **win** | Δ ≥ +0.3 lift vs baseline |
 
-`AGENTS.md` is the source of truth (it ships in the package); `SKILL.md` is a generated harness
-wrapper. Never hand-edit `SKILL.md`.
+On the mini tier a large cost/IET reduction with quality flat (within the −0.1 band) **is** a
+legitimate ship — tokens are cheap, the binding constraint was the model otherwise flailing or
+failing.
 
----
+### Frontier tier — the HARM (zero tolerance)
 
-## 2. The evidence bar — "confident enough to ship"
+The strong model rarely *needs* grounding, so this run does not need a win — it must prove grounding
+**does no damage**. This is the direct analog of "no drop in recovery, no increase in malformed":
 
-A grounding change ships only when **all** of these hold. If one fails, the PR either doesn't ship or
-says explicitly why the exception is justified.
+| Axis | Threshold |
+| --- | --- |
+| `func` | Δ ≥ 0 — no correctness/recovery drop |
+| `qual` | Δ ≥ −0.1 — no quality regression |
+| **`output tok`** | Δ ≤ +5% — **no output/thinking-token inflation** (the frontier spend harm) |
+| `web` | grounded web calls = 0 |
 
-1. **n ≥ 3 runs**, with the model and judge named (default `claude-haiku-4.5` for both). Single-run
-   numbers are directional only and never the basis for a ship decision.
-2. **Grounded beats baseline on quality**, not just on cost. Cost and correctness wins are necessary
-   but not sufficient — if the judge scores grounded *below* baseline, diagnose it (it is often a
-   [verifiability artifact](./reports/nugetfetch.md), not weaker code) and fix the grounding before
-   shipping. A deliberate quality/cost tradeoff is allowed only if stated and defended.
-3. **Functional assertions (`func`) do not regress.** Build + file + run-output gates must stay at or
-   above baseline.
-4. **Claims rest on normative metrics, never on signals.** See §3.
-5. **Cost is reported three ways** — gross `tok`, cache-excluded `iet`, and `cost` — because a
-   baseline that re-reads a big cache inflates `tok` while `iet`/`cost` tell the real story. IET is
-   the headline cost stick (`README.md` → "How we measure cost: IET").
-6. **Variance is disclosed.** Report the spread / flag high-variance scenarios; do not bury a noisy
-   win. If a result hinges on one scenario, say so.
-7. **Required caveats are present** (§4): the NuGet-cache contamination confound, and the fact that
-   starting cache state is not an experimental variable.
+The case the gate exists to catch: grounding that *adds* output/thinking tokens for only a *modest*
+quality change on the frontier — pure harm to the tier that didn't need it. A small quality gain
+bought with significant output tokens is a **fail** on the frontier.
+
+> These thresholds are the team's starting line (haiku/opus tiers, n=3). They are tunable in one place
+> — `GATE` in `eng/analyze-6q.py` — and the analyzer applies them automatically per `--card`.
 
 ---
 
-## 3. Normative metrics vs. informative signals (do not conflate)
+## 4. The eval dump (copy-paste into the PR)
 
-The analyzer (`eng/analyze-6q.py`) prints two column groups on purpose. A conclusion may rest only on
-the left group.
-
-- **NORMATIVE METRICS** — what we claim as value or harm: `qual` (judge 1–5), `func` (assertions
-  passed), `tok`, `iet`, `cost`, `secs`.
-- **INFORMATIVE SIGNALS** — corroborating behavioral data that *explains* why the metrics moved, but
-  is never itself the claim: `web`, `tools`, `turns`, `di` (dotnet-inspect calls), `mcp`, `cache`
-  (bash rummaging `~/.nuget/packages`), `bash`. A tool call or web fetch adds nothing to the bill on
-  its own; its value is interpretive — many signal points together trace the narrative arc
-  (archaeology, cache-reflection, compile-retry loops) that gives the token delta its shape.
-
-Write claims as: *"grounding cut IET 3.7× and lifted quality +0.3 (metrics); the baseline's spend is
-explained by web archaeology and compile-retry loops it no longer needs (signals)."*
-
----
-
-## 4. Required methodology caveats
-
-Every grounding report/PR for a package that ships docs must carry these, because they bound the
-measurement (full treatment in [`harness.md`](./harness.md)):
-
-- **The baseline is partly self-grounded from the NuGet cache.** A package's `README.md`/`AGENTS.md`
-  are packed *inside the nupkg*, so any restore extracts them to `~/.nuget/packages`, where the
-  web-blocked baseline can read them. The baseline-vs-grounded gap therefore **understates**
-  grounding's value. Attribute cache reads **per arm** via `sessions.db` and count only successful
-  tool results — never `grep` the path string across all logs (it over-counts and conflates arms).
-- **Starting cache state is not a variable.** For build-based scenarios the agent restores the package
-  itself within its first few tool calls, so an empty cache collapses to warm before any
-  package-specific work. Treat the cache as fixed (warm); an empty cache is only observable for
-  advisory tasks that never build.
-
----
-
-## 5. PR description format
-
-Use the template (`.github/PULL_REQUEST_TEMPLATE.md`). The required sections:
-
-### Changes
-What grounding text changed and **why it is package-specific knowledge**, not a generic process tip.
-The justification must point at the package's actual trap (e.g. "NuGetFetch shadows the official NuGet
-client, so we name the calls to prove the real API was used").
-
-### Metrics (n=…, model=…, judge=…)
-A table over the three arms with the normative metrics, plus the key signals that explain them:
-
-```
-| arm      | qual | func  | tok   | iet   | cost | ‖ | web | turns | cache |
-| -------- | ---- | ----- | ----- | ----- | ---- | - | --- | ----- | ----- |
-| baseline | …    | 26/30 | ~540k | ~…    | 7.7  | ‖ | 0   | …     | …     |
-| isolated | …    | 30/30 | ~96k  | ~…    | 1.8  | ‖ | 0   | …     | …     |
-| plugin   | …    | 30/30 | ~133k | ~…    | 2.1  | ‖ | 0   | …     | …     |
-```
-
-State the grounding investment (the `~tok` size of the loaded `SKILL.md`) the payoff is measured
-against.
-
-### Representative check
-One concrete before/after: what the **ungrounded** agent reaches for (the hallucinated/wrong API) and
-what the grounding makes it do instead. This is the qualitative counterpart to the table.
-
-### Validation (reproducible)
-The exact commands a reviewer can rerun:
+Generate the dump from the committed dataset:
 
 ```bash
-eng/sync-skill.sh --check                        # SKILL.md in sync with AGENTS.md
-RUNS=3 eng/run-<unit>-6q.sh                       # matched n=3 eval -> data/<unit>-6q/<unit>.haiku.json
-python3 eng/analyze-6q.py data/<unit>-6q/<unit>.haiku.json
-cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json  # commit the matched run
+python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.haiku.json     # mini-tier WIN card
+python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.opus.json      # frontier-tier HARM card
 ```
 
-`run-<unit>-6q.sh` writes `<unit>.haiku.json`; we **commit the matched n=3 run** as
-`<unit>.n3.haiku.json` so it is not overwritten by a later single-run pass.
+`--card` prints a self-contained Markdown block — the metrics table, the tier-appropriate gate with
+each threshold PASS/FAIL, and the lower-bound caveat — **paste it verbatim** into the PR's *Metrics*
+section. It detects the tier from the model name and evaluates the correct gate. Example (NuGetFetch,
+mini tier):
 
-### Caveats
-The §4 caveats, plus any scenario-specific variance notes.
+```
+| Metric | Baseline | Isolated | Plugin |
+| --- | ---: | ---: | ---: |
+| quality (1–5) | 4.40 | 4.38 | 4.67 |
+| func passed | 17/18 | 18/18 | 18/18 |
+| IET (mean) | 30189 | 20980 | 17220 |
+| output tok (mean) | 6246 | 1518 | 1604 |
+| cost (mean) | 7.77 | 1.83 | 2.08 |
+| web calls | 6 | 0 | 0 |
+
+**Mini WIN gate (plugin vs baseline): ✅ PASS**
+- PASS  func no regression (Δ +1)
+- PASS  quality no regression (Δ +0.27; floor −0.1)
+- WIN   IET reduction 43% (bar 25%)
+- WIN   cost reduction 73% (bar 25%)
+```
+
+---
+
+## 5. What a grounding PR contains
+
+| Artifact | Path |
+| --- | --- |
+| The grounding edit (body ≤ `eng/agents-line-limit.txt`, currently 60) | `grounding/<unit>/AGENTS.md` |
+| Regenerated wrapper, in sync (`sync-skill.sh --check`) | `grounding/<unit>/SKILL.md` |
+| The matched n≥3 mini-tier dataset | `data/<unit>-6q/<unit>.n3.haiku.json` |
+| The matched n≥3 frontier-tier dataset (no-harm check) | `data/<unit>-6q/<unit>.n3.opus.json` |
+| The report | `docs/reports/<unit>.md` |
+
+### PR description format
+Use `.github/PULL_REQUEST_TEMPLATE.md`. Required sections: **Changes** (what changed and *why it is
+package-specific knowledge*, pointing at the package's actual trap), **Metrics** (paste both `--card`
+dumps), **Representative check** (one concrete before/after: the wrong API the ungrounded agent reaches
+for vs. what grounding makes it do), **Validation** (the exact commands), **Caveats** (the cache
+self-grounding lower-bound + cache-state-not-a-variable).
+
+### Validation (reproducible)
+
+```bash
+eng/sync-skill.sh --check
+RUNS=3 eng/run-<unit>-6q.sh                                    # -> data/<unit>-6q/<unit>.haiku.json
+RUNS=3 MODELS=claude-opus-4.8 eng/run-<unit>-6q.sh            # frontier no-harm run
+python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.haiku.json
+cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # commit the matched run
+```
 
 ---
 
 ## 6. Reviewer checklist
 
-- [ ] `AGENTS.md` body within the line limit; `eng/sync-skill.sh --check` passes.
-- [ ] Dataset committed under `data/<unit>-6q/`; table in the PR matches it (rerun `analyze-6q.py`).
-- [ ] n ≥ 3; model and judge named.
-- [ ] Grounded ≥ baseline on **quality** and **func**; cost/IET win shown with all three of
-      `tok`/`iet`/`cost`.
-- [ ] Claims cite normative metrics; signals used only to explain.
-- [ ] The grounding text is package-specific, justified by the package's actual trap.
+- [ ] `AGENTS.md` within the line limit; `eng/sync-skill.sh --check` passes.
+- [ ] Datasets committed under `data/<unit>-6q/`; both `--card` dumps in the PR match them.
+- [ ] n ≥ 3; model and judge named, for **both** tiers.
+- [ ] **mini WIN** gate passes (a real cost/IET or quality win; no func/quality/web regression).
+- [ ] **frontier NO-HARM** gate passes (zero output-token inflation; no quality/func regression).
+- [ ] Claims cite normative metrics; signals only explain.
+- [ ] Grounding text is package-specific, justified by the package's actual trap.
 - [ ] Required caveats present; cache reads attributed per arm (not grepped).
-- [ ] Report under `docs/reports/<unit>.md` updated.
+- [ ] `docs/reports/<unit>.md` updated.
