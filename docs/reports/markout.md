@@ -40,31 +40,34 @@ plugin +0.07; Haiku iso −0.06 / plugin +0.21, varianceCV 1.7). Per the methodo
 is the corroborating *signal* that explains the spend, not a claim in itself — and either is more
 robust than the run-to-run quality delta at n=3.
 
-> **Caveat — the baseline is partly self-grounded from the NuGet cache.** `Markout 0.13.8` ships
-> both `README.md` (488 lines) and a packed `AGENTS.md` (68 lines), and `dotnet build` restores them
-> into `~/.nuget/packages`. The web-blocked baseline **read them from disk** (n=3 scenario M6:
-> `AGENTS.md` 9×, `README.md` 16×), so it is not truly ungrounded — meaning the baseline-vs-grounded
-> gap reported here **understates** grounding's value. The clean control is a two-baseline test
-> (cache docs present vs stripped); see
+> **Caveat — the baseline is partly self-grounded from the NuGet cache.** `Markout 0.13.8` packs both
+> `README.md` and `AGENTS.md` **inside its nupkg**, so `dotnet build` restores them into
+> `~/.nuget/packages`. The web-blocked baseline **read them from disk** — attributing sessions to arms
+> via `sessions.db`, the baseline arm made **28 successful reads** of the cached `README.md`/`AGENTS.md`
+> across its 18 sessions, while the grounded arms read the cache **0×** (they get `AGENTS.md` from the
+> skill). So the baseline is not truly ungrounded, and the gap reported here **understates** grounding's
+> value. See
 > [the cache-contamination confound](../harness.md#a-confound-the-baseline-can-read-the-package-from-the-nuget-cache).
 >
-> **Two-baseline result (n=3, matched).** Re-running the baseline with the shipped docs temporarily
-> relocated out of the cache (lib kept, so the package still builds) closes the leak completely:
-> cache-path reads of `README.md`/`AGENTS.md` go **304 / 98 → 0 successful** (the CLEAN agents still
-> *reach* for them — 12 / 4 attempts — but every one returns `No such file`). The measured effect on the
-> baseline arm:
+> Because the docs ride **inside the nupkg**, every restore extracts them (verified: a `dotnet restore`
+> into an empty cache re-materializes both files). And every Markout scenario asserts `dotnet build`. So
+> a build-based scenario can **never** give a truly cold/ungrounded baseline — the agent's own build
+> always warms the cache. A truly cold baseline is only possible for advisory tasks that never build.
+>
+> **Doc-strip probe (n=3, matched, upper bound).** Relocating the `0.13.8` docs out of the cache (lib
+> kept) and re-running the baseline dropped its successful cache-doc reads **28 → 1**; the lone survivor
+> was the agent falling back to a **sibling cached version** (`… 0.13.8/README.md || … 0.13.7/README.md`),
+> proving stripping one version is not a cold cache. Measured effect on the baseline arm:
 >
 > | baseline (mean / 6 scenarios, n=3) | quality | cost | iet |
 > | --- | --- | --- | --- |
-> | WARM (docs in cache, self-grounded) | 4.23 | 11.75 | 51,951 |
-> | CLEAN (docs stripped, truly unaided) | 4.05 | 11.24 | 47,937 |
-> | **contamination (WARM − CLEAN)** | **+0.18** | +0.51 | +4,014 |
+> | WARM (docs cached) | 4.23 | 11.75 | 51,951 |
+> | doc-stripped (0.13.8 only) | 4.05 | 11.24 | 47,937 |
+> | **delta (lower bound)** | **+0.18** | +0.51 | +4,014 |
 >
-> So Markout's shipped `README.md`/`AGENTS.md` give even a web-blocked baseline a **~0.18 quality bump**;
-> cost/iet move within noise. The robust, physically-verified signal is the read-count collapse, not the
-> small quality delta. Net: the published baseline-vs-grounded gap understates grounding by roughly this
-> margin. (NuGetFetch 0.6.2 ships no docs in its cache entry — only the DLL — so it has no equivalent
-> strippable leak and needs no CLEAN control.)
+> So denying the `0.13.8` docs cost the baseline **~0.18 quality** — a *lower bound*, since sibling
+> versions still leaked; cost/iet moved within noise. (NuGetFetch 0.6.2 packs no docs in its nupkg — only
+> the DLL — so it has no equivalent strippable leak.)
 
 ## The reframing: grounding competes with the package's README, not with model ignorance
 

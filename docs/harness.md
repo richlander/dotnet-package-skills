@@ -61,43 +61,66 @@ and the `lib/*.dll` (reflectable/decompilable). So the web-blocked baseline is n
 ungrounded — it can self-serve the grounding straight from the restored package.
 
 This is empirically active, not hypothetical. In the Markout n=3 runs (package `Markout 0.13.8`,
-whose cache entry ships both `README.md` (488 lines) and `AGENTS.md` (68 lines)), the **baseline**
-read those files from the cache — scenario M6 alone shows 9 reads of `AGENTS.md` and 16 of
-`README.md`. The `cache` signal column counts these bash pokes. The consequence: for a package that
-ships groundable artifacts, **the baseline-vs-grounded gap understates grounding's value**, because
-the baseline already had (a fraction of) the grounding on disk. NuGetFetch `0.6.2` ships no docs in
-its cache entry (only the DLL), so its leak is weaker (reflection only) — which is itself a reason
-the NuGetFetch baseline looks stronger relative to grounding than Markout's.
+whose cache entry ships both `README.md` and `AGENTS.md`), the **baseline** read those files from
+the cache. Attributing every session to its arm via `sessions.db` and counting only *successful*
+tool results, the **baseline** arm made **28 successful reads** of the cached `README.md`/`AGENTS.md`
+across its 18 sessions (6 scenarios × 3 runs); the two grounded arms made **0** cache-path reads —
+they receive `AGENTS.md` through the skill mechanism, not the cache. (An earlier coarse `grep` of the
+path string across all session logs reported 304/98; that over-counted — one read spans many log
+lines — and conflated arms. The per-arm, success-aware figure is 28 baseline reads.) The consequence:
+for a package that ships groundable artifacts, **the baseline-vs-grounded gap understates grounding's
+value**, because the baseline already had (a fraction of) the grounding on disk.
 
-The clean control is a **two-baseline test**: run the same baseline with the package's cache entry
-**carrying** its shipped docs vs **stripped** of them (lib kept, so it still builds). The delta
-isolates the value the package's own shipped artifacts provide to an unaided agent — i.e. the
-README/`AGENTS.md` *delivery* effect, measured rather than assumed.
+**The docs ride inside the nupkg, so every restore extracts them.** `Markout 0.13.8`'s nupkg contains
+`README.md` and `AGENTS.md` at the package root (declared via `<PackageReadmeFile>` / `<None Pack>`).
+Verified directly: starting from a *completely empty* `NUGET_PACKAGES` dir, a single `dotnet restore`
+of the package re-materializes both files on disk. This has a sharp implication: **you cannot have the
+package restored (buildable) without its shipped docs being readable** — the docs travel with the
+code. Since every Markout scenario asserts `dotnet build`/`run`, the agent's own build necessarily
+restores the package and lands the docs in the cache. So in any build-based scenario the web-blocked
+baseline is **never truly ungrounded**.
 
-A HOME-redirected isolation harness **does not work** here — the Copilot CLI's auth state is
-HOME-bound, so a redirected `HOME` fails with `Not authenticated`. The working approach
-(`.tools/baseline-cache-clean.sh`, gitignored) keeps the real `HOME` and instead temporarily
-**relocates only the shipped doc files** out of the global cache entry for the duration of the eval,
-with a checksum-verified restore trap (EXIT/INT/TERM) that puts them back intact.
+That makes only two baseline conditions physically meaningful:
 
-**Measured result (Markout `0.13.8`, n=3 matched).** Stripping the docs closes the leak completely:
-cache-path reads of `README.md`/`AGENTS.md` collapse from **304 / 98 successful (WARM)** to **0
-successful (CLEAN)** — the CLEAN baseline still *reaches* for them (12 / 4 attempts) but every read
-returns `No such file`. The effect on the baseline arm (mean / 6 scenarios):
+1. **Warm / restored** — the only condition compatible with build-based scenarios. The package (and
+   therefore its `README.md`/`AGENTS.md`) is on disk; the baseline competes against
+   grounding-via-cache, not against model ignorance. **Every number in this repo is this condition.**
+2. **Cold / no-restore** — a truly empty cache where the package is never restored. Here the baseline
+   has model knowledge only. But this is only achievable for **advisory scenarios that never build**;
+   the moment a task requires `dotnet build`, restore warms the cache and condition (1) returns.
+
+Stripping the docs out of a *restored* cache entry (lib kept) is therefore an **artificial third
+state** that corresponds to no real developer setup — you would never have a restored, buildable
+package on disk with its `README.md` surgically deleted. It is useful only as an upper-bound probe of
+"how much does denying the cached docs cost the baseline," not as a realistic ungrounded baseline.
+
+NuGetFetch `0.6.2` ships **no** docs in its nupkg (only the DLL), so its baseline leak is reflection
+only (weaker) — which is itself a reason the NuGetFetch baseline looks stronger relative to grounding
+than Markout's.
+
+**The doc-strip probe (Markout `0.13.8`, n=3 matched).** As an upper-bound probe we relocated the
+`0.13.8` docs out of the cache (lib kept) and re-ran the baseline. Method note: a HOME-redirected
+isolation harness **does not work** — the Copilot CLI's auth state is HOME-bound, so a redirected
+`HOME` fails with `Not authenticated`; the working approach (`.tools/baseline-cache-clean.sh`,
+gitignored) keeps the real `HOME` and relocates only the doc files with a checksum-verified restore
+trap. Stripping `0.13.8` dropped the baseline's successful cache-doc reads from **28 → 1**: the
+single survivor was the agent **falling back to a sibling cached version** —
+`cat .../0.13.8/README.md || cat .../0.13.7/README.md` — proving that stripping one version is *not* a
+cold cache (the global cache here held five Markout versions: 0.10.2, 0.13.7, 0.13.8, 0.13.9,
+10.0.2, four of them shipping a README). The effect on the baseline arm (mean / 6 scenarios):
 
 | baseline (n=3) | quality | cost | iet |
 | --- | --- | --- | --- |
-| WARM (self-grounded) | 4.23 | 11.75 | 51,951 |
-| CLEAN (docs stripped) | 4.05 | 11.24 | 47,937 |
-| **WARM − CLEAN** | **+0.18** | +0.51 | +4,014 |
+| WARM (docs cached) | 4.23 | 11.75 | 51,951 |
+| doc-stripped (0.13.8) | 4.05 | 11.24 | 47,937 |
+| **delta** | **+0.18** | +0.51 | +4,014 |
 
-So the shipped docs give even a web-blocked baseline a **~0.18 quality bump**; cost/iet move within
-noise. The robust, physically-verified signal is the read-count collapse, not the small quality
-delta. Bottom line: the published baseline-vs-grounded gap **understates** grounding by roughly this
-margin, and the understatement scales with how much groundable material a package ships in its cache
-entry. NuGetFetch `0.6.2` ships only the DLL, so it has no strippable-doc leak and needs no CLEAN
-control. (`.tools/baseline-cache-test.sh` is an earlier HOME-isolated variant kept only for
-reference — it is blocked by the auth issue above.)
+So denying the baseline the `0.13.8` docs cost it **~0.18 quality** (a *lower bound* — sibling-version
+READMEs still leaked); cost/iet moved within noise. Bottom line: the published baseline-vs-grounded
+gap **understates** grounding, the understatement scales with how much groundable material the package
+ships, and because the docs are packed in the nupkg, a build-based scenario can never fully remove
+that understatement. (`.tools/baseline-cache-test.sh` is an earlier HOME-isolated variant kept only
+for reference — it is blocked by the auth issue above.)
 
 ## How it relates to dotnet/skills
 
