@@ -72,9 +72,32 @@ the NuGetFetch baseline looks stronger relative to grounding than Markout's.
 The clean control is a **two-baseline test**: run the same baseline with the package's cache entry
 **carrying** its shipped docs vs **stripped** of them (lib kept, so it still builds). The delta
 isolates the value the package's own shipped artifacts provide to an unaided agent — i.e. the
-README/`AGENTS.md` *delivery* effect, measured rather than assumed. See
-`.tools/baseline-cache-test.sh` for a HOME-isolated harness that does this without mutating the real
-cache.
+README/`AGENTS.md` *delivery* effect, measured rather than assumed.
+
+A HOME-redirected isolation harness **does not work** here — the Copilot CLI's auth state is
+HOME-bound, so a redirected `HOME` fails with `Not authenticated`. The working approach
+(`.tools/baseline-cache-clean.sh`, gitignored) keeps the real `HOME` and instead temporarily
+**relocates only the shipped doc files** out of the global cache entry for the duration of the eval,
+with a checksum-verified restore trap (EXIT/INT/TERM) that puts them back intact.
+
+**Measured result (Markout `0.13.8`, n=3 matched).** Stripping the docs closes the leak completely:
+cache-path reads of `README.md`/`AGENTS.md` collapse from **304 / 98 successful (WARM)** to **0
+successful (CLEAN)** — the CLEAN baseline still *reaches* for them (12 / 4 attempts) but every read
+returns `No such file`. The effect on the baseline arm (mean / 6 scenarios):
+
+| baseline (n=3) | quality | cost | iet |
+| --- | --- | --- | --- |
+| WARM (self-grounded) | 4.23 | 11.75 | 51,951 |
+| CLEAN (docs stripped) | 4.05 | 11.24 | 47,937 |
+| **WARM − CLEAN** | **+0.18** | +0.51 | +4,014 |
+
+So the shipped docs give even a web-blocked baseline a **~0.18 quality bump**; cost/iet move within
+noise. The robust, physically-verified signal is the read-count collapse, not the small quality
+delta. Bottom line: the published baseline-vs-grounded gap **understates** grounding by roughly this
+margin, and the understatement scales with how much groundable material a package ships in its cache
+entry. NuGetFetch `0.6.2` ships only the DLL, so it has no strippable-doc leak and needs no CLEAN
+control. (`.tools/baseline-cache-test.sh` is an earlier HOME-isolated variant kept only for
+reference — it is blocked by the auth issue above.)
 
 ## How it relates to dotnet/skills
 

@@ -47,6 +47,24 @@ robust than the run-to-run quality delta at n=3.
 > gap reported here **understates** grounding's value. The clean control is a two-baseline test
 > (cache docs present vs stripped); see
 > [the cache-contamination confound](../harness.md#a-confound-the-baseline-can-read-the-package-from-the-nuget-cache).
+>
+> **Two-baseline result (n=3, matched).** Re-running the baseline with the shipped docs temporarily
+> relocated out of the cache (lib kept, so the package still builds) closes the leak completely:
+> cache-path reads of `README.md`/`AGENTS.md` go **304 / 98 → 0 successful** (the CLEAN agents still
+> *reach* for them — 12 / 4 attempts — but every one returns `No such file`). The measured effect on the
+> baseline arm:
+>
+> | baseline (mean / 6 scenarios, n=3) | quality | cost | iet |
+> | --- | --- | --- | --- |
+> | WARM (docs in cache, self-grounded) | 4.23 | 11.75 | 51,951 |
+> | CLEAN (docs stripped, truly unaided) | 4.05 | 11.24 | 47,937 |
+> | **contamination (WARM − CLEAN)** | **+0.18** | +0.51 | +4,014 |
+>
+> So Markout's shipped `README.md`/`AGENTS.md` give even a web-blocked baseline a **~0.18 quality bump**;
+> cost/iet move within noise. The robust, physically-verified signal is the read-count collapse, not the
+> small quality delta. Net: the published baseline-vs-grounded gap understates grounding by roughly this
+> margin. (NuGetFetch 0.6.2 ships no docs in its cache entry — only the DLL — so it has no equivalent
+> strippable leak and needs no CLEAN control.)
 
 ## The reframing: grounding competes with the package's README, not with model ignorance
 
