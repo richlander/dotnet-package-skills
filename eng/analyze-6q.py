@@ -293,6 +293,11 @@ def print_card(path):
         agg = aggregate(scs)
         b, iso, plg = agg["baseline"], agg["skilledIsolated"], agg["skilledPlugin"]
         print(f"### Grounding eval — {sn} (model={model}, judge={judge}, tier={tier})\n")
+        print("_About this grounding._ `AGENTS.md` provides RAG-style, section-addressable "
+              "information for agents, surfaced by a grounding tool like the NuGet MCP. `README.md` "
+              "offers nice introductions and progressive disclosure for untrained humans; `AGENTS.md` "
+              "fills in targeted, evaluated gaps for trained models. Its presence removes any pressure "
+              "to make `README.md` agent-efficient or catered.\n")
         if gtok:
             print(f"Grounding: `grounding/{sn}/AGENTS.md` (~{gtok} tok loaded per grounded arm). "
                   f"{b['n']} scenarios; means across scenarios.\n")
@@ -312,9 +317,9 @@ def print_card(path):
               "**archaeology** (the row below) — searching outside the sandbox to reconstruct what "
               "grounding would have told it. This is the reality today for a package the model "
               "doesn't know.")
-        print("- **Grounding tool** — the package grounding (`AGENTS.md`) is surfaced to the agent by "
-              "a grounding tool — a packed `AGENTS.md`, the NuGet MCP, `dotnet-inspect`, or similar. "
-              "This is the shipping experience, so the ship decision is judged on this column.")
+        print("- **Grounding tool** — the package grounding (`AGENTS.md`) is surfaced by a grounding "
+              "tool, like the NuGet MCP, `dotnet-inspect`, or similar. The ship gate is read off this "
+              "column.")
         print("\n_Rows — the metrics:_")
         print("- **quality** — pairwise-judge rubric score, 1–5 (higher better).")
         print("- **func passed** — functional assertions met (build + file + run-output checks); "
