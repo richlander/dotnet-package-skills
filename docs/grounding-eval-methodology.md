@@ -20,9 +20,9 @@ We reuse the [`dotnet/skills`](https://github.com/dotnet/skills) **skill-validat
 **baseline vs. grounded** evaluation over a fixed set of scenarios (a "6-question unit", e.g. N1–N6
 for NuGetFetch, M1–M6 for Markout). Each scenario runs three **arms**:
 
-- **baseline** — no grounding; model knowledge only, web tools rejected.
-- **skilled-isolated** — grounding delivered inline.
-- **skilled-plugin** — grounding delivered as an auto-loaded plugin skill.
+- **baseline** — no grounding; model knowledge only. The agent falls back to **archaeology** — searching outside the sandbox (web fetch/search, rummaging the restored NuGet cache, etc.) to reconstruct what grounding would have told it.
+- **skilled-isolated** — grounding delivered inline. A research-only diagnostic; **not shown on ship cards**.
+- **skilled-plugin** — grounding delivered as an auto-loaded skill. Stands in for any **grounding tool** (a packed `AGENTS.md`, the NuGet MCP, `dotnet-inspect`, …); the ship gate is read off this arm.
 
 A pairwise LLM judge scores rubric quality; the harness also records tokens, cost, tool calls, and
 assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read results with
@@ -30,9 +30,9 @@ assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read res
 
 **Why grounded must be compared carefully.** The baseline is *not* a clean "model ignorance" control:
 a package's `README.md`/`AGENTS.md` are packed inside its nupkg, so any `dotnet build` restores them
-to `~/.nuget/packages`, where the web-blocked baseline can read them. So **the baseline is partly
-self-grounded and the measured gap understates grounding's value** (see [harness.md](./harness.md) for
-the per-arm read attribution and the empty-cache analysis). Treat every quality delta as a *lower
+to `~/.nuget/packages`, where the baseline can read them (one form of archaeology). So **the baseline
+is partly self-grounded and the measured gap understates grounding's value** (see [harness.md](./harness.md)
+for the per-arm read attribution and the empty-cache analysis). Treat every quality delta as a *lower
 bound*.
 
 ---
@@ -43,7 +43,8 @@ bound*.
 | --- | --- |
 | **Grounding** | A compact, package-specific `AGENTS.md` that ships in the package root and makes the package self-teaching for an agent. Records only what the model is *proven to lack* — not model-resident knowledge. |
 | **`AGENTS.md` vs `SKILL.md`** | `AGENTS.md` is the source of truth (it ships in the package). `SKILL.md` is generated from it by `eng/sync-skill.sh` purely so the harness can toggle grounding on/off. Never hand-edit `SKILL.md`. |
-| **isolated / plugin** | The two grounded delivery channels the harness simulates. **plugin** (auto-loaded) is closest to a packed `AGENTS.md` that is always present, so the ship gate is evaluated on the **plugin** arm. |
+| **isolated / plugin → "grounding tool"** | The two grounded delivery channels the harness simulates. **plugin** (auto-loaded) is closest to a packed `AGENTS.md` that is always present — it stands in for any **grounding tool** (packed `AGENTS.md`, NuGet MCP, `dotnet-inspect`), so the ship gate is evaluated on it and ship cards label it **"Grounding tool"**. **isolated** is a research-only diagnostic, omitted from cards. |
+| **archaeology** | Any agent search for content **outside the sandbox** to reconstruct knowledge that grounding would have supplied inline — web fetch/search, rummaging the local NuGet cache, decompiling DLLs, etc. A domain-general informative signal (not a hard gate metric); grounding should collapse it toward 0. Cards show it as one **archaeology (web+cache)** row; the **web** portion alone is a hard gate guard (a grounded run must never resort to the internet). |
 | **qual** | Judge quality, rubric-weighted `overallScore` 1–5. A **value** metric. |
 | **func** | Functional assertions passed (build + file + run-output regex). A **value** metric. The correctness/recovery analog. |
 | **tok** | Gross tokens (`input + output`); `input` *includes* cache reads. Inflated by cache re-reads, so not the harm by itself. |
@@ -70,7 +71,7 @@ bugs) at **zero tolerance** — the grounding gate is two-sided:
 
 A complete decision therefore needs **two runs**: a mini-tier run (default `claude-haiku-4.5`) for the
 win, and a frontier-tier run (e.g. `claude-opus-*`) for the no-harm check. Each is n ≥ 3, model and
-judge named. The gate is evaluated on the **plugin** arm vs **baseline**, on means across the unit's
+judge named. The gate is evaluated on the **grounding-tool** arm (the `plugin` channel) vs **baseline**, on means across the unit's
 scenarios.
 
 ### Mini tier — the WIN (thresholds)
@@ -81,7 +82,7 @@ Correctness may never regress; then at least one win axis must clear:
 | --- | --- | --- |
 | `func` | guard (hard) | Δ ≥ 0 — no functional regression |
 | `qual` | guard (hard) | Δ ≥ −0.1 — no regression beyond n=3 noise |
-| `web` | guard (hard) | grounded web calls = 0 (no `reject_tools` breach) |
+| `web` | guard (hard) | grounded **web** calls = 0 (never resort to the internet; local cache peeks are allowed) |
 | `iet` | **win** | ≥ 25% reduction vs baseline, **or** |
 | `cost` | **win** | ≥ 25% reduction vs baseline, **or** |
 | `qual` | **win** | Δ ≥ +0.3 lift vs baseline |
@@ -100,7 +101,7 @@ The strong model rarely *needs* grounding, so this run does not need a win — i
 | `func` | Δ ≥ 0 — no correctness/recovery drop |
 | `qual` | Δ ≥ −0.1 — no quality regression |
 | **`output tok`** | Δ ≤ +5% — **no output/thinking-token inflation** (the frontier spend harm) |
-| `web` | grounded web calls = 0 |
+| `web` | grounded **web** calls = 0 (cache peeks allowed) |
 
 The case the gate exists to catch: grounding that *adds* output/thinking tokens for only a *modest*
 quality change on the frontier — pure harm to the tier that didn't need it. A small quality gain
@@ -126,18 +127,20 @@ section. It detects the tier from the model name and evaluates the correct gate.
 mini tier):
 
 ```
-| Metric | Baseline | Isolated | Plugin |
-| --- | ---: | ---: | ---: |
-| quality (1–5) | 4.40 | 4.38 | 4.67 |
-| func passed | 17/18 | 18/18 | 18/18 |
-| IET (mean) | 30189 | 20980 | 17220 |
-| output tok (mean) | 6246 | 1518 | 1604 |
-| cost (mean) | 7.77 | 1.83 | 2.08 |
-| web calls | 6 | 0 | 0 |
+| Metric | Baseline | Grounding tool |
+| --- | ---: | ---: |
+| quality (1–5) | 4.40 | 4.67 |
+| func passed | 17/18 | 18/18 |
+| IET (mean) | 30189 | 17220 |
+| output tok (mean) | 6246 | 1604 |
+| cost (mean) | 7.77 | 2.08 |
+| gross tok (mean) | 539876 | 132746 |
+| archaeology (web+cache) | 20 | 0 |
 
-**Mini WIN gate (plugin vs baseline): ✅ PASS**
+**Mini WIN gate (grounding tool vs baseline): ✅ PASS**
 - PASS  func no regression (Δ +1)
 - PASS  quality no regression (Δ +0.27; floor −0.1)
+- PASS  no web archaeology (web=0; cache peeks allowed, here 0)
 - WIN   IET reduction 43% (bar 25%)
 - WIN   cost reduction 73% (bar 25%)
 ```

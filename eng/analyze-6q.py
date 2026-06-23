@@ -197,7 +197,7 @@ def _num(x):
 
 def aggregate(scenarios):
     """Mean-per-scenario aggregates for each arm: qual, func, iet, cost, tok, out, web."""
-    acc = {k: dict(quals=[], fp=0, ft=0, iet=0.0, cost=0.0, tok=0.0, out=0.0, web=0, n=0)
+    acc = {k: dict(quals=[], fp=0, ft=0, iet=0.0, cost=0.0, tok=0.0, out=0.0, web=0, cache=0, n=0)
            for k, _ in ARMS}
     for sc in scenarios:
         for key, _ in ARMS:
@@ -211,7 +211,7 @@ def aggregate(scenarios):
             fp, ft = r["func"].split("/")
             a["fp"] += int(fp); a["ft"] += int(ft)
             a["iet"] += r["iet"]; a["cost"] += r["cost"]; a["tok"] += r["tok"]
-            a["out"] += r["out"]; a["web"] += r["web"]
+            a["out"] += r["out"]; a["web"] += r["web"]; a["cache"] += r["cache"]
     out = {}
     for key, _ in ARMS:
         a = acc[key]; n = max(a["n"], 1)
@@ -219,7 +219,7 @@ def aggregate(scenarios):
             qual=(sum(a["quals"]) / len(a["quals"])) if a["quals"] else None,
             fp=a["fp"], ft=a["ft"],
             iet=a["iet"] / n, cost=a["cost"] / n, tok=a["tok"] / n, out=a["out"] / n,
-            web=a["web"], n=a["n"],
+            web=a["web"], cache=a["cache"], n=a["n"],
         )
     return out
 
@@ -238,7 +238,7 @@ def gate_mini(base, grnd):
         harm.append(f"{'PASS' if h_q else 'FAIL'}  quality no regression "
                     f"(Δ {dq:+.2f}; floor −{GATE['qual_regress_max']})")
     h_web = grnd["web"] == 0; ok &= h_web
-    harm.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']})")
+    harm.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']}; cache peeks allowed, here {grnd['cache']})")
     iet_frac = (base["iet"] - grnd["iet"]) / base["iet"] if base["iet"] else 0
     cost_frac = (base["cost"] - grnd["cost"]) / base["cost"] if base["cost"] else 0
     w_iet = iet_frac >= GATE["iet_win_frac"]
@@ -274,7 +274,7 @@ def gate_frontier(base, grnd):
     rows.append(f"{'PASS' if h_out else 'FAIL'}  no output/thinking-token inflation "
                 f"(Δ {out_frac*100:+.0f}%; cap +{GATE['out_inflate_frac']*100:.0f}%)")
     h_web = grnd["web"] == 0; ok &= h_web
-    rows.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']})")
+    rows.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']}; cache peeks allowed, here {grnd['cache']})")
     return ok, rows
 
 
@@ -296,25 +296,25 @@ def print_card(path):
         if gtok:
             print(f"Grounding: `grounding/{sn}/AGENTS.md` (~{gtok} tok loaded per grounded arm). "
                   f"{b['n']} scenarios; means across scenarios.\n")
-        print("| Metric | Baseline | Isolated | Plugin |")
-        print("| --- | ---: | ---: | ---: |")
-        print(f"| quality (1–5) | {_fmt_q(b['qual'])} | {_fmt_q(iso['qual'])} | {_fmt_q(plg['qual'])} |")
-        print(f"| func passed | {b['fp']}/{b['ft']} | {iso['fp']}/{iso['ft']} | {plg['fp']}/{plg['ft']} |")
-        print(f"| IET (mean) | {b['iet']:.0f} | {iso['iet']:.0f} | {plg['iet']:.0f} |")
-        print(f"| output tok (mean) | {b['out']:.0f} | {iso['out']:.0f} | {plg['out']:.0f} |")
-        print(f"| cost (mean) | {b['cost']:.2f} | {iso['cost']:.2f} | {plg['cost']:.2f} |")
-        print(f"| gross tok (mean) | {b['tok']:.0f} | {iso['tok']:.0f} | {plg['tok']:.0f} |")
-        print(f"| web calls | {b['web']} | {iso['web']} | {plg['web']} |")
+        print("| Metric | Baseline | Grounding tool |")
+        print("| --- | ---: | ---: |")
+        print(f"| quality (1–5) | {_fmt_q(b['qual'])} | {_fmt_q(plg['qual'])} |")
+        print(f"| func passed | {b['fp']}/{b['ft']} | {plg['fp']}/{plg['ft']} |")
+        print(f"| IET (mean) | {b['iet']:.0f} | {plg['iet']:.0f} |")
+        print(f"| output tok (mean) | {b['out']:.0f} | {plg['out']:.0f} |")
+        print(f"| cost (mean) | {b['cost']:.2f} | {plg['cost']:.2f} |")
+        print(f"| gross tok (mean) | {b['tok']:.0f} | {plg['tok']:.0f} |")
+        print(f"| archaeology (web+cache) | {b['web'] + b['cache']} | {plg['web'] + plg['cache']} |")
         print("\n**Legend**\n")
-        print("_Columns — the three arms run the **same** task; they differ only in how (or whether) "
-              "the grounding reaches the agent:_")
-        print("- **Baseline** — no grounding, and web search disabled: the agent relies on model "
-              "knowledge alone (what happens today for a package the model doesn't know).")
-        print("- **Isolated** — the grounding text is handed to the agent directly as context for "
-              "the task.")
-        print("- **Plugin** — the grounding is auto-discovered the way a packed `AGENTS.md` is found "
-              "in the shipped package. This best matches production, so the ship decision is judged "
-              "on this column.")
+        print("_Columns — both run the **same** task; they differ only in whether the package "
+              "grounding is available to the agent:_")
+        print("- **Baseline** — no grounding. The agent has model knowledge only and falls back to "
+              "**archaeology** (the row below) — searching outside the sandbox to reconstruct what "
+              "grounding would have told it. This is the reality today for a package the model "
+              "doesn't know.")
+        print("- **Grounding tool** — the package grounding (`AGENTS.md`) is surfaced to the agent by "
+              "a grounding tool — a packed `AGENTS.md`, the NuGet MCP, `dotnet-inspect`, or similar. "
+              "This is the shipping experience, so the ship decision is judged on this column.")
         print("\n_Rows — the metrics:_")
         print("- **quality** — pairwise-judge rubric score, 1–5 (higher better).")
         print("- **func passed** — functional assertions met (build + file + run-output checks); "
@@ -324,12 +324,15 @@ def print_card(path):
         print("- **output tok** — output/thinking tokens (the priciest, most variable component).")
         print("- **cost** — premium-request multiplier, cache-discounted (lower better).")
         print("- **gross tok** — raw input+output incl. cache re-reads (context only; not the bill).")
-        print("- **web calls** — web fetch/search calls; grounded runs should be **0** (no "
-              "hallucinate-then-search archaeology).")
-        # Gate evaluated on plugin (auto-delivered channel, closest to a packed AGENTS.md).
+        print("- **archaeology (web+cache)** — out-of-sandbox lookups the agent makes to recover "
+              "missing knowledge: web fetch/search **plus** rummaging the local NuGet cache "
+              "(generalizes to any external source — decompiled DLLs, etc.). An informative signal, "
+              "not a hard gate metric; grounding should collapse it toward 0. The **web** portion is "
+              "the hard guard (a grounded run must never resort to the internet).")
+        # Gate evaluated on the grounding-tool arm (closest to the shipping experience).
         if tier == "frontier":
             passed, rows = gate_frontier(b, plg)
-            print(f"\n**Frontier HARM gate (plugin vs baseline): "
+            print(f"\n**Frontier HARM gate (grounding tool vs baseline): "
                   f"{'✅ NO HARM' if passed else '❌ HARM'}** — zero tolerance.\n")
             for line in rows:
                 print(f"- {line}")
@@ -338,7 +341,7 @@ def print_card(path):
                   "needs a mini-tier WIN run._")
         else:
             passed, harm, win = gate_mini(b, plg)
-            print(f"\n**Mini WIN gate (plugin vs baseline): {'✅ PASS' if passed else '❌ FAIL'}**\n")
+            print(f"\n**Mini WIN gate (grounding tool vs baseline): {'✅ PASS' if passed else '❌ FAIL'}**\n")
             print("_Guards (must hold):_")
             for line in harm:
                 print(f"- {line}")
@@ -347,9 +350,10 @@ def print_card(path):
                 print(f"- {line}")
             print("\n_This tier measures the win. A full ship decision also needs a frontier-tier "
                   "NO-HARM run (zero output-token inflation, no quality regression)._")
-        print("\n> Quality Δ is a **lower bound** — the web-blocked baseline self-grounds from the "
-              "NuGet cache (docs are packed in the nupkg), so it understates grounding's value. "
-              "Starting cache state is not a variable. See docs/grounding-eval-methodology.md.\n")
+        print("\n> Quality Δ is a **lower bound** — even ungrounded, the baseline can self-ground "
+              "from the restored NuGet cache (README/AGENTS are packed in the nupkg), so it "
+              "understates grounding's value. Starting cache state is not a variable. "
+              "See docs/grounding-eval-methodology.md.\n")
 
 
 if __name__ == "__main__":
