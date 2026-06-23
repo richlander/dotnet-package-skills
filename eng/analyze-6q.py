@@ -305,6 +305,20 @@ def print_card(path):
         print(f"| cost (mean) | {b['cost']:.2f} | {iso['cost']:.2f} | {plg['cost']:.2f} |")
         print(f"| gross tok (mean) | {b['tok']:.0f} | {iso['tok']:.0f} | {plg['tok']:.0f} |")
         print(f"| web calls | {b['web']} | {iso['web']} | {plg['web']} |")
+        print("\n**Legend**")
+        print("- **Baseline** — no grounding (web blocked). **Isolated** / **Plugin** — grounding "
+              "delivered inline vs. as an auto-loaded skill; **Plugin** is closest to a packed "
+              "`AGENTS.md`, so the gate is read off it.")
+        print("- **quality** — pairwise-judge rubric score, 1–5 (higher better).")
+        print("- **func passed** — functional assertions met (build + file + run-output checks); "
+              "100% is the target.")
+        print("- **IET** — Input-Equivalent Tokens = (input − cache-reads) + output; the "
+              "cache-discounted token cost (lower better).")
+        print("- **output tok** — output/thinking tokens (the priciest, most variable component).")
+        print("- **cost** — premium-request multiplier, cache-discounted (lower better).")
+        print("- **gross tok** — raw input+output incl. cache re-reads (context only; not the bill).")
+        print("- **web calls** — web fetch/search calls; grounded runs should be **0** (no "
+              "hallucinate-then-search archaeology).")
         # Gate evaluated on plugin (auto-delivered channel, closest to a packed AGENTS.md).
         if tier == "frontier":
             passed, rows = gate_frontier(b, plg)
