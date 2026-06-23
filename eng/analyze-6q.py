@@ -10,7 +10,12 @@ are what a conclusion ("grounding is cheaper / better") is allowed to rest on.
 
   qual   judge quality, overallScore 1-5 (rubric-weighted)   [value]
   func   functional assertions passed (build + file + run-output regex)  [value]
-  tok    total token estimate (input+output)                  [harm: spend]
+  tok    GROSS tokens (input+output); input INCLUDES cache reads  [harm: spend]
+  iet    cache-excluded effective tokens: (input - cacheRead) + output.
+         tok and iet bracket the real harm -- a baseline that re-reads a big
+         cache shows a huge tok but a modest iet; cost sits between them and is
+         the truest single harm proxy. Carry both so neither over- nor
+         under-states the gap (raw metrics are not lossy: cacheRead is stored).
   cost   premium request multiplier (sum)                     [harm: spend]
   secs   wall seconds                                          [harm: latency]
 
@@ -98,6 +103,8 @@ def arm_row(arm):
     web = tb.get("web_fetch", 0) + tb.get("web_search", 0)
     di, mcp, cache = count_tool_events(m)
     tok = (m.get("inputTokens", 0) or 0) + (m.get("outputTokens", 0) or 0)
+    iet = ((m.get("inputTokens", 0) or 0) - (m.get("cacheReadTokens", 0) or 0)
+           + (m.get("outputTokens", 0) or 0))
     return dict(
         qual=jr.get("overallScore", "-"),
         func=f"{fp}/{len(func)}",
@@ -110,14 +117,15 @@ def arm_row(arm):
         cache=cache,
         bash=tb.get("bash", 0),
         tok=tok,
+        iet=iet,
         cost=round(m.get("cost", 0) or 0, 1),
         secs=round((m.get("wallTimeMs", 0) or 0) / 1000),
     )
 
 
-HDR = (f"{'scenario':28} | {'arm':8} | qual | func | {'tok':>6} | cost | secs "
+HDR = (f"{'scenario':28} | {'arm':8} | qual | func | {'tok':>7} | {'iet':>6} | cost | secs "
        f"\u2016 web | tools | turn | di | mcp | cache | bash")
-GRP = (f"{'':28}   {'':8}   {'<<<<<<<<<< NORMATIVE METRICS':^34} "
+GRP = (f"{'':28}   {'':8}   {'<<<<<<<<<< NORMATIVE METRICS':^43} "
        f"\u2016 {'INFORMATIVE SIGNALS >>>>>>>>>>':<29}")
 
 
@@ -145,7 +153,7 @@ def main(paths):
                     if not r:
                         continue
                     print(f"{name:28} | {label:8} | {str(r['qual']):>4} | {r['func']:>4} | "
-                          f"{r['tok']:>6} | {str(r['cost']):>4} | {r['secs']:>4} "
+                          f"{r['tok']:>7} | {r['iet']:>6} | {str(r['cost']):>4} | {r['secs']:>4} "
                           f"\u2016 {str(r['web'])+r['web_flag']:>3} | {str(r['tools']):>5} | "
                           f"{str(r['turns']):>4} | {r['di']:>2} | {r['mcp']:>3} | "
                           f"{r['cache']:>5} | {r['bash']:>4}")

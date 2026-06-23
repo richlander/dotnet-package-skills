@@ -21,7 +21,12 @@ actual value delivered or harm incurred:
 - **quality** (judge `overallScore`) and **functional pass** (`taskCompleted` + assertion
   gates) — the *value* axis (was the task done, and done well?).
 - **tokens**, **cost** (premium-request multiplier), and **wall-clock** — the *harm* axis
-  (what did it cost to get there?).
+  (what did it cost to get there?). The analyzer carries **two token views** because the raw
+  metrics are not lossy: `tok` (gross input+output, where input *includes* cache re-reads) and
+  `iet` (cache-excluded effective tokens, `(input − cacheRead) + output`). They **bracket** the
+  real harm — a baseline that re-reads a large cache shows a huge `tok` but a modest `iet` — and
+  **`cost` sits between them** as the truest single proxy. Quote `cost` for the harm claim; show
+  `tok`/`iet` to reveal whether a token gap is fresh compute or cheap cache reflection.
 
 A headline like "grounding is cheaper and at least as correct" may rest **only** on these.
 
