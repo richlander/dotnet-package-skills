@@ -460,6 +460,7 @@ def _classify_tool(k):
     stem = base.split()[0]
     decomp = ("ilspy", "ildasm", "inspect")
     if k.startswith("dotnet tool") or stem in _EXTRA_TOOLS \
+            or k in ("dotnet repl", "dotnet script") \
             or (k.startswith("dll:") and any(x in base.lower() for x in decomp)):
         return "extra"
     if k.startswith("dll:"):
