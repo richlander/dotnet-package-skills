@@ -46,7 +46,8 @@ Usage:
   eng/analyze-6q.py .skill-validator-results/m6q-*/**/results.json
   eng/analyze-6q.py --card data/markout-6q/markout.n3.haiku.json   # copy-paste PR dump + gate
 """
-import json, sys, glob, os
+import json, sys, glob, os, re
+from collections import Counter
 
 ARMS = [("baseline", "baseline"), ("skilledIsolated", "isolated"), ("skilledPlugin", "plugin")]
 
@@ -374,6 +375,155 @@ def _tier_section(arms, tier_label, gate_label):
               f"AGENTS.md is present, so this is the real floor AGENTS.md must beat._")
 
 
+# --- diagnostic cards: what the agent reached for (tools) and searched (web) -----------
+# These are INFRA DIAGNOSTICS, not the ship card. They expose the out-of-sandbox behavior
+# the headline archaeology number summarizes: which external programs the agent invoked
+# and what it searched the web for. The point they make: grounding collapses both to ~0.
+
+_EXTRA_TOOLS = {"dotnet-inspect", "ilspycmd", "dotnet-ildasm", "ildasm", "dotnet-depends",
+                "dotnet-linq2db", "dotnet-script", "dotnet-repl"}
+_SHELL_ARCH = {"curl", "wget", "find", "ls", "cat", "grep", "strings", "file", "jq",
+               "head", "tail", "nm", "objdump", "unzip", "xxd", "zcat", "gunzip", "tree"}
+_DROP_LEAD = {"cd", "sudo", "env", "rm", "mv", "cp", "mkdir", "echo", "true", "export",
+              "set", "for", "do", "done", "if", "then", "fi", "#", "while", ":"}
+
+
+def _strip_heredocs(cmd):
+    return re.sub(r"<<-?\s*'?\"?(\w+)'?\"?.*?(?:\n|$).*?(?:^|\n)\s*\1\b",
+                  " <<heredoc>> ", cmd, flags=re.S | re.M)
+
+
+def _lead_progs(cmd):
+    """Leading program of each &&/;/| -separated segment, heredoc bodies removed.
+    A `dotnet <path>/X.dll` invocation is surfaced by its DLL basename (e.g. `ilspycmd.dll`)
+    so decompilers/inspectors run via the framework don't masquerade as a build."""
+    out = []
+    for part in re.split(r"&&|\|\||;|\|", _strip_heredocs(cmd)):
+        toks = part.strip().split()
+        if not toks or toks[0] in _DROP_LEAD:
+            continue
+        p = toks[0]
+        if p == "dotnet" and len(toks) > 1:
+            if toks[1] == "tool" and len(toks) > 2:
+                p = "dotnet tool " + toks[2]
+            elif toks[1].endswith(".dll"):
+                p = "dll:" + os.path.basename(toks[1])
+            else:
+                p = "dotnet " + toks[1]
+        out.append(p)
+    return out
+
+
+def _extract_behavior(path):
+    """Per-arm Counters of tool invocations and web targets parsed from the event log."""
+    d = json.load(open(path))
+    scn = (d.get("verdicts") or [{}])[0].get("scenarios", [])
+    arms = {}
+    for arm, _ in ARMS:
+        tc, web, kw = Counter(), Counter(), Counter()
+        for s in scn:
+            for e in (s.get(arm, {}).get("metrics", {}) or {}).get("events") or []:
+                if e.get("type") != "tool.execution_start":
+                    continue
+                data = e.get("data") or {}
+                name = data.get("toolName", "")
+                try:
+                    a = json.loads(data.get("arguments", "{}"))
+                except Exception:
+                    a = {}
+                if name == "bash":
+                    for p in _lead_progs(a.get("command", "")):
+                        tc[p] += 1
+                elif name == "web_fetch":
+                    m = re.match(r"https?://([^/]+)(/[^?#]*)?", a.get("url", ""))
+                    if m:
+                        web[m.group(1)] += 1
+                        for seg in re.findall(r"[A-Za-z][A-Za-z0-9.\-]{2,}", m.group(2) or ""):
+                            if seg.lower() not in ("index", "json", "packages", "tree",
+                                                   "blob", "main", "master", "wiki"):
+                                kw[seg.lower()] += 1
+                elif name == "web_search":
+                    for w in re.findall(r"[A-Za-z][A-Za-z0-9.\-]{2,}", a.get("query", "").lower()):
+                        kw[w] += 1
+        arms[arm] = dict(tools=tc, web=web, kw=kw)
+    return arms
+
+
+def _arm_label(key):
+    return {"baseline": "Baseline", "skilledIsolated": "AGENTS (isolated)",
+            "skilledPlugin": "AGENTS (grounding tool)"}.get(key, key)
+
+
+def _classify_tool(k):
+    """Bucket a program name -> 'extra' | 'shell' | 'build' | None (ignore)."""
+    base = k[4:] if k.startswith("dll:") else k
+    stem = base.split()[0]
+    decomp = ("ilspy", "ildasm", "inspect")
+    if k.startswith("dotnet tool") or stem in _EXTRA_TOOLS \
+            or (k.startswith("dll:") and any(x in base.lower() for x in decomp)):
+        return "extra"
+    if k.startswith("dll:"):
+        return "shell"          # running some other DLL directly = probing the artifact
+    if stem in _SHELL_ARCH:
+        return "shell"
+    if k.startswith("dotnet "):
+        return "build"
+    return "shell"              # any other bare external binary is archaeology, not build
+
+
+def print_tools_card(paths, topn=8):
+    """Diagnostic: top-N programs the agent invoked, per arm, split extra vs shell vs build."""
+    for path in paths:
+        b = _extract_behavior(path)
+        d = json.load(open(path))
+        model = d.get("model", "?")
+        sn = (d.get("verdicts") or [{}])[0].get("skillName", "?")
+        print(f"### Diagnostic — top tools, {sn} (`{model}`)\n")
+        print("_Out-of-sandbox programs the agent invoked via `bash`, ranked. "
+              "**Extra** = tools that merely happen to be in the environment "
+              "(decompilers, inspectors, self-installed global tools) — the contamination "
+              "we want gone from the baseline. **Shell-archaeology** = basic reverse-engineering "
+              "(`curl`, `find`, `strings`, running the artifact DLL, …). **Build** = expected SDK "
+              "calls. Grounded arms should show only Build._\n")
+        print(f"| Arm | Extra tools (count) | Shell-archaeology | Build/SDK |")
+        print(f"| --- | --- | --- | --- |")
+        for arm, _ in ARMS:
+            t = b[arm]["tools"]
+            buckets = {"extra": [], "shell": [], "build": []}
+            for k, v in t.most_common():
+                buckets[_classify_tool(k)].append((k, v))
+            disp = lambda k: k[4:] if k.startswith("dll:") else k
+            fmt = lambda xs: ", ".join(f"`{disp(k)}`×{v}" for k, v in xs[:topn]) or "—"
+            star = " ⚠️" if buckets["extra"] else ""
+            print(f"| {_arm_label(arm)}{star} | {fmt(buckets['extra'])} | "
+                  f"{fmt(buckets['shell'])} | {fmt(buckets['build'])} |")
+        print()
+
+
+def print_web_card(paths, topn=10):
+    """Diagnostic: top-N web targets/keywords the agent searched, per arm."""
+    for path in paths:
+        b = _extract_behavior(path)
+        d = json.load(open(path))
+        model = d.get("model", "?")
+        sn = (d.get("verdicts") or [{}])[0].get("skillName", "?")
+        print(f"### Diagnostic — top web targets, {sn} (`{model}`)\n")
+        print("_What the agent reached for on the open web (`web_fetch` domains + URL/query "
+              "keywords). The reality a clean baseline must not need; grounded arms should be "
+              "empty. Keywords reveal what the model went looking for — note any that name a "
+              "grounding tool the model knows by reputation (e.g. `dotnet-inspect`)._\n")
+        print(f"| Arm | Web domains (count) | Top keywords |")
+        print(f"| --- | --- | --- |")
+        for arm, _ in ARMS:
+            dom = b[arm]["web"].most_common(topn)
+            kw = b[arm]["kw"].most_common(topn)
+            fmtd = ", ".join(f"`{k}`×{v}" for k, v in dom) or "—"
+            fmtk = ", ".join(f"`{k}`×{v}" for k, v in kw) or "—"
+            star = " ⚠️" if dom else ""
+            print(f"| {_arm_label(arm)}{star} | {fmtd} | {fmtk} |")
+        print()
+
+
 def print_card(paths):
     """Render a complete ship card from one or more datasets.
 
@@ -449,13 +599,19 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if not args:
         print(__doc__); sys.exit(1)
-    if args[0] == "--card":
+    if args[0] in ("--card", "--tools-card", "--web-card"):
         rest = args[1:]
         if not rest:
-            print("--card needs a results.json path"); sys.exit(1)
+            print(f"{args[0]} needs a results.json path"); sys.exit(1)
         files = []
         for p in rest:
             files.extend(glob.glob(p, recursive=True) or [p])
-        print_card(sorted(set(files)))
+        files = sorted(set(files))
+        if args[0] == "--card":
+            print_card(files)
+        elif args[0] == "--tools-card":
+            print_tools_card(files)
+        else:
+            print_web_card(files)
         sys.exit(0)
     main(args)
