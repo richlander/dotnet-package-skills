@@ -49,19 +49,24 @@ Usage:
 import json, sys, glob, os, re
 from collections import Counter
 
+# When True, card renderers omit their own `### …` heading (the embedding doc supplies
+# the section heading instead) and fold the agent model into the italic descriptor line.
+NO_TITLE = False
+
 ARMS = [("baseline", "baseline"), ("skilledIsolated", "isolated"), ("skilledPlugin", "plugin")]
 
 # --- Grading thresholds (uniform — applied identically to every model). ---
 # The card grades grounding's measured effect vs baseline with ONE model-independent
-# rubric (BETTER / NEUTRAL / WORSE — see _grade). These thresholds set where each
-# boundary sits. The *ship decision* (which models we require to be BETTER vs merely
-# not-WORSE) is higher-level analysis, not the card's job — see docs §3.
+# rubric (BETTER / NEUTRAL / WORSE — see _grade). Grading keys off OBJECTIVE axes only:
+# success rate, open-web archaeology, and cost/IET — never a subjective judge-quality diff
+# (the top 1pt of the 1-5 judge scale is instruction-sensitive noise; see judge-philosophy doc).
+# The *ship decision* (which models must be BETTER vs merely not-WORSE) is higher-level
+# analysis, not the card's job — see docs §3.
 GATE = dict(
     iet_win_frac=0.25,        # BETTER: >=25% IET reduction vs baseline, OR
-    cost_win_frac=0.25,       # BETTER: >=25% cost reduction vs baseline, OR
-    qual_win_delta=0.3,       # BETTER: >=+0.3 quality lift vs baseline
-    qual_regress_max=0.1,     # WORSE: quality may not drop more than this
-    iet_harm_cap_frac=0.10,   # WORSE (headline): grounded IET may not exceed baseline by >10%
+    cost_win_frac=0.25,       # BETTER: >=25% cost reduction vs baseline, OR resourcefulness→0
+    iet_harm_cap_frac=0.10,   # WORSE: grounded IET may not exceed baseline by >10%
+    cost_harm_cap_frac=0.10,  # WORSE: grounded cost may not exceed baseline by >10%
     out_inflate_frac=0.05,    # WORSE (secondary guard): output tokens may not rise more than 5%
 )
 
@@ -196,8 +201,18 @@ def _num(x):
 
 
 def aggregate(scenarios):
-    """Mean-per-scenario aggregates for each arm: qual, func, iet, cost, tok, out, web."""
-    acc = {k: dict(quals=[], fp=0, ft=0, iet=0.0, cost=0.0, tok=0.0, out=0.0, web=0, cache=0, n=0)
+    """Mean-per-scenario aggregates for each arm.
+
+    Reports each arm in ISOLATION (no cross-arm judge diff). Key axes:
+      succ  success rate — a scenario succeeds for an arm if every functional assertion
+            passed AND the judge's overall quality cleared the floor (>= 4.0, i.e. "meets
+            expectations"). The judge's 1-5 score is used ONLY as this pass/fail floor; its
+            top band (the 4->5 gradient) is discarded as subjective noise.
+      arch  resourcefulness — out-of-sandbox lookups (web + local NuGet-cache rummaging) the
+            agent had to do to recover the API. High = had to be resourceful; grounding's job
+            is to drive this to ~0. Measured objectively from the timeline, not the judge.
+    """
+    acc = {k: dict(quals=[], fp=0, ft=0, succ=0, iet=0.0, cost=0.0, tok=0.0, out=0.0, web=0, cache=0, n=0)
            for k, _ in ARMS}
     for sc in scenarios:
         for key, _ in ARMS:
@@ -209,7 +224,11 @@ def aggregate(scenarios):
             if q is not None:
                 a["quals"].append(q)
             fp, ft = r["func"].split("/")
-            a["fp"] += int(fp); a["ft"] += int(ft)
+            fp_i, ft_i = int(fp), int(ft)
+            a["fp"] += fp_i; a["ft"] += ft_i
+            # Scenario success: all assertions passed AND judge cleared the >=4 floor.
+            if ft_i > 0 and fp_i == ft_i and (q is None or q >= 4.0):
+                a["succ"] += 1
             a["iet"] += r["iet"]; a["cost"] += r["cost"]; a["tok"] += r["tok"]
             a["out"] += r["out"]; a["web"] += r["web"]; a["cache"] += r["cache"]
     out = {}
@@ -217,7 +236,7 @@ def aggregate(scenarios):
         a = acc[key]; n = max(a["n"], 1)
         out[key] = dict(
             qual=(sum(a["quals"]) / len(a["quals"])) if a["quals"] else None,
-            fp=a["fp"], ft=a["ft"],
+            fp=a["fp"], ft=a["ft"], succ=a["succ"],
             iet=a["iet"] / n, cost=a["cost"] / n, tok=a["tok"] / n, out=a["out"] / n,
             web=a["web"], cache=a["cache"], n=a["n"],
         )
@@ -255,15 +274,18 @@ def _arch(a):
 # % for token/cost magnitudes, absolute Δ for quality, count Δ for func, an arrow
 # for archaeology. lower_is_better drives the WIN/benefit interpretation only.
 _METRICS = [
-    ("qual",  "quality (1–5)",
-     lambda a: _fmt_q(a["qual"]),
-     lambda n, o: (f"{(n['qual'] - o['qual']):+.2f}"
-                   if n["qual"] is not None and o["qual"] is not None else "—"),
+    ("success",  "success (scenarios)",
+     lambda a: f"{a['succ']}/{a['n']}",
+     lambda n, o: f"{n['succ'] - o['succ']:+d} ({n['succ']}/{n['n']})",
      False),
-    ("func",  "func passed",
+    ("func",  "func passed (assertions)",
      lambda a: f"{a['fp']}/{a['ft']}",
      lambda n, o: f"{n['fp'] - o['fp']:+d} ({n['fp']}/{n['ft']})",
      False),
+    ("arch",  "resourcefulness (archaeology)",
+     lambda a: f"{_arch(a)}",
+     lambda n, o: f"{_arch(o)}→{_arch(n)}",
+     True),
     ("iet",   "IET",
      lambda a: f"{a['iet']:.0f}",
      lambda n, o: f"{_pct(n['iet'], o['iet']):+.0f}%",
@@ -276,44 +298,41 @@ _METRICS = [
      lambda a: f"{a['cost']:.2f}",
      lambda n, o: f"{_pct(n['cost'], o['cost']):+.0f}%",
      True),
-    ("arch",  "archaeology (web+cache)",
-     lambda a: f"{_arch(a)}",
-     lambda n, o: f"{_arch(o)}→{_arch(n)}",
-     True),
 ]
 
 
 def _grade(base, grnd):
-    """Uniform verdict — the **same grading for every model**. The card grades the measured
-    effect of grounding vs baseline; it does **not** decide shipping (whether a NEUTRAL/WORSE
-    result is acceptable on a model that didn't need grounding is higher-level analysis, not the
-    card's job). Purely directional:
+    """Uniform verdict — the **same grading for every model**, keyed off OBJECTIVE axes only
+    (success rate, open-web archaeology, cost/IET). It does NOT use a judge-quality diff: the
+    judge's score enters only as the >=4 success floor (see aggregate); its subjective top band
+    is discarded. The card grades grounding's measured effect vs baseline; it does not decide
+    shipping (that is higher-level analysis — see docs §3).
 
-      BETTER  — a real improvement past the win bar (IET/cost reduction, or a quality lift),
-                with no regression.
-      WORSE   — grounding regressed something: func or quality dropped, web archaeology appeared,
-                or IET/output inflated past the cap.
-      NEUTRAL — neither: no material improvement, no regression.
+      BETTER  — same-or-better success, no harm, AND a real win: IET/cost cut past the bar, or
+                resourcefulness (archaeology) eliminated.
+      WORSE   — grounding regressed something objective: success dropped, the grounded arm did
+                open-web archaeology, or cost/IET/output inflated past the cap.
+      NEUTRAL — neither: success held, but no material efficiency win.
     """
     iet  = _pct(grnd["iet"],  base["iet"])     # − = cheaper
     cost = _pct(grnd["cost"], base["cost"])
     out  = _pct(grnd["out"],  base["out"])
-    dq = ((grnd["qual"] - base["qual"]) if grnd["qual"] is not None
-          and base["qual"] is not None else 0.0)
-    dfunc = grnd["fp"] - base["fp"]
-    tail = f"IET {iet:+.0f}%, cost {cost:+.0f}%, quality Δ {dq:+.2f}, func {dfunc:+d}"
+    dsucc = grnd["succ"] - base["succ"]        # < 0 => grounding solved fewer scenarios
+    b_arch, g_arch = _arch(base), _arch(grnd)
+    tail = (f"success {grnd['succ']}/{grnd['n']} vs {base['succ']}/{base['n']}, "
+            f"resourcefulness {b_arch}→{g_arch}, IET {iet:+.0f}%, cost {cost:+.0f}%")
 
     worse = []
-    if dfunc < 0:                            worse.append(f"func {dfunc:+d}")
-    if dq < -GATE["qual_regress_max"]:       worse.append(f"quality Δ {dq:+.2f}")
-    if grnd["web"] > 0:                      worse.append(f"web archaeology {grnd['web']}")
-    if iet > GATE["iet_harm_cap_frac"] * 100:  worse.append(f"IET +{iet:.0f}%")
-    if out > GATE["out_inflate_frac"] * 100:   worse.append(f"output +{out:.0f}%")
+    if dsucc < 0:                                 worse.append(f"success {dsucc:+d}")
+    if grnd["web"] > 0:                           worse.append(f"web archaeology {grnd['web']}")
+    if iet  > GATE["iet_harm_cap_frac"]  * 100:   worse.append(f"IET +{iet:.0f}%")
+    if cost > GATE["cost_harm_cap_frac"] * 100:   worse.append(f"cost +{cost:.0f}%")
+    if out  > GATE["out_inflate_frac"]   * 100:   worse.append(f"output +{out:.0f}%")
     if worse:
         return f"**WORSE** — {', '.join(worse)} ({tail})"
 
-    if (-iet >= GATE["iet_win_frac"] * 100 or -cost >= GATE["cost_win_frac"] * 100
-            or dq >= GATE["qual_win_delta"]):
+    if (dsucc > 0 or -iet >= GATE["iet_win_frac"] * 100 or -cost >= GATE["cost_win_frac"] * 100
+            or (b_arch > 0 and g_arch == 0)):
         return f"**BETTER** — {tail}"
 
     return f"**NEUTRAL** — no material change ({tail})"
@@ -323,10 +342,12 @@ def print_primary(path):
     a = _load_arm(path)
     base = a["agg"]["baseline"]; grnd = a["agg"]["skilledPlugin"]
     sn = a["sn"]; gtok = grounding_tokens(sn)
-    print(f"### Grounding eval — {sn} · `{a['model']}`\n")
-    if gtok:
-        print(f"_Baseline (no grounding) vs `AGENTS.md` (~{gtok} tok, via grounding tool). "
-              f"Judge `{a['judge']}`. Means across scenarios._\n")
+    if not NO_TITLE:
+        print(f"### Grounding eval — {sn} · `{a['model']}`\n")
+    mpref = f"`{a['model']}` · " if NO_TITLE else ""
+    print(f"_{mpref}Baseline (no grounding) vs `AGENTS.md`"
+          + (f" (~{gtok} tok, via grounding tool)" if gtok else "")
+          + f". Judge `{a['judge']}`. Means across scenarios._\n")
     print("| Metric | Baseline | AGENTS.md |")
     print("| --- | ---: | ---: |")
     for _, label, raw, _diff, _lb in _METRICS:
@@ -341,10 +362,11 @@ def print_model_diff(paths):
     # mini first, then frontier; stable within tier by model name
     arms.sort(key=lambda a: (0 if a["tier"] == "mini" else 1, a["model"]))
     sn = arms[0]["sn"]
-    print(f"### Model-diff — {sn} · AGENTS.md lift over baseline\n")
+    if not NO_TITLE:
+        print(f"### Model-diff — {sn} · AGENTS.md lift over baseline\n")
     print("_Each cell = grounded (AGENTS.md) change vs that model's own baseline. "
-          "% for IET/output/cost (− = cheaper), Δ for quality, count for func, "
-          "before→after for archaeology._\n")
+          "count Δ for success/func, before→after for resourcefulness, "
+          "% for IET/output/cost (− = cheaper)._\n")
     head = "| Metric | " + " | ".join(f"`{a['model']}`" for a in arms) + " |"
     print(head); print("| --- |" + " ---: |" * len(arms))
     for _, label, _raw, diff, _lb in _METRICS:
@@ -366,10 +388,13 @@ def print_source_diff(paths):
               "(a path containing 'readme')."); return
     ag = agents["agg"]["skilledPlugin"]; rd = readme["agg"]["skilledPlugin"]
     sn = agents["sn"]
-    print(f"### Source-diff — {sn} · `{agents['model']}` · AGENTS.md benefit over README.md\n")
-    print("_Both surfaced via the grounding tool; baseline removed. Single column = "
-          "AGENTS.md change vs README.md (− = AGENTS cheaper/better on cost metrics, "
-          "+ on quality/func). This is what authoring AGENTS.md buys over the README floor._\n")
+    if not NO_TITLE:
+        print(f"### Source-diff — {sn} · `{agents['model']}` · AGENTS.md benefit over README.md\n")
+    mpref = f"`{agents['model']}` · " if NO_TITLE else ""
+    print(f"_{mpref}Both surfaced via the grounding tool; baseline removed. Single column = "
+          "AGENTS.md change vs README.md (− = AGENTS cheaper on cost metrics, "
+          "+ on success/func, lower resourcefulness = AGENTS more self-sufficient). "
+          "This is what authoring AGENTS.md buys over the README floor._\n")
     print("| Metric | AGENTS.md − README.md |")
     print("| --- | ---: |")
     for _, label, _raw, diff, _lb in _METRICS:
@@ -538,26 +563,34 @@ def print_card(paths):
         if i:
             print()
         print_primary(p)
-    print("\n**Legend** — _quality_: pairwise-judge rubric 1–5 (higher better). "
-          "_func passed_: functional assertions met (build+file+run-output), target 100%. "
-          "_IET_: Input-Equivalent Tokens = (input − cache-reads) + output, the cache-discounted "
-          "token cost (lower better). _output tok_: output/thinking tokens (priciest, most "
-          "variable; key harm signal — most likely to inflate on a strong model). _cost_: premium-request multiplier (lower better). "
-          "_archaeology (web+cache)_: out-of-sandbox lookups to recover missing knowledge — web "
-          "fetch/search **plus** local NuGet-cache rummaging; grounding should collapse it to 0, "
-          "and the web portion is a hard guard. _Conclusion_ is a uniform, model-independent grade of "
-          "grounding's measured effect vs baseline (the card grades; it does not decide shipping): "
-          "**BETTER** (a real improvement past the win bar — IET/cost down or quality up — with no "
-          "regression), **NEUTRAL** (no material change), or **WORSE** (a func/quality regression, web "
-          "archaeology, or IET/output inflated past the cap). Whether a NEUTRAL/WORSE result is "
-          "acceptable for a given model is higher-level analysis. See docs/grounding-eval-methodology.md.\n")
-    print("> Quality Δ is a **lower bound** — even ungrounded, the baseline self-grounds from the "
-          "restored NuGet cache (README/AGENTS are packed in the nupkg) and the open web, so it "
-          "understates grounding's value.\n")
+    print("\n**Legend** — each metric is read **per arm in isolation** (no judge-quality diff). "
+          "_success (scenarios)_: a scenario counts as solved when every functional assertion passes "
+          "AND the judge's overall quality clears the **≥4 floor** ('meets expectations'); the judge's "
+          "1–5 score is used only as this pass/fail floor, its subjective 4→5 top band is discarded. "
+          "_func passed (assertions)_: build+file+run-output assertions met, target 100%. "
+          "_resourcefulness (archaeology)_: out-of-sandbox lookups the agent had to make to recover the "
+          "API — web fetch/search **plus** local NuGet-cache rummaging. High = the agent had to be "
+          "resourceful; **grounding's whole job is to drive this to 0**, so lower is the win, not a loss. "
+          "The web portion is a hard guard (it should be 0 in a grounded arm). "
+          "_IET_: Input-Equivalent Tokens = (input − cache-reads) + output, the cache-discounted token "
+          "cost (lower better). _output tok_: output/thinking tokens (priciest, most variable). _cost_: "
+          "premium-request multiplier (lower better). _Conclusion_ is a uniform, model-independent grade "
+          "of grounding's measured effect vs baseline on **objective axes** (the card grades; it does not "
+          "decide shipping): **BETTER** (success held and a real win — IET/cost cut past the bar, or "
+          "resourcefulness eliminated), **NEUTRAL** (success held, no material efficiency win), or "
+          "**WORSE** (success dropped, the grounded arm did open-web archaeology, or cost/IET/output "
+          "inflated past the cap). Whether a NEUTRAL/WORSE result is acceptable for a given model is "
+          "higher-level analysis. See docs/grounding-eval-methodology.md.\n")
+    print("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
+          "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
+          "**lower bound** and grounding's advantage is understated.\n")
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--no-title" in args:
+        NO_TITLE = True
+        args = [a for a in args if a != "--no-title"]
     if not args:
         print(__doc__); sys.exit(1)
     if args[0] in ("--card", "--tools-card", "--web-card", "--model-diff", "--source-diff"):
