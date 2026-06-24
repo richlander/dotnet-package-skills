@@ -24,6 +24,11 @@ for NuGetFetch, M1–M6 for Markout). Each scenario runs three **arms**:
 - **skilled-isolated** — grounding delivered inline. A research-only diagnostic; **not shown on ship cards**.
 - **skilled-plugin** — grounding delivered as an auto-loaded skill. Stands in for any **grounding tool** (a packed `AGENTS.md`, the NuGet MCP, `dotnet-inspect`, …); the ship gate is read off this arm.
 
+The grounded arms can be run with **either** grounding source: `AGENTS.md` (the curated grounding) or
+the package `README.md` (the **fallback** a grounding tool surfaces when no `AGENTS.md` ships). Running
+both yields the three card columns — baseline, README-fallback, AGENTS.md — and shows whether AGENTS.md
+is actually needed (if README alone clears the gate, it isn't).
+
 A pairwise LLM judge scores rubric quality; the harness also records tokens, cost, tool calls, and
 assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read results with
 `eng/analyze-6q.py` (full table) or `eng/analyze-6q.py --card` (the PR dump, §4).
@@ -114,35 +119,44 @@ bought with significant output tokens is a **fail** on the frontier.
 
 ## 4. The eval dump (copy-paste into the PR)
 
-Generate the dump from the committed dataset:
+`--card` takes **one or more** datasets and assembles a single self-contained card. It groups them by
+tier (mini = haiku/sonnet/flash; frontier = opus/gpt-5/gemini) and, within a tier, by grounding source
+(a dataset whose path contains `readme` is the **README** arm). Pass all the datasets you have:
 
 ```bash
-python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.haiku.json     # mini-tier WIN card
-python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.opus.json      # frontier-tier HARM card
+python3 eng/analyze-6q.py --card \
+  data/<unit>-6q/<unit>.n3.haiku.json \
+  data/<unit>-6q/<unit>-readme.n3.haiku.json \
+  data/<unit>-6q/<unit>.n3.opus.json \
+  data/<unit>-6q/<unit>-readme.n3.opus.json
 ```
 
-`--card` prints a self-contained Markdown block — the metrics table, the tier-appropriate gate with
-each threshold PASS/FAIL, and the lower-bound caveat — **paste it verbatim** into the PR's *Metrics*
-section. It detects the tier from the model name and evaluates the correct gate. Example (NuGetFetch,
-mini tier):
+The card tells the **two-sided** story — a mini-tier **WIN** and a frontier-tier **NO-HARM** check —
+and shows three columns: **Baseline** (no grounding), **README (fallback)** (what a grounding tool
+surfaces when no `AGENTS.md` ships — the floor AGENTS.md must beat), and **AGENTS.md (grounding tool)**
+(the curated grounding the gate is read off). Missing tiers are flagged `⏳ pending`. **Paste it
+verbatim** into the PR's *Metrics* section. Example (NuGetFetch, mini tier, frontier pending):
 
 ```
-| Metric | Baseline | Grounding tool |
-| --- | ---: | ---: |
-| quality (1–5) | 4.40 | 4.67 |
-| func passed | 17/18 | 18/18 |
-| IET (mean) | 30189 | 17220 |
-| output tok (mean) | 6246 | 1604 |
-| cost (mean) | 7.77 | 2.08 |
-| gross tok (mean) | 539876 | 132746 |
-| archaeology (web+cache) | 20 | 0 |
+| Metric | Baseline | README (fallback) | AGENTS.md (grounding tool) |
+| --- | ---: | ---: | ---: |
+| quality (1–5) | 4.40 | 4.22 | 4.67 |
+| func passed | 17/18 | 17/18 | 18/18 |
+| IET (mean) | 30189 | 20400 | 17220 |
+| output tok (mean) | 6246 | 2436 | 1604 |
+| cost (mean) | 7.77 | 3.62 | 2.08 |
+| gross tok (mean) | 539876 | 246966 | 132746 |
+| archaeology (web+cache) | 20 | 13 | 0 |
 
-**Mini WIN gate (grounding tool vs baseline): ✅ PASS**
+**Mini WIN gate (AGENTS.md vs baseline): ✅ PASS**
 - PASS  func no regression (Δ +1)
 - PASS  quality no regression (Δ +0.27; floor −0.1)
 - PASS  no web archaeology (web=0; cache peeks allowed, here 0)
 - WIN   IET reduction 43% (bar 25%)
 - WIN   cost reduction 73% (bar 25%)
+
+_Fallback check — README alone ❌: quality Δ −0.22 vs its own baseline, and 13 cache pokes remain.
+README is written for humans, not models, so AGENTS.md is needed here._
 ```
 
 ---

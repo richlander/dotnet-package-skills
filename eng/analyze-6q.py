@@ -282,83 +282,156 @@ def _fmt_q(q):
     return f"{q:.2f}" if isinstance(q, (int, float)) else "-"
 
 
-def print_card(path):
+def _load_arm(path):
+    """Load one results.json -> (model, judge, tier, skillName, agg, is_readme)."""
     d = json.load(open(path))
     model = d.get("model", "?"); judge = d.get("judgeModel", model)
     tier = model_tier(model)
-    for v in d.get("verdicts", []):
-        sn = v.get("skillName", "?")
-        gtok = grounding_tokens(sn)
-        scs = v.get("scenarios", [])
-        agg = aggregate(scs)
-        b, iso, plg = agg["baseline"], agg["skilledIsolated"], agg["skilledPlugin"]
-        print(f"### Grounding eval — {sn} (model={model}, judge={judge}, tier={tier})\n")
-        print("_About this grounding._ `AGENTS.md` provides RAG-style, section-addressable "
-              "information for agents, surfaced by a grounding tool like the NuGet MCP. `README.md` "
-              "offers nice introductions and progressive disclosure for untrained humans; `AGENTS.md` "
-              "fills in targeted, evaluated gaps for trained models. Its presence removes any pressure "
-              "to make `README.md` agent-efficient or catered.\n")
-        if gtok:
-            print(f"Grounding: `grounding/{sn}/AGENTS.md` (~{gtok} tok loaded per grounded arm). "
-                  f"{b['n']} scenarios; means across scenarios.\n")
-        print("| Metric | Baseline | Grounding tool |")
-        print("| --- | ---: | ---: |")
-        print(f"| quality (1–5) | {_fmt_q(b['qual'])} | {_fmt_q(plg['qual'])} |")
-        print(f"| func passed | {b['fp']}/{b['ft']} | {plg['fp']}/{plg['ft']} |")
-        print(f"| IET (mean) | {b['iet']:.0f} | {plg['iet']:.0f} |")
-        print(f"| output tok (mean) | {b['out']:.0f} | {plg['out']:.0f} |")
-        print(f"| cost (mean) | {b['cost']:.2f} | {plg['cost']:.2f} |")
-        print(f"| gross tok (mean) | {b['tok']:.0f} | {plg['tok']:.0f} |")
-        print(f"| archaeology (web+cache) | {b['web'] + b['cache']} | {plg['web'] + plg['cache']} |")
-        print("\n**Legend**\n")
-        print("_Columns — both run the **same** task; they differ only in whether the package "
-              "grounding is available to the agent:_")
-        print("- **Baseline** — no grounding. The agent has model knowledge only and falls back to "
-              "**archaeology** (the row below) — searching outside the sandbox to reconstruct what "
-              "grounding would have told it. This is the reality today for a package the model "
-              "doesn't know.")
-        print("- **Grounding tool** — the package grounding (`AGENTS.md`) is surfaced by a grounding "
-              "tool, like the NuGet MCP, `dotnet-inspect`, or similar. The ship gate is read off this "
-              "column.")
-        print("\n_Rows — the metrics:_")
-        print("- **quality** — pairwise-judge rubric score, 1–5 (higher better).")
-        print("- **func passed** — functional assertions met (build + file + run-output checks); "
-              "100% is the target.")
-        print("- **IET** — Input-Equivalent Tokens = (input − cache-reads) + output; the "
-              "cache-discounted token cost (lower better).")
-        print("- **output tok** — output/thinking tokens (the priciest, most variable component).")
-        print("- **cost** — premium-request multiplier, cache-discounted (lower better).")
-        print("- **gross tok** — raw input+output incl. cache re-reads (context only; not the bill).")
-        print("- **archaeology (web+cache)** — out-of-sandbox lookups the agent makes to recover "
-              "missing knowledge: web fetch/search **plus** rummaging the local NuGet cache "
-              "(generalizes to any external source — decompiled DLLs, etc.). An informative signal, "
-              "not a hard gate metric; grounding should collapse it toward 0. The **web** portion is "
-              "the hard guard (a grounded run must never resort to the internet).")
-        # Gate evaluated on the grounding-tool arm (closest to the shipping experience).
-        if tier == "frontier":
-            passed, rows = gate_frontier(b, plg)
-            print(f"\n**Frontier HARM gate (grounding tool vs baseline): "
+    v = (d.get("verdicts") or [{}])[0]
+    sn = v.get("skillName", "?")
+    agg = aggregate(v.get("scenarios", []))
+    is_readme = "readme" in os.path.basename(path).lower()
+    return dict(model=model, judge=judge, tier=tier, sn=sn, agg=agg, readme=is_readme, path=path)
+
+
+def _three_col_table(base, readme_plg, agents_plg):
+    """Baseline | README (fallback) | AGENTS.md. README column omitted if not provided."""
+    cols = ["Baseline"]
+    if readme_plg is not None:
+        cols.append("README (fallback)")
+    cols.append("AGENTS.md (grounding tool)")
+    head = "| Metric | " + " | ".join(cols) + " |"
+    sep = "| --- |" + " ---: |" * len(cols)
+    print(head); print(sep)
+
+    def row(label, fn):
+        cells = [fn(base)]
+        if readme_plg is not None:
+            cells.append(fn(readme_plg))
+        cells.append(fn(agents_plg))
+        print(f"| {label} | " + " | ".join(cells) + " |")
+
+    row("quality (1–5)", lambda a: _fmt_q(a["qual"]))
+    row("func passed", lambda a: f"{a['fp']}/{a['ft']}")
+    row("IET (mean)", lambda a: f"{a['iet']:.0f}")
+    row("output tok (mean)", lambda a: f"{a['out']:.0f}")
+    row("cost (mean)", lambda a: f"{a['cost']:.2f}")
+    row("gross tok (mean)", lambda a: f"{a['tok']:.0f}")
+    row("archaeology (web+cache)", lambda a: f"{a['web'] + a['cache']}")
+
+
+def _tier_section(arms, tier_label, gate_label):
+    """Render one tier's 3-col table + gate. arms: dict with 'agents' and optional 'readme'."""
+    agents = arms.get("agents"); readme = arms.get("readme")
+    primary = agents or readme
+    base = primary["agg"]["baseline"]
+    agents_plg = agents["agg"]["skilledPlugin"] if agents else None
+    readme_plg = readme["agg"]["skilledPlugin"] if readme else None
+    model = primary["model"]; judge = primary["judge"]
+    print(f"#### {tier_label} — model `{model}`, judge `{judge}`\n")
+    _three_col_table(base, readme_plg, agents_plg if agents_plg is not None else base)
+
+    if agents:
+        if agents["tier"] == "frontier":
+            passed, rows = gate_frontier(base, agents_plg)
+            print(f"\n**{gate_label} (AGENTS.md vs baseline): "
                   f"{'✅ NO HARM' if passed else '❌ HARM'}** — zero tolerance.\n")
             for line in rows:
                 print(f"- {line}")
-            print("\n_This tier measures harm, not win: frontier quality is near the ceiling, so "
-                  "grounding need not improve it — it must not damage it. A full ship decision also "
-                  "needs a mini-tier WIN run._")
         else:
-            passed, harm, win = gate_mini(b, plg)
-            print(f"\n**Mini WIN gate (grounding tool vs baseline): {'✅ PASS' if passed else '❌ FAIL'}**\n")
+            passed, harm, win = gate_mini(base, agents_plg)
+            print(f"\n**{gate_label} (AGENTS.md vs baseline): "
+                  f"{'✅ PASS' if passed else '❌ FAIL'}**\n")
             print("_Guards (must hold):_")
             for line in harm:
                 print(f"- {line}")
             print("\n_Win (at least one must clear):_")
             for line in win:
                 print(f"- {line}")
-            print("\n_This tier measures the win. A full ship decision also needs a frontier-tier "
-                  "NO-HARM run (zero output-token inflation, no quality regression)._")
-        print("\n> Quality Δ is a **lower bound** — even ungrounded, the baseline can self-ground "
-              "from the restored NuGet cache (README/AGENTS are packed in the nupkg), so it "
-              "understates grounding's value. Starting cache state is not a variable. "
-              "See docs/grounding-eval-methodology.md.\n")
+    # README-as-fallback verdict (judged against README's own run baseline).
+    if readme:
+        rb = readme["agg"]["baseline"]; rp = readme["agg"]["skilledPlugin"]
+        if readme["tier"] == "frontier":
+            rpass, _ = gate_frontier(rb, rp)
+        else:
+            rpass, _, _ = gate_mini(rb, rp)
+        dq = (rp["qual"] or 0) - (rb["qual"] or 0)
+        note = "clears the bar — AGENTS.md would be unnecessary" if rpass else \
+               "does NOT clear the bar — AGENTS.md is needed"
+        print(f"\n_Fallback check — **README alone** {'✅' if rpass else '❌'}: {note} "
+              f"(quality Δ {dq:+.2f} vs its own baseline). Grounding surfaces README.md when no "
+              f"AGENTS.md is present, so this is the real floor AGENTS.md must beat._")
+
+
+def print_card(paths):
+    """Render a complete ship card from one or more datasets.
+
+    Datasets are grouped by tier (mini = haiku/sonnet/flash; frontier = opus/gpt-5/gemini)
+    and, within a tier, by grounding source (a path containing 'readme' is the README arm).
+    The card tells the two-sided story: a mini-tier WIN and a frontier-tier NO-HARM check.
+    """
+    arms = [_load_arm(p) for p in paths]
+    sn = arms[0]["sn"]
+    gtok = grounding_tokens(sn)
+    groups = {"mini": {}, "frontier": {}}
+    for a in arms:
+        groups[a["tier"]]["readme" if a["readme"] else "agents"] = a
+
+    print(f"### Grounding eval — {sn}\n")
+    print("_About this grounding._ `AGENTS.md` provides RAG-style, section-addressable "
+          "information for agents, surfaced by a grounding tool like the NuGet MCP. `README.md` "
+          "offers nice introductions and progressive disclosure for untrained humans; `AGENTS.md` "
+          "fills in targeted, evaluated gaps for trained models. Its presence removes any pressure "
+          "to make `README.md` agent-efficient or catered.\n")
+    if gtok:
+        print(f"Grounding: `grounding/{sn}/AGENTS.md` (~{gtok} tok loaded per grounded arm). "
+              f"Means across scenarios.\n")
+    print("_The ship decision is **two-sided**: a smaller model (mini tier) must show a **WIN**, "
+          "and a frontier model must show **NO HARM**. Both are read off the **AGENTS.md** column; "
+          "the **README** column is the fallback floor (what grounding surfaces when no AGENTS.md "
+          "ships) — if README already clears the bar, AGENTS.md is unnecessary._\n")
+
+    if groups["mini"]:
+        _tier_section(groups["mini"], "Mini tier — the WIN", "Mini WIN gate")
+    else:
+        print("#### Mini tier — the WIN\n\n_⏳ pending — run a haiku/sonnet dataset._")
+    print()
+    if groups["frontier"]:
+        _tier_section(groups["frontier"], "Frontier tier — the NO-HARM check", "Frontier HARM gate")
+    else:
+        print("#### Frontier tier — the NO-HARM check\n\n_⏳ pending — run an opus/gpt-5/gemini "
+              "dataset (`MODELS=claude-opus-4.6 eng/run-<unit>-6q.sh`) to complete the decision._")
+
+    print("\n**Legend**\n")
+    print("_Columns — every column runs the **same** task; they differ only in what grounding the "
+          "agent is given:_")
+    print("- **Baseline** — no grounding. The agent has model knowledge only and falls back to "
+          "**archaeology** (the row below) — searching outside the sandbox to reconstruct what "
+          "grounding would have told it. The reality today for a package the model doesn't know.")
+    print("- **README (fallback)** — the package `README.md` is surfaced as grounding. This is what "
+          "a grounding tool returns when no `AGENTS.md` ships, so it is the floor AGENTS.md must "
+          "beat. README is written for humans, not models.")
+    print("- **AGENTS.md (grounding tool)** — the curated package grounding, surfaced by a grounding "
+          "tool (NuGet MCP, `dotnet-inspect`, …). The ship gate is read off this column.")
+    print("\n_Rows — the metrics:_")
+    print("- **quality** — pairwise-judge rubric score, 1–5 (higher better).")
+    print("- **func passed** — functional assertions met (build + file + run-output checks); "
+          "100% is the target.")
+    print("- **IET** — Input-Equivalent Tokens = (input − cache-reads) + output; the "
+          "cache-discounted token cost (lower better).")
+    print("- **output tok** — output/thinking tokens (the priciest, most variable component; the "
+          "key frontier-harm signal).")
+    print("- **cost** — premium-request multiplier, cache-discounted (lower better).")
+    print("- **gross tok** — raw input+output incl. cache re-reads (context only; not the bill).")
+    print("- **archaeology (web+cache)** — out-of-sandbox lookups the agent makes to recover "
+          "missing knowledge: web fetch/search **plus** rummaging the local NuGet cache "
+          "(generalizes to any external source — decompiled DLLs, etc.). An informative signal, "
+          "not a hard gate metric; grounding should collapse it toward 0. The **web** portion is "
+          "the hard guard (a grounded run must never resort to the internet).")
+    print("\n> Quality Δ is a **lower bound** — even ungrounded, the baseline can self-ground "
+          "from the restored NuGet cache (README/AGENTS are packed in the nupkg), so it "
+          "understates grounding's value. Starting cache state is not a variable. "
+          "See docs/grounding-eval-methodology.md.\n")
 
 
 if __name__ == "__main__":
@@ -371,8 +444,7 @@ if __name__ == "__main__":
             print("--card needs a results.json path"); sys.exit(1)
         files = []
         for p in rest:
-            files.extend(glob.glob(p, recursive=True))
-        for f in sorted(set(files)):
-            print_card(f)
+            files.extend(glob.glob(p, recursive=True) or [p])
+        print_card(sorted(set(files)))
         sys.exit(0)
     main(args)
