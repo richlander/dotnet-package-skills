@@ -61,11 +61,11 @@ bound*.
 | **Informative signal** | Corroborating behavioral data that *explains* a metric move but is never the claim: `web`, `tools`, `turns`, `cache` (bash rummaging `~/.nuget/packages`), `di`, `mcp`, `bash`. A tool call adds nothing to the bill on its own; many signals together trace the narrative arc (archaeology, cache-reflection, retry loops). |
 | **warm / cold cache** | Whether the package is restored on disk. For build-based scenarios the agent restores it within its first few tool calls, so **starting cache state is not a variable** — treat it as warm (see harness.md). |
 | **verify-close** | A package-specific grounding line that makes the agent surface the final code/API calls, fixing a *verifiability artifact* where the judge underscores efficient grounded runs it can't see (see [nugetfetch report](./reports/nugetfetch.md)). |
-| **Pareto gate / tier** | The ship rule (§3). **mini tier** (λ low — weaker/cheaper model that *needs* grounding): quality is the binding constraint, tokens are cheap → seek the **win** here. **frontier tier** (λ high — strong model that doesn't need it): quality is near ceiling → require **zero harm** here. |
+| **Pareto gate / tier** | The ship rule (§3). **mini tier** (λ low — weaker/cheaper model that *needs* grounding): quality is the binding constraint, tokens are cheap → require the card to grade **BETTER** here. **frontier tier** (λ high — strong model that doesn't need it): quality is near ceiling → require **not WORSE** (BETTER or NEUTRAL) here. |
 
 ---
 
-## 3. The ship gate — win on the tier that needs it, zero harm on the tier that doesn't
+## 3. The ship decision — require BETTER on the tier that needs it, not WORSE on the tier that doesn't
 
 Grounding is **auto-installed and un-removable**, so the verdict is a **Pareto gate**, not an average
 (authoring-principles §4). Modeled directly on the decompiler quality-diff card — which **requires a
@@ -80,7 +80,15 @@ win, and a frontier-tier run (e.g. `claude-opus-*`) for the no-harm check. Each 
 judge named. The gate is evaluated on the **grounding-tool** arm (the `plugin` channel) vs **baseline**, on means across the unit's
 scenarios.
 
-### Mini tier — the WIN (thresholds)
+> **The card grades; this section decides.** The `--card` conclusion is a single **uniform,
+> model-independent grade** of grounding's measured effect vs baseline — **BETTER / NEUTRAL / WORSE**
+> (§4) — the *same* rubric for haiku and opus. It deliberately does **not** encode shipping. The
+> tier-aware ship decision below is the **higher-level analysis** layered on top of those grades: we
+> *require* **BETTER** on the mini tier (it needs grounding) and merely *not* **WORSE** on the frontier
+> tier (it doesn't). A frontier **BETTER** is a welcome bonus, never a requirement. Reading the grade is
+> the card's job; deciding what the grade means for shipping is yours.
+
+### Mini tier — require BETTER (the win thresholds)
 
 Correctness may never regress; then at least one win axis must clear:
 
@@ -97,26 +105,27 @@ On the mini tier a large cost/IET reduction with quality flat (within the −0.1
 legitimate ship — tokens are cheap, the binding constraint was the model otherwise flailing or
 failing.
 
-### Frontier tier — the no-harm check (and a win is welcome)
+### Frontier tier — require *not WORSE* (a BETTER is a welcome bonus)
 
-The strong model rarely *needs* grounding, so this run is not **required** to win — it must prove
-grounding **does no damage**. This is the direct analog of "no drop in recovery, no increase in
-malformed". But "not required to win" is not "can't win": if grounding makes even the frontier model
-**materially cheaper** (clears the same IET/cost win bar as the mini tier) with no quality/func
-regression, that is a genuine **WIN** and the card says so. We bounded ourselves into only ever
-reporting "no harm" on opus once; the verdict now recognizes an efficiency win on any tier.
+The strong model rarely *needs* grounding, so this run is not **required** to be **BETTER** — it must
+only prove grounding does **no damage** (the card grades it **not WORSE**: BETTER or NEUTRAL). This is the
+direct analog of "no drop in recovery, no increase in malformed". But "not required to be better" is not
+"can't be better": if grounding makes even the frontier model **materially cheaper** (clears the same
+IET/cost win bar) with no regression, the card grades it **BETTER** on its own — same rubric as every
+model. Don't read a frontier NEUTRAL as failure and don't withhold a deserved BETTER; we cornered
+ourselves into only ever saying "no harm" on opus once, and the uniform grade fixes that.
 
-So the frontier verdict has three outcomes:
-- **WIN** — grounding pays off even here: a real efficiency (or quality) gain, no regression.
-- **NO HARM** — the only *requirement*: IET inflation stayed under the cap (often the diff is negative).
-- **HARM** — failed: IET inflated past the cap, or a quality/func regression.
+So, reading the **uniform card grade** for the frontier ship decision:
+- **BETTER** — grounding pays off even here (efficiency or quality gain, no regression). Ships; a bonus.
+- **NEUTRAL** — no material change. **Ships** — this is all the frontier tier is required to show.
+- **WORSE** — IET/output inflated past the cap, or a quality/func regression. **Blocks the ship.**
 
-**Harm is a number, not a bool.** The headline harm metric is the **IET diff from baseline**
-(`IET_grounded − IET_baseline`, signed). Harm need not be zero — it carries a **hard cap** (a budget):
-grounding may cost a little more on a model that didn't need it, but not a lot. In practice the diff is
-usually *negative* (grounding makes even the frontier cheaper — which is what tips a no-harm into a
-**win**), so the cap rarely binds; it exists to catch a bloated grounding doc. We report the number so
-harm is *tracked as a quantity*, not collapsed to a pass/fail.
+**WORSE is bounded by a number, not a bool.** The headline harm metric is the **IET diff from baseline**
+(`IET_grounded − IET_baseline`, signed). It need not be zero — it carries a **hard cap** (a budget):
+grounding may cost a little more on a model that didn't need it, but not a lot (past the cap ⇒ WORSE). In
+practice the diff is usually *negative* (grounding makes even the frontier cheaper — which is what tips a
+NEUTRAL into a **BETTER**), so the cap rarely binds; it exists to catch a bloated grounding doc. We report
+the number so the effect is *tracked as a quantity*, not collapsed to a pass/fail.
 
 | Axis | Threshold |
 | --- | --- |
@@ -147,14 +156,20 @@ a small quality gain bought with a large output-token increase is still a **fail
 
 `eng/analyze-6q.py` emits **three single-variable cards**, each isolating exactly one comparison so the
 data is trivial to read. Every card shows the same metric rows — `quality`, `func passed`, `IET`,
-`output tok`, `cost`, `archaeology` — and a **Conclusion** that is a verdict *derived from* the rows, not
-a row itself. A dataset whose filename contains `readme` is read as the **README arm**.
+`output tok`, `cost`, `archaeology` — and a **Conclusion**: a single **uniform, model-independent grade**
+of grounding's effect vs baseline, **BETTER / NEUTRAL / WORSE** (the same rubric for every model — the
+card grades, it does not decide shipping; that is §3). A dataset whose filename contains `readme` is read
+as the **README arm**.
+
+- **BETTER** — a real improvement past the win bar (IET or cost down ≥ 25%, or quality Δ ≥ +0.3), no regression.
+- **NEUTRAL** — no material change (no win, no regression).
+- **WORSE** — a func/quality regression, web archaeology, or IET/output inflated past the cap.
 
 | Card | Flag | Holds fixed | Varies | Answers |
 | --- | --- | --- | --- | --- |
-| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model; mini ⇒ WIN (required), frontier ⇒ no-harm (a win is welcome)) |
-| ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Where grounding's lift lands — mini WIN vs frontier no-harm — side by side. |
-| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? |
+| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
+| ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
+| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? (AGENTS graded against README) |
 
 ```bash
 # ① primary, one card per model
@@ -180,11 +195,11 @@ primary (frontier), ② model-diff, ③ source-diff (mini). Example (NuGetFetch,
 | cost | 7.75 | 2.28 |
 | archaeology (web+cache) | 35 | 0 |
 
-> **Conclusion:** **WIN** — IET -44%, cost -71%, quality Δ +0.23, func +1.
+> **Conclusion:** **BETTER** — IET -44%, cost -71%, quality Δ +0.23, func +1.
 ```
 
-The card emits a shared **Legend** explaining each row and the WIN / HARM verdicts. For the operational
-"which card for which lifecycle operation" guide, see
+The card emits a shared **Legend** explaining each row and the BETTER / NEUTRAL / WORSE grade. For the
+operational "which card for which lifecycle operation" guide, see
 [`grounding-lifecycle.md`](./grounding-lifecycle.md).
 
 ---
@@ -223,8 +238,8 @@ cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # comm
 - [ ] `AGENTS.md` within the line limit; `eng/sync-skill.sh --check` passes.
 - [ ] Datasets committed under `data/<unit>-6q/`; both `--card` dumps in the PR match them.
 - [ ] n ≥ 3; model and judge named, for **both** tiers.
-- [ ] **mini WIN** gate passes (a real cost/IET or quality win; no func/quality/web regression).
-- [ ] **frontier NO-HARM** gate passes (zero output-token inflation; no quality/func regression).
+- [ ] Mini tier graded **BETTER** (a real cost/IET or quality gain; no func/quality/web regression).
+- [ ] Frontier tier graded **not WORSE** (BETTER or NEUTRAL — IET/output under the cap; no quality/func regression).
 - [ ] Claims cite normative metrics; signals only explain.
 - [ ] Grounding text is package-specific, justified by the package's actual trap.
 - [ ] Required caveats present; cache reads attributed per arm (not grepped).

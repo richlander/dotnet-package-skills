@@ -51,20 +51,18 @@ from collections import Counter
 
 ARMS = [("baseline", "baseline"), ("skilledIsolated", "isolated"), ("skilledPlugin", "plugin")]
 
-# --- Ship gate thresholds. See docs/grounding-eval-methodology.md. ---
-# Pareto gate (authoring-principles §4), modeled on the decompiler quality-diff card:
-# require a real WIN on the tier that needs grounding (mini, λ low — quality is the
-# binding constraint, tokens are cheap), and tolerate ~ZERO HARM on the tier that does
-# not (frontier, λ high). Frontier harm is the direct analog of the decompiler's "no
-# drop in recovery, no increase in malformed": no quality regression and no output/
-# thinking-token inflation. Correctness (func) may never regress on either tier.
+# --- Grading thresholds (uniform — applied identically to every model). ---
+# The card grades grounding's measured effect vs baseline with ONE model-independent
+# rubric (BETTER / NEUTRAL / WORSE — see _grade). These thresholds set where each
+# boundary sits. The *ship decision* (which models we require to be BETTER vs merely
+# not-WORSE) is higher-level analysis, not the card's job — see docs §3.
 GATE = dict(
-    iet_win_frac=0.25,        # mini WIN: >=25% IET reduction vs baseline, OR
-    cost_win_frac=0.25,       # mini WIN: >=25% cost reduction vs baseline, OR
-    qual_win_delta=0.3,       # mini WIN: >=+0.3 quality lift vs baseline
-    qual_regress_max=0.1,     # HARM (both tiers): quality may not drop more than this
-    iet_harm_cap_frac=0.10,   # FRONTIER HARM (headline): grounded IET may not exceed baseline by >10%
-    out_inflate_frac=0.05,    # FRONTIER HARM (secondary guard): output tokens may not rise more than 5%
+    iet_win_frac=0.25,        # BETTER: >=25% IET reduction vs baseline, OR
+    cost_win_frac=0.25,       # BETTER: >=25% cost reduction vs baseline, OR
+    qual_win_delta=0.3,       # BETTER: >=+0.3 quality lift vs baseline
+    qual_regress_max=0.1,     # WORSE: quality may not drop more than this
+    iet_harm_cap_frac=0.10,   # WORSE (headline): grounded IET may not exceed baseline by >10%
+    out_inflate_frac=0.05,    # WORSE (secondary guard): output tokens may not rise more than 5%
 )
 
 FRONTIER_HINTS = ("opus", "sonnet", "gpt-5", "gpt5", "gemini-3", "gemini-2.5-pro")
@@ -226,68 +224,6 @@ def aggregate(scenarios):
     return out
 
 
-def gate_mini(base, grnd):
-    """WIN tier (mini, λ low): require a real win; correctness may never regress."""
-    harm, win = [], []
-    ok = True
-    dfunc = grnd["fp"] - base["fp"]
-    h_func = dfunc >= 0; ok &= h_func
-    harm.append(f"{'PASS' if h_func else 'FAIL'}  func no regression "
-                f"(Δ {dfunc:+d}; {grnd['fp']}/{grnd['ft']} vs {base['fp']}/{base['ft']})")
-    if base["qual"] is not None and grnd["qual"] is not None:
-        dq = grnd["qual"] - base["qual"]
-        h_q = dq >= -GATE["qual_regress_max"]; ok &= h_q
-        harm.append(f"{'PASS' if h_q else 'FAIL'}  quality no regression "
-                    f"(Δ {dq:+.2f}; floor −{GATE['qual_regress_max']})")
-    h_web = grnd["web"] == 0; ok &= h_web
-    harm.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']}; cache peeks allowed, here {grnd['cache']})")
-    iet_frac = (base["iet"] - grnd["iet"]) / base["iet"] if base["iet"] else 0
-    cost_frac = (base["cost"] - grnd["cost"]) / base["cost"] if base["cost"] else 0
-    w_iet = iet_frac >= GATE["iet_win_frac"]
-    w_cost = cost_frac >= GATE["cost_win_frac"]
-    w_q = (base["qual"] is not None and grnd["qual"] is not None
-           and (grnd["qual"] - base["qual"]) >= GATE["qual_win_delta"])
-    win.append(f"{'WIN ' if w_iet else '--  '}  IET reduction {iet_frac*100:.0f}% "
-               f"(bar {GATE['iet_win_frac']*100:.0f}%)")
-    win.append(f"{'WIN ' if w_cost else '--  '}  cost reduction {cost_frac*100:.0f}% "
-               f"(bar {GATE['cost_win_frac']*100:.0f}%)")
-    if base["qual"] is not None and grnd["qual"] is not None:
-        win.append(f"{'WIN ' if w_q else '--  '}  quality lift Δ "
-                   f"{grnd['qual']-base['qual']:+.2f} (bar +{GATE['qual_win_delta']})")
-    return (ok and (w_iet or w_cost or w_q)), harm, win
-
-
-def gate_frontier(base, grnd):
-    """HARM tier (frontier). Harm is a NUMBER, not a bool: the headline is the **IET diff from
-    baseline** (grounded − baseline), held under a hard cap (a budget, not zero — grounding may
-    cost a little on a model that didn't need it, not a lot). Guards: no func/quality regression,
-    no web archaeology. Output tokens are a visible secondary guard so a pure output blow-up isn't
-    masked when input nets down. Returns (ok, iet_harm_frac, rows)."""
-    rows = []
-    ok = True
-    # Headline harm number: IET inflation vs baseline (negative = grounding is cheaper, no harm).
-    iet_frac = (grnd["iet"] - base["iet"]) / base["iet"] if base["iet"] else 0.0
-    h_iet = iet_frac <= GATE["iet_harm_cap_frac"]; ok &= h_iet
-    rows.append(f"{'PASS' if h_iet else 'FAIL'}  HARM = IET diff {iet_frac*100:+.0f}% vs baseline "
-                f"(cap +{GATE['iet_harm_cap_frac']*100:.0f}%)")
-    dfunc = grnd["fp"] - base["fp"]
-    h_func = dfunc >= 0; ok &= h_func
-    rows.append(f"{'PASS' if h_func else 'FAIL'}  no correctness/recovery drop "
-                f"(func Δ {dfunc:+d})")
-    if base["qual"] is not None and grnd["qual"] is not None:
-        dq = grnd["qual"] - base["qual"]
-        h_q = dq >= -GATE["qual_regress_max"]; ok &= h_q
-        rows.append(f"{'PASS' if h_q else 'FAIL'}  no quality regression "
-                    f"(Δ {dq:+.2f}; floor −{GATE['qual_regress_max']})")
-    out_frac = (grnd["out"] - base["out"]) / base["out"] if base["out"] else 0
-    h_out = out_frac <= GATE["out_inflate_frac"]; ok &= h_out
-    rows.append(f"{'PASS' if h_out else 'FAIL'}  output-token guard "
-                f"(Δ {out_frac*100:+.0f}%; cap +{GATE['out_inflate_frac']*100:.0f}%)")
-    h_web = grnd["web"] == 0; ok &= h_web
-    rows.append(f"{'PASS' if h_web else 'FAIL'}  no web archaeology (web={grnd['web']}; cache peeks allowed, here {grnd['cache']})")
-    return ok, iet_frac, rows
-
-
 def _fmt_q(q):
     return f"{q:.2f}" if isinstance(q, (int, float)) else "-"
 
@@ -347,38 +283,40 @@ _METRICS = [
 ]
 
 
-def _conclusion(base, grnd, tier):
-    """One-line verdict string (the conclusion, not a row): WIN for mini, HARM for frontier."""
-    iet = _pct(grnd["iet"], base["iet"])
+def _grade(base, grnd):
+    """Uniform verdict — the **same grading for every model**. The card grades the measured
+    effect of grounding vs baseline; it does **not** decide shipping (whether a NEUTRAL/WORSE
+    result is acceptable on a model that didn't need grounding is higher-level analysis, not the
+    card's job). Purely directional:
+
+      BETTER  — a real improvement past the win bar (IET/cost reduction, or a quality lift),
+                with no regression.
+      WORSE   — grounding regressed something: func or quality dropped, web archaeology appeared,
+                or IET/output inflated past the cap.
+      NEUTRAL — neither: no material improvement, no regression.
+    """
+    iet  = _pct(grnd["iet"],  base["iet"])     # − = cheaper
     cost = _pct(grnd["cost"], base["cost"])
+    out  = _pct(grnd["out"],  base["out"])
     dq = ((grnd["qual"] - base["qual"]) if grnd["qual"] is not None
           and base["qual"] is not None else 0.0)
     dfunc = grnd["fp"] - base["fp"]
-    if tier == "frontier":
-        ok, iet_frac, _ = gate_frontier(base, grnd)
-        cap = GATE["iet_harm_cap_frac"]
-        win_ok, _, _ = gate_mini(base, grnd)
-        if ok and win_ok:
-            # Frontier doesn't *need* grounding, but here it still pays off — a real
-            # efficiency win with no quality/func regression. Recognize it as a WIN.
-            return (f"**WIN** — grounding pays off even on frontier: IET {iet:+.0f}%, "
-                    f"cost {cost:+.0f}%, quality Δ {dq:+.2f}, func {dfunc:+d} → ✅ PASS")
-        if ok:
-            if iet_frac <= 0:
-                harm = (f"**NO HARM** — IET {iet_frac*100:+.0f}% (grounding is *cheaper*), "
-                        f"well within +{cap*100:.0f}% cap")
-            else:
-                harm = (f"**NO HARM** — IET inflation {iet_frac*100:+.0f}%, "
-                        f"within +{cap*100:.0f}% cap")
-            return (f"{harm} — quality Δ {dq:+.2f}, func {dfunc:+d} → ✅ PASS")
-        reason = (f"IET inflation {iet_frac*100:+.0f}% exceeds +{cap*100:.0f}% cap"
-                  if iet_frac > cap else
-                  f"regression (IET {iet_frac*100:+.0f}%, quality Δ {dq:+.2f}, func {dfunc:+d})")
-        return f"**HARM** — {reason} → ❌ FAIL"
-    ok, _, _ = gate_mini(base, grnd)
-    return (f"**{'WIN' if ok else 'NO WIN'}** — IET {iet:+.0f}%, cost {cost:+.0f}%, "
-            f"quality Δ {dq:+.2f}, func {dfunc:+d}")
+    tail = f"IET {iet:+.0f}%, cost {cost:+.0f}%, quality Δ {dq:+.2f}, func {dfunc:+d}"
 
+    worse = []
+    if dfunc < 0:                            worse.append(f"func {dfunc:+d}")
+    if dq < -GATE["qual_regress_max"]:       worse.append(f"quality Δ {dq:+.2f}")
+    if grnd["web"] > 0:                      worse.append(f"web archaeology {grnd['web']}")
+    if iet > GATE["iet_harm_cap_frac"] * 100:  worse.append(f"IET +{iet:.0f}%")
+    if out > GATE["out_inflate_frac"] * 100:   worse.append(f"output +{out:.0f}%")
+    if worse:
+        return f"**WORSE** — {', '.join(worse)} ({tail})"
+
+    if (-iet >= GATE["iet_win_frac"] * 100 or -cost >= GATE["cost_win_frac"] * 100
+            or dq >= GATE["qual_win_delta"]):
+        return f"**BETTER** — {tail}"
+
+    return f"**NEUTRAL** — no material change ({tail})"
 
 def print_primary(path):
     """① Primary card — one model, Baseline vs AGENTS.md (the grounding tool). The data."""
@@ -393,7 +331,7 @@ def print_primary(path):
     print("| --- | ---: | ---: |")
     for _, label, raw, _diff, _lb in _METRICS:
         print(f"| {label} | {raw(base)} | {raw(grnd)} |")
-    print(f"\n> **Conclusion:** {_conclusion(base, grnd, a['tier'])}.")
+    print(f"\n> **Conclusion:** {_grade(base, grnd)}.")
 
 
 def print_model_diff(paths):
@@ -412,7 +350,7 @@ def print_model_diff(paths):
     for _, label, _raw, diff, _lb in _METRICS:
         cells = [diff(a["agg"]["skilledPlugin"], a["agg"]["baseline"]) for a in arms]
         print(f"| {label} | " + " | ".join(cells) + " |")
-    verdicts = [_conclusion(a["agg"]["baseline"], a["agg"]["skilledPlugin"], a["tier"])
+    verdicts = [_grade(a["agg"]["baseline"], a["agg"]["skilledPlugin"])
                 for a in arms]
     print("| **→ verdict** | " + " | ".join(verdicts) + " |")
 
@@ -436,13 +374,7 @@ def print_source_diff(paths):
     print("| --- | ---: |")
     for _, label, _raw, diff, _lb in _METRICS:
         print(f"| {label} | {diff(ag, rd)} |")
-    diet = _pct(ag["iet"], rd["iet"])
-    dq = ((ag["qual"] - rd["qual"]) if ag["qual"] is not None and rd["qual"] is not None
-          else 0.0)
-    worth = (diet <= -GATE["iet_win_frac"] * 100) or (dq >= GATE["qual_win_delta"])
-    note = ("AGENTS.md earns its place — material gain over README"
-            if worth else "README is close — AGENTS.md adds little here")
-    print(f"\n> **Conclusion:** {note} (IET {diet:+.0f}%, quality Δ {dq:+.2f}).")
+    print(f"\n> **Conclusion:** {_grade(rd, ag)} _(AGENTS.md graded against the README floor)._")
 
 
 # --- diagnostic cards: what the agent reached for (tools) and searched (web) -----------
@@ -610,15 +542,15 @@ def print_card(paths):
           "_func passed_: functional assertions met (build+file+run-output), target 100%. "
           "_IET_: Input-Equivalent Tokens = (input − cache-reads) + output, the cache-discounted "
           "token cost (lower better). _output tok_: output/thinking tokens (priciest, most "
-          "variable; key frontier-harm signal). _cost_: premium-request multiplier (lower better). "
+          "variable; key harm signal — most likely to inflate on a strong model). _cost_: premium-request multiplier (lower better). "
           "_archaeology (web+cache)_: out-of-sandbox lookups to recover missing knowledge — web "
           "fetch/search **plus** local NuGet-cache rummaging; grounding should collapse it to 0, "
-          "and the web portion is a hard guard. _Conclusion_ is a verdict derived from the rows, "
-          "not a metric: **WIN** (grounding clearly pays off — a real quality or efficiency gain "
-          "with no regression; the *requirement* on the mini tier, and a welcome bonus on frontier), "
-          "**NO HARM** (frontier passed its only requirement — IET inflation stayed under the cap), "
-          "or **HARM** (failed: IET inflated past the cap, or a quality/func regression). "
-          "See docs/grounding-eval-methodology.md.\n")
+          "and the web portion is a hard guard. _Conclusion_ is a uniform, model-independent grade of "
+          "grounding's measured effect vs baseline (the card grades; it does not decide shipping): "
+          "**BETTER** (a real improvement past the win bar — IET/cost down or quality up — with no "
+          "regression), **NEUTRAL** (no material change), or **WORSE** (a func/quality regression, web "
+          "archaeology, or IET/output inflated past the cap). Whether a NEUTRAL/WORSE result is "
+          "acceptable for a given model is higher-level analysis. See docs/grounding-eval-methodology.md.\n")
     print("> Quality Δ is a **lower bound** — even ungrounded, the baseline self-grounds from the "
           "restored NuGet cache (README/AGENTS are packed in the nupkg) and the open web, so it "
           "understates grounding's value.\n")

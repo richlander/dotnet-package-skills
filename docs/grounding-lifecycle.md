@@ -13,7 +13,7 @@ Worked exemplars (use these as templates):
 
 | Operation | Exemplar | What it shows |
 | --- | --- | --- |
-| **CREATE** | [nuget-fetch#13](https://github.com/richlander/nuget-fetch/pull/13) | A new `AGENTS.md` that turns a mini-tier loss into a WIN with zero frontier harm. |
+| **CREATE** | [nuget-fetch#13](https://github.com/richlander/nuget-fetch/pull/13) | A new `AGENTS.md` graded BETTER on the mini tier (which needed it) and BETTER on frontier too — no regression anywhere. |
 | **EVALUATE / UPDATE** | [markout grounding eval issue](https://github.com/richlander/markout/issues) | A 3 KB `AGENTS.md` measured against a real 18.8 KB package README to prove the curated file still earns its place. |
 
 ---
@@ -38,10 +38,12 @@ already knows this package — **do not author grounding**. Grounding is justifi
 2. **Sync the wrapper:** `eng/sync-skill.sh` regenerates `SKILL.md` (harness toggle only — never
    hand-edit it). `eng/sync-skill.sh --check` must pass.
 3. **Evaluate both tiers, n ≥ 3:**
-   - **mini** (e.g. `claude-haiku-4.5`) — the tier that *needs* grounding; you are looking for a **WIN**.
-   - **frontier** (e.g. `claude-opus-4.8`) — the tier that doesn't; you are checking for **no HARM**.
-4. **Read the cards** (§4). Ship only if the **mini WIN** gate and the **frontier no-harm check** (IET inflation under the cap) both pass
-   (thresholds in methodology §3).
+   - **mini** (e.g. `claude-haiku-4.5`) — the tier that *needs* grounding.
+   - **frontier** (e.g. `claude-opus-4.8`) — the tier that doesn't.
+4. **Read the cards** (§4). Each card grades grounding uniformly as **BETTER / NEUTRAL / WORSE** (same
+   rubric for every model — the card grades, it doesn't decide). Apply the higher-level ship rule
+   (methodology §3): **require BETTER on the mini tier** (it needs grounding) and **merely not-WORSE on
+   the frontier tier** (a frontier BETTER is a welcome bonus). Ship only if both hold.
 5. **Open the PR** using `.github/PULL_REQUEST_TEMPLATE.md`. Paste the four cards into *Metrics*, link
    this playbook and the methodology, and give one representative before/after.
 
@@ -72,11 +74,11 @@ knowledge shifts, or a new trap appears. The operation is the same as CREATE plu
 Grounding is a liability once it is redundant (the model learned the package) or wrong (the API moved).
 Deletion is also a claim and needs evidence:
 
-- Re-run **baseline vs AGENTS** on both tiers. If the **mini WIN has collapsed** — baseline now matches
+- Re-run **baseline vs AGENTS** on both tiers. If the mini grade has **collapsed to NEUTRAL** — baseline now matches
   grounded on quality/func with no archaeology — the grounding no longer pays for its tokens. Remove it.
 - If the package is **retired/unsupported**, delete the grounding with a short note; no eval needed, but
   say so explicitly in the PR.
-- Never silently delete: a removal PR carries the "WIN collapsed" card or the retirement note.
+- Never silently delete: a removal PR carries the "collapsed to NEUTRAL" card or the retirement note.
 
 ---
 
@@ -84,14 +86,16 @@ Deletion is also a claim and needs evidence:
 
 All operations are decided off `eng/analyze-6q.py`. It emits **three single-variable cards**, each
 isolating exactly one comparison so the data is trivial to read. Each card shows the same metric rows —
-`quality`, `func passed`, `IET`, `output tok`, `cost`, `archaeology` — and a **Conclusion** that is a
-verdict *derived from* the rows, not a row itself.
+`quality`, `func passed`, `IET`, `output tok`, `cost`, `archaeology` — and a **Conclusion**: a single
+**uniform, model-independent grade** of grounding's effect vs baseline — **BETTER** (real improvement, no
+regression) / **NEUTRAL** (no material change) / **WORSE** (a regression, or cost inflated past the cap).
+The same rubric grades every model; the card grades, it does not decide shipping (that is §1 step 4 / methodology §3).
 
 | Card | Flag | Holds fixed | Varies | Answers |
 | --- | --- | --- | --- | --- |
-| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model; mini = WIN (required), frontier = no-harm (a win is welcome)) |
-| ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Where does grounding's lift land — mini WIN vs frontier no-harm — side by side. |
-| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? |
+| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
+| ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
+| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? (AGENTS graded against README) |
 
 ```bash
 # ① primary, one card per model
