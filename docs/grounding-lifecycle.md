@@ -86,13 +86,29 @@ Deletion is also a claim and needs evidence:
 ## 4. EVALUATE — the three cards
 
 All operations are decided off `eng/analyze-6q.py`. It emits **three single-variable cards**, each
-isolating exactly one comparison so the data is trivial to read. Each card shows the same metric rows —
-`success (scenarios)`, `func passed`, `resourcefulness (archaeology)`, `IET`, `output tok`, `cost` — and a
-**Conclusion**: a single **uniform, model-independent grade** of grounding's effect vs baseline on
-**objective axes** (no judge-quality diff — see methodology §7) — **BETTER** (success held + a real win:
-more scenarios solved, resourcefulness eliminated, or ≥25% IET/cost cut) / **NEUTRAL** (success held, no
-material win) / **WORSE** (success dropped, grounded web archaeology, or cost/IET/output inflated past the cap).
-The same rubric grades every model; the card grades, it does not decide shipping (that is §1 step 4 / methodology §3).
+isolating exactly one comparison so the data is trivial to read. Every card shows the same metric rows
+and a **Conclusion** — a single **uniform, model-independent grade** of grounding's effect vs baseline,
+on **objective axes** (no judge-quality diff; see methodology §7). The same rubric grades every model;
+the card grades, it does **not** decide shipping (that is §1 step 4 / methodology §3).
+
+**Metric legend** — every card shows these rows, each read **per arm in isolation**:
+
+| Row | Meaning | Better |
+| --- | --- | :---: |
+| **success (scenarios)** | A scenario is *solved* for an arm when every functional assertion passes **and** the judge's quality clears the **≥4 floor** ("meets expectations"). The 1–5 judge score is used *only* as this pass/fail floor — its subjective top band is discarded (methodology §7). | higher |
+| **func passed (assertions)** | Build + file + run-output assertions met (target 100%) — the objective correctness signal inside `success`. | higher |
+| **resourcefulness (archaeology)** | Out-of-sandbox lookups the agent had to make to recover the API: web fetch/search **+** local NuGet-cache rummaging / decompiling. Measured from the timeline, not the judge. Grounding's job is to drive it to **0**, so **lower is the win**. The **web** portion must be 0 in a grounded arm (hard guard). | lower |
+| **IET** | Input-Equivalent Tokens = `(input − cache-reads) + output` — the cache-discounted token cost. | lower |
+| **output tok** | Output / thinking tokens (priciest per token, most variable). | lower |
+| **cost** | Premium-request multiplier (cache-discounted). | lower |
+
+**Conclusion grade** — keyed off objective axes only:
+
+| Grade | When |
+| --- | --- |
+| **BETTER** | success held **and** a real win — more scenarios solved, resourcefulness eliminated, or IET/cost cut ≥ 25%. |
+| **NEUTRAL** | success held, no material efficiency win. |
+| **WORSE** | success dropped, the grounded arm did open-web archaeology, or cost/IET/output inflated past the cap. |
 
 | Card | Flag | Holds fixed | Varies | Answers |
 | --- | --- | --- | --- | --- |

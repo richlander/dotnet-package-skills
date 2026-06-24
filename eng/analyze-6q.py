@@ -563,24 +563,14 @@ def print_card(paths):
         if i:
             print()
         print_primary(p)
-    print("\n**Legend** — each metric is read **per arm in isolation** (no judge-quality diff). "
-          "_success (scenarios)_: a scenario counts as solved when every functional assertion passes "
-          "AND the judge's overall quality clears the **≥4 floor** ('meets expectations'); the judge's "
-          "1–5 score is used only as this pass/fail floor, its subjective 4→5 top band is discarded. "
-          "_func passed (assertions)_: build+file+run-output assertions met, target 100%. "
-          "_resourcefulness (archaeology)_: out-of-sandbox lookups the agent had to make to recover the "
-          "API — web fetch/search **plus** local NuGet-cache rummaging. High = the agent had to be "
-          "resourceful; **grounding's whole job is to drive this to 0**, so lower is the win, not a loss. "
-          "The web portion is a hard guard (it should be 0 in a grounded arm). "
-          "_IET_: Input-Equivalent Tokens = (input − cache-reads) + output, the cache-discounted token "
-          "cost (lower better). _output tok_: output/thinking tokens (priciest, most variable). _cost_: "
-          "premium-request multiplier (lower better). _Conclusion_ is a uniform, model-independent grade "
-          "of grounding's measured effect vs baseline on **objective axes** (the card grades; it does not "
-          "decide shipping): **BETTER** (success held and a real win — IET/cost cut past the bar, or "
-          "resourcefulness eliminated), **NEUTRAL** (success held, no material efficiency win), or "
-          "**WORSE** (success dropped, the grounded arm did open-web archaeology, or cost/IET/output "
-          "inflated past the cap). Whether a NEUTRAL/WORSE result is acceptable for a given model is "
-          "higher-level analysis. See docs/grounding-eval-methodology.md.\n")
+    print("\n**Legend & grades** — full term table at "
+          "[grounding-lifecycle.md §4](https://github.com/richlander/dotnet-package-grounding/blob/main/docs/grounding-lifecycle.md#4-evaluate--the-three-cards). "
+          "In short, each metric is read **per arm in isolation** (no judge-quality diff): "
+          "_success_ = func assertions pass **and** judge ≥4 floor (higher better); "
+          "_resourcefulness (archaeology)_ = web+cache lookups to recover the API — grounding drives it to 0, so lower is the win, and grounded **web** must be 0; "
+          "_IET / output tok / cost_ = token/spend cost (lower better). "
+          "**Conclusion:** **BETTER** = success held + a real win (more solved, resourcefulness eliminated, or IET/cost cut), "
+          "**NEUTRAL** = success held with no material win, **WORSE** = success dropped, grounded web archaeology, or cost/IET/output inflated past the cap.\n")
     print("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
           "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
           "**lower bound** and grounding's advantage is understated.\n")
