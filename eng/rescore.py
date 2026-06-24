@@ -42,7 +42,7 @@ Scoring (the ONE fixed rubric - it is all just context):
     meaningful harm to the frontier tier; RIP OUT iff it helps neither.
 
 Usage:
-  eng/rescore.py claude-haiku-4.5=<dir-or-json> claude-opus-4.6=<dir-or-json> ...
+  eng/rescore.py claude-haiku-4.5=<dir-or-json> claude-opus-4.8=<dir-or-json> ...
   eng/rescore.py --w=6 <model>=<path> ...     # OpenAI output weight
   ('=' or ':' both separate model from path)
 """

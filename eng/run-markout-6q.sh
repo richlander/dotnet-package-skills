@@ -30,13 +30,13 @@
 #
 # Usage:
 #   eng/run-markout-6q.sh                                   # defaults: runs=3, haiku+opus
-#   RUNS=5 MODELS="claude-opus-4.6" eng/run-markout-6q.sh
+#   RUNS=5 MODELS="claude-opus-4.8" eng/run-markout-6q.sh
 #   NO_JUDGE=1 RUNS=1 MODELS="claude-haiku-4.5" eng/run-markout-6q.sh   # cheap smoke run
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 RUNS="${RUNS:-3}"
-MODELS="${MODELS:-claude-opus-4.6 claude-haiku-4.5}"
+MODELS="${MODELS:-claude-opus-4.8 claude-haiku-4.5}"
 NO_JUDGE="${NO_JUDGE:-}"
 BIN=$(ls -d .tools/skill-validator-*/skill-validator 2>/dev/null | head -1)
 [ -x "$BIN" ] || { echo "skill-validator not built; run eng/run-evals.sh once first"; exit 1; }

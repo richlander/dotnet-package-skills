@@ -18,13 +18,13 @@
 #
 # Usage:
 #   eng/run-channel-matrix.sh markout            # markout task, both tiers
-#   RUNS=3 MODELS="claude-opus-4.6 claude-haiku-4.5" eng/run-channel-matrix.sh markout
+#   RUNS=3 MODELS="claude-opus-4.8 claude-haiku-4.5" eng/run-channel-matrix.sh markout
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 TASK="${1:-markout}"
 RUNS="${RUNS:-3}"
-MODELS="${MODELS:-claude-opus-4.6 claude-haiku-4.5}"
+MODELS="${MODELS:-claude-opus-4.8 claude-haiku-4.5}"
 BIN=$(ls -d .tools/skill-validator-*/skill-validator 2>/dev/null | head -1)
 [ -x "$BIN" ] || { echo "skill-validator not built; run eng/run-evals.sh once first"; exit 1; }
 ./eng/gen-plugins.sh >/dev/null

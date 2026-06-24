@@ -29,7 +29,7 @@ CH = [
 ]
 
 # model tier name per data tag (for HIET cross-model scaling)
-TIER_MODEL = {'opus': 'claude-opus-4.6', 'haiku': 'claude-haiku-4.5'}
+TIER_MODEL = {'opus': 'claude-opus-4.8', 'haiku': 'claude-haiku-4.5'}
 
 def scen(stem, tier):
     return json.load(open(os.path.join(DATA, f'{stem}.{tier}.json')))['verdicts'][0]['scenarios'][0]
