@@ -26,8 +26,9 @@ for NuGetFetch, M1–M6 for Markout). Each scenario runs three **arms**:
 
 The grounded arms can be run with **either** grounding source: `AGENTS.md` (the curated grounding) or
 the package `README.md` (the **fallback** a grounding tool surfaces when no `AGENTS.md` ships). Running
-both yields the three card columns — baseline, README-fallback, AGENTS.md — and shows whether AGENTS.md
-is actually needed (if README alone clears the gate, it isn't).
+both feeds the **source-diff card** (③ in §4), which isolates `AGENTS.md − README.md` and shows whether
+authoring `AGENTS.md` is actually worth it over the README floor (if README alone clears the gate, it
+isn't).
 
 A pairwise LLM judge scores rubric quality; the harness also records tokens, cost, tool calls, and
 assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read results with
@@ -135,45 +136,47 @@ a small quality gain bought with a large output-token increase is still a **fail
 
 ## 4. The eval dump (copy-paste into the PR)
 
-`--card` takes **one or more** datasets and assembles a single self-contained card. It groups them by
-tier (mini = haiku/sonnet/flash; frontier = opus/gpt-5/gemini) and, within a tier, by grounding source
-(a dataset whose path contains `readme` is the **README** arm). Pass all the datasets you have:
+`eng/analyze-6q.py` emits **three single-variable cards**, each isolating exactly one comparison so the
+data is trivial to read. Every card shows the same metric rows — `quality`, `func passed`, `IET`,
+`output tok`, `cost`, `archaeology` — and a **Conclusion** that is a verdict *derived from* the rows, not
+a row itself. A dataset whose filename contains `readme` is read as the **README arm**.
+
+| Card | Flag | Holds fixed | Varies | Answers |
+| --- | --- | --- | --- | --- |
+| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model; mini ⇒ WIN, frontier ⇒ HARM cap) |
+| ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Where grounding's lift lands — mini WIN vs frontier no-harm — side by side. |
+| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? |
 
 ```bash
-python3 eng/analyze-6q.py --card \
-  data/<unit>-6q/<unit>.n3.haiku.json \
-  data/<unit>-6q/<unit>-readme.n3.haiku.json \
-  data/<unit>-6q/<unit>.n3.opus.json \
-  data/<unit>-6q/<unit>-readme.n3.opus.json
+# ① primary, one card per model
+python3 eng/analyze-6q.py --card data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
+# ② model-diff (AGENTS lift, models side by side)
+python3 eng/analyze-6q.py --model-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
+# ③ source-diff (AGENTS − README, one model — usually the mini tier)
+python3 eng/analyze-6q.py --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>-readme.n3.haiku.json
 ```
 
-The card tells the **two-sided** story — a mini-tier **WIN** and a frontier-tier **NO-HARM** check —
-and shows three columns: **Baseline** (no grounding), **README (fallback)** (what a grounding tool
-surfaces when no `AGENTS.md` ships — the floor AGENTS.md must beat), and **AGENTS.md (grounding tool)**
-(the curated grounding the gate is read off). Missing tiers are flagged `⏳ pending`. **Paste it
-verbatim** into the PR's *Metrics* section. Example (NuGetFetch, mini tier, frontier pending):
+**Paste the cards verbatim** into the PR's *Metrics* section. The PR carries four: ① primary (mini), ①
+primary (frontier), ② model-diff, ③ source-diff (mini). Example (NuGetFetch, mini primary):
 
 ```
-| Metric | Baseline | README (fallback) | AGENTS.md (grounding tool) |
-| --- | ---: | ---: | ---: |
-| quality (1–5) | 4.40 | 4.22 | 4.67 |
-| func passed | 17/18 | 17/18 | 18/18 |
-| IET (mean) | 30189 | 20400 | 17220 |
-| output tok (mean) | 6246 | 2436 | 1604 |
-| cost (mean) | 7.77 | 3.62 | 2.08 |
-| gross tok (mean) | 539876 | 246966 | 132746 |
-| archaeology (web+cache) | 20 | 13 | 0 |
+### Grounding eval — nugetfetch · `claude-haiku-4.5`
 
-**Mini WIN gate (AGENTS.md vs baseline): ✅ PASS**
-- PASS  func no regression (Δ +1)
-- PASS  quality no regression (Δ +0.27; floor −0.1)
-- PASS  no web archaeology (web=0; cache peeks allowed, here 0)
-- WIN   IET reduction 43% (bar 25%)
-- WIN   cost reduction 73% (bar 25%)
+| Metric | Baseline | AGENTS.md |
+| --- | ---: | ---: |
+| quality (1–5) | 4.55 | 4.78 |
+| func passed | 17/18 | 18/18 |
+| IET | 31276 | 17558 |
+| output tok | 5782 | 1716 |
+| cost | 7.75 | 2.28 |
+| archaeology (web+cache) | 35 | 0 |
 
-_Fallback check — README alone ❌: quality Δ −0.22 vs its own baseline, and 13 cache pokes remain.
-README is written for humans, not models, so AGENTS.md is needed here._
+> **Conclusion:** **WIN** — IET -44%, cost -71%, quality Δ +0.23, func +1.
 ```
+
+The card emits a shared **Legend** explaining each row and the WIN / HARM verdicts. For the operational
+"which card for which lifecycle operation" guide, see
+[`grounding-lifecycle.md`](./grounding-lifecycle.md).
 
 ---
 
