@@ -357,17 +357,24 @@ def _conclusion(base, grnd, tier):
     if tier == "frontier":
         ok, iet_frac, _ = gate_frontier(base, grnd)
         cap = GATE["iet_harm_cap_frac"]
-        if iet_frac <= 0:
-            harm = (f"**NO HARM** — IET {iet_frac*100:+.0f}% (grounding is *cheaper*), "
-                    f"well within +{cap*100:.0f}% cap")
-        elif iet_frac <= cap:
-            harm = (f"**NO HARM** — IET inflation {iet_frac*100:+.0f}%, "
-                    f"within +{cap*100:.0f}% cap")
-        else:
-            harm = (f"**HARM** — IET inflation {iet_frac*100:+.0f}% "
-                    f"exceeds +{cap*100:.0f}% cap")
-        return (f"{harm} — quality Δ {dq:+.2f}, func {dfunc:+d} → "
-                f"{'✅ PASS' if ok else '❌ FAIL'}")
+        win_ok, _, _ = gate_mini(base, grnd)
+        if ok and win_ok:
+            # Frontier doesn't *need* grounding, but here it still pays off — a real
+            # efficiency win with no quality/func regression. Recognize it as a WIN.
+            return (f"**WIN** — grounding pays off even on frontier: IET {iet:+.0f}%, "
+                    f"cost {cost:+.0f}%, quality Δ {dq:+.2f}, func {dfunc:+d} → ✅ PASS")
+        if ok:
+            if iet_frac <= 0:
+                harm = (f"**NO HARM** — IET {iet_frac*100:+.0f}% (grounding is *cheaper*), "
+                        f"well within +{cap*100:.0f}% cap")
+            else:
+                harm = (f"**NO HARM** — IET inflation {iet_frac*100:+.0f}%, "
+                        f"within +{cap*100:.0f}% cap")
+            return (f"{harm} — quality Δ {dq:+.2f}, func {dfunc:+d} → ✅ PASS")
+        reason = (f"IET inflation {iet_frac*100:+.0f}% exceeds +{cap*100:.0f}% cap"
+                  if iet_frac > cap else
+                  f"regression (IET {iet_frac*100:+.0f}%, quality Δ {dq:+.2f}, func {dfunc:+d})")
+        return f"**HARM** — {reason} → ❌ FAIL"
     ok, _, _ = gate_mini(base, grnd)
     return (f"**{'WIN' if ok else 'NO WIN'}** — IET {iet:+.0f}%, cost {cost:+.0f}%, "
             f"quality Δ {dq:+.2f}, func {dfunc:+d}")
@@ -607,9 +614,11 @@ def print_card(paths):
           "_archaeology (web+cache)_: out-of-sandbox lookups to recover missing knowledge — web "
           "fetch/search **plus** local NuGet-cache rummaging; grounding should collapse it to 0, "
           "and the web portion is a hard guard. _Conclusion_ is a verdict derived from the rows, "
-          "not a metric: **WIN** (mini tier must beat baseline) or a **NO-HARM check** (frontier "
-          "tier: IET inflation must stay under the cap; a negative IET means grounding is cheaper, "
-          "so there is no harm). See docs/grounding-eval-methodology.md.\n")
+          "not a metric: **WIN** (grounding clearly pays off — a real quality or efficiency gain "
+          "with no regression; the *requirement* on the mini tier, and a welcome bonus on frontier), "
+          "**NO HARM** (frontier passed its only requirement — IET inflation stayed under the cap), "
+          "or **HARM** (failed: IET inflated past the cap, or a quality/func regression). "
+          "See docs/grounding-eval-methodology.md.\n")
     print("> Quality Δ is a **lower bound** — even ungrounded, the baseline self-grounds from the "
           "restored NuGet cache (README/AGENTS are packed in the nupkg) and the open web, so it "
           "understates grounding's value.\n")

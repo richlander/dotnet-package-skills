@@ -97,17 +97,26 @@ On the mini tier a large cost/IET reduction with quality flat (within the −0.1
 legitimate ship — tokens are cheap, the binding constraint was the model otherwise flailing or
 failing.
 
-### Frontier tier — the HARM (hard cap, not zero)
+### Frontier tier — the no-harm check (and a win is welcome)
 
-The strong model rarely *needs* grounding, so this run does not need a win — it must prove grounding
-**does no damage**. This is the direct analog of "no drop in recovery, no increase in malformed".
+The strong model rarely *needs* grounding, so this run is not **required** to win — it must prove
+grounding **does no damage**. This is the direct analog of "no drop in recovery, no increase in
+malformed". But "not required to win" is not "can't win": if grounding makes even the frontier model
+**materially cheaper** (clears the same IET/cost win bar as the mini tier) with no quality/func
+regression, that is a genuine **WIN** and the card says so. We bounded ourselves into only ever
+reporting "no harm" on opus once; the verdict now recognizes an efficiency win on any tier.
+
+So the frontier verdict has three outcomes:
+- **WIN** — grounding pays off even here: a real efficiency (or quality) gain, no regression.
+- **NO HARM** — the only *requirement*: IET inflation stayed under the cap (often the diff is negative).
+- **HARM** — failed: IET inflated past the cap, or a quality/func regression.
 
 **Harm is a number, not a bool.** The headline harm metric is the **IET diff from baseline**
 (`IET_grounded − IET_baseline`, signed). Harm need not be zero — it carries a **hard cap** (a budget):
 grounding may cost a little more on a model that didn't need it, but not a lot. In practice the diff is
-usually *negative* (grounding makes even the frontier cheaper), so the cap rarely binds — it exists to
-catch a bloated grounding doc. We report the number so harm is *tracked as a quantity*, not collapsed
-to a pass/fail.
+usually *negative* (grounding makes even the frontier cheaper — which is what tips a no-harm into a
+**win**), so the cap rarely binds; it exists to catch a bloated grounding doc. We report the number so
+harm is *tracked as a quantity*, not collapsed to a pass/fail.
 
 | Axis | Threshold |
 | --- | --- |
@@ -143,7 +152,7 @@ a row itself. A dataset whose filename contains `readme` is read as the **README
 
 | Card | Flag | Holds fixed | Varies | Answers |
 | --- | --- | --- | --- | --- |
-| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model; mini ⇒ WIN, frontier ⇒ no-harm under cap) |
+| ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model; mini ⇒ WIN (required), frontier ⇒ no-harm (a win is welcome)) |
 | ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Where grounding's lift lands — mini WIN vs frontier no-harm — side by side. |
 | ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? |
 
