@@ -111,6 +111,27 @@ Two consequences for authoring:
   resident baseline; never write a section whose correctness depends on a human having read the section
   above it.
 
+#### 2c. The eval is a usability test of the `README.md` — and it sets the authoring order
+
+`AGENTS.md` is an **emergent** document: it precipitates from where the eval questions make contact with
+the model's ignorance — the minimal non-resident set (§1). That dictates the order:
+
+1. **Author `AGENTS.md` first**, additively from the empty baseline, until it reaches full **success with
+   zero archaeology**. It is now a verified checklist of *exactly* the facts the model lacked.
+2. **Then run the README arm** (source-diff card ③). Any question the README-grounded agent fails, or any
+   archaeology it forces, is a **README usability bug** — *if an AI given only the README can't answer it,
+   an untrained human can't either.*
+3. **Fix the README in the same PR**, using the finished `AGENTS.md` as the checklist of facts it must
+   cover — in **human prose**, not token-optimized and not "agentic" (§2b above). The README may be long;
+   it just has to be *complete*. Re-run to confirm it also reaches success + 0 archaeology.
+
+The opposite — starting from the big README and **mutating it to quality** — is the document-scale version
+of the draft-first trap (§1): no gap isolation, conflated concerns, and no signal for which edit closed
+the gap. And note the honest consequence: **once the README is complete, `AGENTS.md`'s advantage narrows
+to what it was always for — fewer tokens and section-retrievability, not correctness.** Declaring "AGENTS
+beats README" while the README is *broken* is a myopic claim; the real claim is efficiency over a
+*complete* README.
+
 
 
 Grounding is **auto-installed with the package and cannot be uninstalled** (it arrives via

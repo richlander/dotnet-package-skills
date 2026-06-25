@@ -26,9 +26,10 @@ for NuGetFetch, M1–M6 for Markout). Each scenario runs three **arms**:
 
 The grounded arms can be run with **either** grounding source: `AGENTS.md` (the curated grounding) or
 the package `README.md` (the **fallback** a grounding tool surfaces when no `AGENTS.md` ships). Running
-both feeds the **source-diff card** (③ in §4), which isolates `AGENTS.md − README.md` and shows whether
-authoring `AGENTS.md` is actually worth it over the README floor (if README alone clears the gate, it
-isn't).
+both feeds the **source-diff card** (③ in §4), which isolates `AGENTS.md − README.md` as a **usability
+test of the README**: if the README arm fails questions or forces archaeology, those are README bugs to
+fix; and if a *complete* README already clears the gate as cheaply, the curated `AGENTS.md` isn't earning
+its place.
 
 A pairwise LLM judge scores rubric quality; the harness also records tokens, cost, tool calls, and
 assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read results with
@@ -173,7 +174,7 @@ filename contains `readme` is read as the **README arm**.
 | --- | --- | --- | --- | --- |
 | ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
 | ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
-| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? (AGENTS graded against README) |
+| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | A **usability test of the README** (not a floor to beat): does the README also answer every question with 0 archaeology? README failures are bugs to **fix in the same PR**. Once the README is complete, AGENTS's edge narrows to efficiency/retrieval. |
 
 ```bash
 # ① primary, one card per model

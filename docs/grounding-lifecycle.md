@@ -44,8 +44,16 @@ already knows this package — **do not author grounding**. Grounding is justifi
    rubric for every model — the card grades, it doesn't decide). Apply the higher-level ship rule
    (methodology §3): **require BETTER on the mini tier** (it needs grounding) and **merely not-WORSE on
    the frontier tier** (a frontier BETTER is a welcome bonus). Ship only if both hold.
-5. **Open the PR** using `.github/PULL_REQUEST_TEMPLATE.md`. Paste the four cards into *Metrics*, link
-   this playbook and the methodology, and give one representative before/after.
+5. **Complete the README too (if the package has one).** The source-diff card (③) is a **usability test
+   of the README**: any question its arm fails, or archaeology it forces, is a README bug. Fix the README
+   **in this PR**, using the finished `AGENTS.md` as the checklist of facts it must cover (human prose —
+   not token-optimized; authoring-principles §2c), and re-run to confirm it also reaches success + 0
+   archaeology. Author `AGENTS.md` *first*, then derive the README fixes from it — never mutate the big
+   README to quality from scratch.
+6. **Open the PR** using `.github/PULL_REQUEST_TEMPLATE.md`. Paste the four cards into *Metrics*, link
+   this playbook and the methodology, and **commit the eval inputs so the package can keep its own
+   loop**: the questions/prompts (the `eval.yaml` scenarios, linked from the PR) and the matched datasets
+   (so the baseline can be reused via `--baseline-from`).
 
 > **Environment hygiene (learned the hard way).** The baseline is *not* a clean ignorance control: a
 > package's README/AGENTS.md are packed in its nupkg, so any `dotnet build` restores them to
@@ -62,9 +70,11 @@ Trigger an update when the package's API changes, the README is rewritten, the m
 knowledge shifts, or a new trap appears. The operation is the same as CREATE plus one extra question:
 
 - **Re-run the matched matrix** (mini + frontier, AGENTS + README).
-- **Read the source-diff card** (③). It isolates `AGENTS.md − README.md` (both via the grounding tool,
-  baseline removed). This is the test that the curated `AGENTS.md` still **beats the README floor** — if
-  the README now carries the same knowledge, the curated file may no longer earn its place.
+- **Read the source-diff card** (③) — a **usability test of the README** (AGENTS.md vs README.md, both via
+  the grounding tool, baseline removed). Any question the README arm fails, or archaeology it forces, is a
+  README bug to fix here too. Once the README is complete, AGENTS's remaining edge is efficiency/retrieval —
+  if even that edge has vanished (the README now carries the same knowledge as cheaply), the curated file
+  may no longer earn its place.
 - Edit `AGENTS.md`, re-sync, re-eval, and open the PR with refreshed cards. The diff in the cards *is*
   the justification.
 
@@ -116,7 +126,7 @@ the card grades, it does **not** decide shipping (that is §1 step 4 / methodolo
 | --- | --- | --- | --- | --- |
 | ① **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
 | ② **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
-| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | Is authoring `AGENTS.md` worth it over the package README floor? (AGENTS graded against README) |
+| ③ **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | A **usability test of the README** (not a floor to beat): does the README also answer every question with 0 archaeology? Its failures are bugs to fix in the same PR; once it's complete, AGENTS's edge is efficiency/retrieval. |
 
 ```bash
 # ① primary, one card per model
@@ -140,8 +150,12 @@ Same artifact list and reviewer checklist as methodology §5–§6:
 - `grounding/<unit>/AGENTS.md` (within the line limit) + regenerated `SKILL.md` (`sync-skill.sh --check`).
 - Matched n ≥ 3 datasets for **both** tiers under `data/<unit>-6q/`.
 - The four cards pasted into *Metrics*, matching the committed datasets.
-- A representative before/after (the wrong API the ungrounded agent reaches for vs. what grounding makes
-  it do).
+- An **Analysis** of what grounding changes (typically eliminating the *resourcefulness* the agent spends
+  to reach the **same** correct API — verify against the transcripts, not a guessed wrong-API story).
+- **The eval inputs, so the package owns its loop going forward**: the questions/prompts (the `eval.yaml`
+  scenarios) committed and **linked from the PR**, plus the matched datasets (for `--baseline-from` reuse).
+- **README fixes** the eval surfaced, if the package has an extensive README (it must also reach success +
+  0 archaeology — authoring-principles §2c).
 - Required caveats: the cache self-grounding lower-bound, and cache-state-is-not-a-variable.
 
 ---
