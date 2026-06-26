@@ -18,12 +18,12 @@ Grounding effectiveness is read off **three single-variable cards**, which were 
 - Test scenarios: `6`
 - Models tested: `2`
 
-### ① Effectiveness
+### Effectiveness
 
 > does grounding help *this* model?
 
 - Baseline: no grounding
-- AGENTS.md: `AGENTS.md` (~903 tok, via grounding tool)
+- AGENTS.md: `AGENTS.md` (~<tok>, via grounding tool)
 - Evaluation model: `claude-haiku-4.5`
 - Judge model: `claude-haiku-4.5`
 
@@ -39,7 +39,7 @@ Grounding effectiveness is read off **three single-variable cards**, which were 
 > **Conclusion:** **BETTER** — success 6/6 vs 5/6, resourcefulness 35→0, IET -44%, cost -71%.
 
 - Baseline: no grounding
-- AGENTS.md: `AGENTS.md` (~903 tok, via grounding tool)
+- AGENTS.md: `AGENTS.md` (~<tok>, via grounding tool)
 - Evaluation model: `claude-opus-4.8`
 - Judge model: `claude-haiku-4.5`
 
@@ -56,7 +56,7 @@ Grounding effectiveness is read off **three single-variable cards**, which were 
 
 Note: rows 1–2 are **correctness** (higher is better); row 3 is **resourcefulness** — the out-of-sandbox archaeology grounding eliminates (drive to 0); rows 4–6 are **cost** (lower is better).
 
-### ② Model difference
+### Model difference
 
 > Does grounding improve performance (Pareto improvement)?
 
@@ -72,12 +72,12 @@ Note: rows 1–2 are **correctness** (higher is better); row 3 is **resourcefuln
 
 Note: each cell is the change vs that model's own baseline — correctness up, resourcefulness and cost down.
 
-### ③ Source-diff
+### Source-diff
 
 > Is `AGENTS.md` effective relative to the existing `README.md`; also, should `README.md` be improved?
 
 - README.md: the package `README.md` (via grounding tool — typically far larger than `AGENTS.md`)
-- AGENTS.md: `AGENTS.md` (~903 tok, via grounding tool)
+- AGENTS.md: `AGENTS.md` (~<tok>, via grounding tool)
 - Evaluation model: `claude-haiku-4.5`
 - Judge model: `claude-haiku-4.5`
 
@@ -99,16 +99,16 @@ Note: `README.md` acts as the baseline; rows show the difference and the end sta
 ## Validation
 
 ```bash
-dotnet pack src/NuGetFetch/NuGetFetch.csproj -c Release
-unzip -l src/artifacts/package/release/NuGetFetch.0.6.3.nupkg | grep -E 'AGENTS|README'   # both at root
+dotnet pack src/<Package>/<Package>.csproj -c Release
+unzip -l src/artifacts/package/release/<Package>.<y>.nupkg | grep -E 'AGENTS|README'   # both at root
 ```
 Eval (in richlander/dotnet-package-grounding), on a clean box:
 ```bash
-RUNS=3 MODELS=claude-haiku-4.5  eng/run-nugetfetch-6q.sh     # mini: expect BETTER
-RUNS=3 MODELS=claude-opus-4.8   eng/run-nugetfetch-6q.sh     # frontier: expect not-WORSE
-python3 eng/analyze-6q.py --card        data/nugetfetch-6q/nugetfetch.n3.haiku.json data/nugetfetch-6q/nugetfetch.n3.opus.json
-python3 eng/analyze-6q.py --model-diff   data/nugetfetch-6q/nugetfetch.n3.haiku.json data/nugetfetch-6q/nugetfetch.n3.opus.json
-python3 eng/analyze-6q.py --source-diff  data/nugetfetch-6q/nugetfetch.n3.haiku.json data/nugetfetch-6q/nugetfetch-readme.n3.haiku.json
+RUNS=3 MODELS=claude-haiku-4.5  eng/run-<unit>-6q.sh     # mini: expect BETTER
+RUNS=3 MODELS=claude-opus-4.8   eng/run-<unit>-6q.sh     # frontier: expect not-WORSE
+python3 eng/analyze-6q.py --card        data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
+python3 eng/analyze-6q.py --model-diff   data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
+python3 eng/analyze-6q.py --source-diff  data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>-readme.n3.haiku.json
 ```
 
 ## Grounding resources
