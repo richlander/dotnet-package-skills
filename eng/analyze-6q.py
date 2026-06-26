@@ -394,12 +394,12 @@ def print_source_diff(paths):
     print(f"_{mpref}Both surfaced via the grounding tool; baseline removed. Single column = "
           "AGENTS.md change vs README.md (− = AGENTS cheaper on cost metrics, "
           "+ on success/func, lower resourcefulness = AGENTS more self-sufficient). "
-          "This is what authoring AGENTS.md buys over the README floor._\n")
+          "The README is co-tested here as a usability artifact._\n")
     print("| Metric | AGENTS.md − README.md |")
     print("| --- | ---: |")
     for _, label, _raw, diff, _lb in _METRICS:
         print(f"| {label} | {diff(ag, rd)} |")
-    print(f"\n> **Conclusion:** {_grade(rd, ag)} _(AGENTS.md graded against the README floor)._")
+    print(f"\n> **Conclusion:** {_grade(rd, ag)} _(README arm is co-tested for usability, not a floor to beat)._")
 
 
 # --- diagnostic cards: what the agent reached for (tools) and searched (web) -----------
