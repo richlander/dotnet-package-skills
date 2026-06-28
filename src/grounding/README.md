@@ -10,7 +10,23 @@ Build / run:
 dotnet build src/grounding -c Release
 dotnet src/grounding/bin/Release/net11.0/grounding.dll --help
 eng/grounding --help            # launcher: builds once, then forwards args
-dotnet publish src/grounding -c Release -r osx-arm64   # native binary -> publish/grounding
+```
+
+## Install as a native tool on PATH
+
+The CLI is **Native AOT**. Publish the native binary and drop it into the
+dotnet tools dir (already on PATH) so `grounding` runs without `dotnet run`:
+
+```bash
+eng/install-grounding.sh        # publish AOT + copy to ~/.dotnet/tools/grounding
+grounding --help                # now a bare command, anywhere
+```
+
+Conventional (framework-dependent) global-tool route, if preferred:
+
+```bash
+dotnet pack src/grounding -c Release
+dotnet tool install --global --add-source src/grounding/nupkg dotnet-package-grounding
 ```
 
 ## Commands

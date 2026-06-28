@@ -11,6 +11,16 @@
     <PublishAot>true</PublishAot>
   </PropertyGroup>
 
+  <!-- `dotnet pack` produces a conventional (framework-dependent) global tool; the
+       Native AOT binary is produced separately via `dotnet publish -r <rid>`. -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>grounding</ToolCommandName>
+    <PackageId>dotnet-package-grounding</PackageId>
+    <Version>0.1.0</Version>
+    <PackageOutputPath>$(MSBuildProjectDirectory)/nupkg</PackageOutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0" />
   </ItemGroup>
