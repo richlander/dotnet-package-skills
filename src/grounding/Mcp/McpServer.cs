@@ -15,7 +15,9 @@ internal static class McpServer
     private static readonly string Gate =
         (Environment.GetEnvironmentVariable("GROUNDING_GATE") ?? "uncertainty_version").Trim();
 
-    private static readonly string RepoRootPath = RepoRoot.Find() ?? Directory.GetCurrentDirectory();
+    // Repo root holding grounding/. Resolved from --root / GROUNDING_ROOT / discovery,
+    // since the harness spawns the MCP server with an unrelated working directory.
+    private static string RepoRootPath = "";
     private static string GroundingDir => Path.Combine(RepoRootPath, "grounding");
     private static string CallLog => Path.Combine(RepoRootPath, ".tools", "mcp-calls.log");
 
@@ -48,8 +50,12 @@ internal static class McpServer
         + "summary of when each one matters. Read the index for free; call this tool only for a "
         + "package whose summary is relevant to the task. If no summary is relevant, do not call it.";
 
-    public static int Run()
+    public static int Run(string? root = null)
     {
+        RepoRootPath = root
+            ?? Environment.GetEnvironmentVariable("GROUNDING_ROOT")
+            ?? RepoRoot.Find()
+            ?? Directory.GetCurrentDirectory();
         Log($"started; gate='{Gate}'; repo={RepoRootPath}");
         string? raw;
         while ((raw = Console.In.ReadLine()) is not null)

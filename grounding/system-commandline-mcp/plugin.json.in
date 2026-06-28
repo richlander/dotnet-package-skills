@@ -5,8 +5,8 @@
   "skills": ["./"],
   "mcpServers": {
     "package-grounding": {
-      "command": "python3",
-      "args": ["__REPO_ROOT__/grounding/_mcp/grounding_mcp.py"]
+      "command": "dotnet",
+      "args": ["__REPO_ROOT__/src/grounding/bin/Release/net11.0/grounding.dll", "mcp", "--root", "__REPO_ROOT__"]
     }
   }
 }

@@ -163,8 +163,15 @@ channels.Subcommands.Add(compare);
 root.Subcommands.Add(channels);
 
 // ---- mcp ----------------------------------------------------------------
-var mcp = new Command("mcp", "Run the stdio JSON-RPC grounding MCP server (GROUNDING_GATE).");
-mcp.SetAction(_ => Grounding.Mcp.McpServer.Run());
+var mcpRootOpt = new Option<string?>("--root")
+{
+    Description = "Repo root holding grounding/ (harness spawns with an unrelated cwd).",
+};
+var mcp = new Command("mcp", "Run the stdio JSON-RPC grounding MCP server (GROUNDING_GATE).")
+{
+    mcpRootOpt,
+};
+mcp.SetAction(parse => Grounding.Mcp.McpServer.Run(parse.GetValue(mcpRootOpt)));
 root.Subcommands.Add(mcp);
 
 root.SetAction(_ =>
