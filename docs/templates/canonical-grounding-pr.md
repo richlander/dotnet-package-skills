@@ -7,24 +7,24 @@ The metric data below is an example (NuGetFetch).
 - Adds/Improves `AGENTS.md` grounding information
 - Improves `README.md` per grounding evaluation ([usability gaps](<readme-issue>))
 - Grounding test tasks — the questions this change is gated on: [`tests/<unit>/eval.yaml`](<eval-link>)
-- Updated version `x` -> `y`
+- Updated version `<x>` -> `<y>`
 - Evaluated content with [richlander/dotnet-package-grounding@`<commit>`](https://github.com/richlander/dotnet-package-grounding/commit/<commit>)
 
 ## Metrics
 
-> should we accept this change?
+> Should we accept this change?
 
 Grounding effectiveness is read off **three single-variable cards**, which were used to gate this change.
 
 - Test iterations: `n=3`
 - Test scenarios: `6`
-- Models tested: `2`
+- Models tested: `claude-haiku-4.5`, `claude-opus-4.8`
 
 ### Effectiveness
 
-> does grounding help *this* model?
+> Does grounding help *this* model?
 
-_`claude-haiku-4.5` · baseline (no grounding) vs `AGENTS.md` (~<tok>) · judge `claude-haiku-4.5`_
+Run: `claude-haiku-4.5`; baseline (no grounding) vs `AGENTS.md` (`~<tok>`); judge `claude-haiku-4.5`
 
 | Metric | Baseline | AGENTS.md |
 | --- | ---: | ---: |
@@ -37,7 +37,7 @@ _`claude-haiku-4.5` · baseline (no grounding) vs `AGENTS.md` (~<tok>) · judge 
 
 > **Conclusion:** **BETTER** — success 6/6 vs 5/6, resourcefulness 35→0, IET -44%, cost -71%.
 
-_`claude-opus-4.8` · baseline (no grounding) vs `AGENTS.md` (~<tok>) · judge `claude-haiku-4.5`_
+Run: `claude-opus-4.8`; baseline (no grounding) vs `AGENTS.md` (`~<tok>`); judge `claude-haiku-4.5`
 
 | Metric | Baseline | AGENTS.md |
 | --- | ---: | ---: |
@@ -56,6 +56,8 @@ Note: rows 1–2 are **correctness** (higher is better); row 3 is **resourcefuln
 
 > Does grounding improve performance (Pareto improvement)?
 
+Run: `claude-haiku-4.5` and `claude-opus-4.8`; each grounded (`AGENTS.md`, `~<tok>`) vs its own baseline; judge `claude-haiku-4.5`
+
 | Metric | `claude-haiku-4.5` | `claude-opus-4.8` |
 | --- | ---: | ---: |
 | success (scenarios) | +1 (6/6) | +0 (6/6) |
@@ -72,7 +74,7 @@ Note: each cell is the change vs that model's own baseline — correctness up, r
 
 > Is `AGENTS.md` effective relative to the existing `README.md`; also, should `README.md` be improved?
 
-_`claude-haiku-4.5` · `AGENTS.md` (~<tok>) vs the package `README.md` (typically far larger), both via the grounding tool, baseline removed · judge `claude-haiku-4.5`. Single column = AGENTS.md − README.md (− = AGENTS cheaper on cost, + on success/func, lower resourcefulness = more self-sufficient). The README is co-tested here as a usability artifact._
+Run: `claude-haiku-4.5`; `AGENTS.md` (`~<tok>`) vs the package `README.md` (`~<tok>`); both via the grounding tool, baseline removed; judge `claude-haiku-4.5`
 
 | Metric | AGENTS.md − README.md |
 | --- | ---: |
@@ -83,9 +85,9 @@ _`claude-haiku-4.5` · `AGENTS.md` (~<tok>) vs the package `README.md` (typicall
 | output tok | +1% |
 | cost | +7% |
 
-> **Conclusion:** **BETTER** — success 6/6 vs 4/6, resourcefulness 0→0, IET -4%, cost +7% _(README arm is co-tested for usability, not a floor to beat)._
+> **Conclusion:** **BETTER** — success 6/6 vs 4/6, resourcefulness 0→0, IET -4%, cost +7%.
 
-Note: `README.md` acts as the baseline; rows show the difference and the end state (same higher/lower targets apply). A `README.md` that cannot be used to answer all test questions is a signal to improve that file. When a strong `README.md` exists, `AGENTS.md` should win on efficiency, not correctness.
+Note: the single column is **AGENTS.md − README.md**, same higher/lower targets as above. If `AGENTS.md` can't beat the package `README.md` here, the curated file isn't earning its remit; conversely, any question the README arm fails is a README usability bug to fix in the same PR. Full reading in the linked methodology/lifecycle docs.
 
 ## Analysis
 
@@ -113,6 +115,6 @@ python3 eng/analyze-6q.py --source-diff  data/<unit>-6q/<unit>.n3.haiku.json dat
 
 ## Grounding resources
 
-- Test questions: [`tests/<unit>/eval.yaml`](<eval-link>) · Datasets: `data/<unit>-6q/` (committed for `--baseline-from` reuse)
+- Test questions: [`tests/<unit>/eval.yaml`](<eval-link>); Datasets: `data/<unit>-6q/` (committed for `--baseline-from` reuse)
 - Methodology: [grounding-eval-methodology.md](https://github.com/richlander/dotnet-package-grounding/blob/main/docs/grounding-eval-methodology.md)
 - Lifecycle playbook: [grounding-lifecycle.md](https://github.com/richlander/dotnet-package-grounding/blob/main/docs/grounding-lifecycle.md)
