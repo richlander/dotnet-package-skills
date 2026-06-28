@@ -10,7 +10,7 @@ obj/
 .DS_Store
 *.swp
 
-# Generated MCP plugin manifests (see eng/gen-plugins.sh; templates are *.in)
+# Generated MCP plugin manifests (run `grounding gen-plugins`; templates are *.in)
 grounding/*mcp/plugin.json
 
 # Tool pack output

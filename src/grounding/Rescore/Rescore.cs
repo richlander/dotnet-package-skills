@@ -3,7 +3,7 @@ using Grounding.Json;
 
 namespace Grounding.Rescore;
 
-// Port of eng/rescore.py + eng/rescore_all.py — re-score skill-validator results
+// Re-score skill-validator results
 // under the grounding-specific IET rubric.
 internal static class Rescore
 {
@@ -46,7 +46,7 @@ internal static class Rescore
         public double? Harness;
     }
 
-    // ---- single-scenario rescore (rescore.py) ----------------------------
+    // ---- single-scenario rescore (single scenario) ----------------------------
 
     public static int Single(IReadOnlyList<string> specs, double wOut)
     {
@@ -163,7 +163,7 @@ internal static class Rescore
 
     private static string Signed1(double v) => (v < 0 ? "-" : "+") + Math.Abs(v).ToString("F1", Inv);
 
-    // ---- batch rescore over .skill-validator-results (rescore_all.py) -----
+    // ---- batch rescore over .skill-validator-results (batch) -----
 
     private static readonly (string Key, string Val)[] Lib =
     {

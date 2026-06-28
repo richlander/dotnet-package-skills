@@ -21,7 +21,7 @@ var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
 };
-// Legacy flag aliases (analyze-6q.py compatibility): --card / --model-diff / etc.
+// View flags (aliases for --view): --card / --model-diff / etc.
 var legacy = new[] { "card", "model-diff", "source-diff", "tools-card", "web-card" }
     .ToDictionary(v => v, v => new Option<bool>($"--{v}") { Description = $"Alias for --view {v}." });
 

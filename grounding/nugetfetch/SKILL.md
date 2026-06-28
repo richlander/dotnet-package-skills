@@ -3,7 +3,7 @@ name: nugetfetch
 description: "Lightweight, AOT-friendly NuGet client library for .NET: query versions, download and extract .nupkg packages, and search nuget.org. It is NOT the official NuGet.Protocol / NuGet.Client API — the surface is much smaller and the shapes differ. Key rules: you bring your own HttpClient (NuGetClient has no parameterless ctor), extraction lives on a separate static PackageExtractor class, and NormalizeVersion is static. See the body."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # NuGetFetch — download/extract/query NuGet packages from .NET
 

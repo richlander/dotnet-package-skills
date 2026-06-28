@@ -3,7 +3,7 @@ using Grounding.Json;
 
 namespace Grounding.Analyze;
 
-// Per-arm, mean-per-scenario aggregate (port of analyze-6q.py `aggregate`).
+// Per-arm, mean-per-scenario aggregate (the original `aggregate`).
 internal sealed class ArmAgg
 {
     public double? Qual;

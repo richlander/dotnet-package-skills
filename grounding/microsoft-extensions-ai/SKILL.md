@@ -3,7 +3,7 @@ name: microsoft-extensions-ai
 description: "Microsoft.Extensions.AI (IChatClient) usage and migration gotchas. Use when building or fixing chat clients, tool/function calling, or middleware pipelines with Microsoft.Extensions.AI — above all that automatic tool calling requires building the client with ChatClientBuilder(...).UseFunctionInvocation(); without it, tools placed in ChatOptions.Tools are silently never invoked, response.Text is empty, and no error is thrown. Also covers the preview→GA API renames (which have no [Obsolete] shims)."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # Microsoft.Extensions.AI usage & migration gotchas
 

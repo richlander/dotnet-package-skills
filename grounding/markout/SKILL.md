@@ -3,7 +3,7 @@ name: markout
 description: "Source-generated .NET serializer that renders objects as Markdown (also ANSI terminal, plain text, pretty tables, TSV). Reach for it when a CLI or tool needs structured, human- or agent-readable output instead of hand-built strings. It looks like System.Text.Json source generation but the rules differ — there is NO reflection fallback, so it requires a generated MarkoutSerializerContext and Markout-specific attributes. See the body for the required pattern."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # Markout — produce Markdown/structured output from objects
 

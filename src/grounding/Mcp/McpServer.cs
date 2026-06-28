@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Grounding.Mcp;
 
 // Minimal stdio JSON-RPC 2.0 MCP server serving NuGet package grounding (AGENTS.md).
-// Port of grounding/_mcp/grounding_mcp.py. The WHEN-TO-CALL guidance in the tool
+// Stdio JSON-RPC MCP server. The WHEN-TO-CALL guidance in the tool
 // description is the experimental variable, selected by GROUNDING_GATE.
 internal static class McpServer
 {

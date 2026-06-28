@@ -3,7 +3,7 @@ name: system-commandline
 description: "System.CommandLine migration and gotchas. Use when migrating a .NET CLI from System.CommandLine 2.0.0-beta (beta1–beta4) to the GA / 3.x API — a large breaking redesign of the invocation and binding stack — and for the silent, compile-clean gotchas, above all the Option/Argument constructor whose 2nd positional argument changed from a description to an alias."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # System.CommandLine migration & gotchas (2.0.0-beta → GA / 3.x)
 

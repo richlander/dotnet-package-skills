@@ -3,7 +3,7 @@ name: system-text-json
 description: "System.Text.Json migration and gotchas. Use when migrating serialization code from Newtonsoft.Json to System.Text.Json, or for its silent compile-clean behavioral differences — above all that System.Text.Json matches property names case-sensitively by default (camelCase JSON into PascalCase members silently yields null/default with no exception), unlike Newtonsoft. Also covers Native AOT / trimming, where reflection-based JsonSerializer is disabled and source generation (JsonSerializerContext) is required."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # System.Text.Json migration & gotchas (Newtonsoft.Json → System.Text.Json)
 

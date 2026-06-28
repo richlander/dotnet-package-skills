@@ -5,7 +5,7 @@ using static Grounding.Analyze.Metrics;
 
 namespace Grounding.Analyze;
 
-// Port of analyze-6q.py renderers. Output is matched byte-for-byte.
+// Port of the original analyze renderers. Output is matched byte-for-byte.
 internal sealed partial class Cards
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;

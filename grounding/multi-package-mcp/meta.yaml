@@ -1,6 +1,6 @@
 # Metadata for the MCP-delivery experiment unit (multi-package triage scenario).
 # Like system-commandline-mcp this unit ships NO AGENTS.md: it only registers the
-# get_package_context MCP server (see plugin.json + ../_mcp/grounding_mcp.py), which
+# get_package_context MCP server (see plugin.json + the grounding mcp server), which
 # serves grounding for ALL packages in the index by name.
 #
 # This scenario references THREE grounded packages (System.CommandLine + two

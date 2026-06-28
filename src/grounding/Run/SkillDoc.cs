@@ -3,7 +3,7 @@ using System.Text;
 namespace Grounding.Run;
 
 // Parses an AGENTS.md (YAML frontmatter + body) and renders the SKILL.md the
-// skill-validator harness consumes. Port of eng/sync-skill.sh.
+// skill-validator harness consumes.
 internal sealed class SkillDoc
 {
     public string? Name;
@@ -11,7 +11,7 @@ internal sealed class SkillDoc
     public string Body = "";
 
     private const string GeneratedMarker =
-        "<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->";
+        "<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->";
 
     public static SkillDoc ParseAgents(string agentsPath, string? metaPath)
     {
@@ -50,7 +50,7 @@ internal sealed class SkillDoc
     }
 
     // Read a scalar `key:` value, folding block scalars (>-, >, |, |-) into one
-    // space-joined line, matching sync-skill.sh's awk extractor.
+    // space-joined line, matching the original awk extractor.
     private static string? ExtractScalar(string yaml, string key)
     {
         var lines = yaml.Split('\n');

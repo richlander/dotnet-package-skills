@@ -1,5 +1,5 @@
 # External-validity unit for the MCP-delivery experiment.
-# Unlike the other -mcp units (which register our controlled grounding_mcp.py), this
+# Unlike the other -mcp units (which register the C# grounding MCP server (grounding mcp)), this
 # one registers the REAL upstream NuGet.Mcp.Server (run via `dnx NuGet.Mcp.Server`).
 # Its get_package_context returns the INSTALLED package's AGENTS.md if present, else
 # the README (these packages ship no AGENTS.md, so README). It is single-tool,

@@ -3,8 +3,8 @@ using Grounding.Json;
 
 namespace Grounding.Channels;
 
-// IET economics shared by the channel scripts (eng/extract-channels.py weights and
-// eng/rescore.py arm_iet / arm_iet_norm / arm_hiet).
+// IET economics for the channel matrix (extract weights and
+// rescore arm_iet / arm_iet_norm / arm_hiet).
 internal static class Economics
 {
     public const double WCacheRead = 0.10;
@@ -51,7 +51,7 @@ internal static class Channels
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    // ---- extract-channels.py ---------------------------------------------
+    // ---- channels extract ---------------------------------------------
 
     private static readonly (string Ch, string Tag, string Arm, string Label)[] ExtractCh =
     {
@@ -102,7 +102,7 @@ internal static class Channels
         return ms;
     }
 
-    // ---- compare-channels.py (hardcoded to data/markout) ------------------
+    // ---- channels compare (hardcoded to data/markout) ------------------
 
     private static readonly (string Label, string Stem, string Arm)[] CompareCh =
     {

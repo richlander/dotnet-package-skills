@@ -2,7 +2,7 @@ using Grounding.Run;
 
 namespace Grounding.Codegen;
 
-// Ports eng/sync-skill.sh and eng/gen-plugins.sh.
+// Implements the sync-skill and gen-plugins commands.
 internal static class Codegen
 {
     // Regenerate (or --check) every grounding/<unit>/SKILL.md from its AGENTS.md.

@@ -1,7 +1,7 @@
 # Metadata for the MCP-delivery experiment unit.
 # Unlike the other units, this one ships NO AGENTS.md (no forced inline grounding).
 # The same System.CommandLine grounding content is served on demand by the
-# get_package_context MCP tool (see plugin.json + ../_mcp/grounding_mcp.py).
+# get_package_context MCP tool (see plugin.json + the grounding mcp server).
 name: system-commandline-mcp
 package: System.CommandLine
 description: >-

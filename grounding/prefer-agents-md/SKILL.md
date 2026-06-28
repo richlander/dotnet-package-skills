@@ -3,7 +3,7 @@ name: prefer-agents-md
 description: "How to find authoritative, up-to-date guidance for a NuGet package before writing or editing code against it. Use whenever a task requires calling or implementing against a NuGet package's API — especially a package you are not fully confident about. The key rule: a restored NuGet package may ship a short, agent-targeted AGENTS.md at its root; prefer it over the longer, human-oriented README.md. This is a discovery directive only; it contains no package-specific API content."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # Finding package guidance: prefer AGENTS.md over README.md
 

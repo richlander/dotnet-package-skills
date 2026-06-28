@@ -3,7 +3,7 @@ name: prefer-dotnet-inspect
 description: "How to fetch a NuGet package's own authoritative docs with the dotnet-inspect CLI before writing or editing code against it. Use whenever a task requires calling or implementing against a NuGet package's API — especially a package you are not fully confident about. The key rule: run `dotnet-inspect package <id>@<version> --readme`, which returns the package's best shipped doc (AGENTS.md > README.md > PACKAGE.md), and prefer it over guessing or relying on training memory. This is a discovery directive only; it contains no package-specific API content."
 ---
 
-<!-- GENERATED from AGENTS.md by eng/sync-skill.sh. Do not edit. -->
+<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->
 
 # Finding package guidance: fetch it with dotnet-inspect
 

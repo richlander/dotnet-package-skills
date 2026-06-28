@@ -1,7 +1,7 @@
 # Metadata for the MCP-delivery experiment unit (resident-API probe).
 # Ships NO AGENTS.md (no forced inline grounding). The System.Text.Json grounding
 # content is served on demand by the get_package_context MCP tool (see plugin.json +
-# ../_mcp/grounding_mcp.py). `package` is what the agent passes to resolve content.
+# the grounding mcp server). `package` is what the agent passes to resolve content.
 name: system-text-json-mcp
 package: System.Text.Json
 description: >-

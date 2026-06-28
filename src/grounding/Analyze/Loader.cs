@@ -3,7 +3,7 @@ using Grounding.Json;
 
 namespace Grounding.Analyze;
 
-// Per-arm, per-scenario raw row (port of analyze-6q.py `arm_row`).
+// Per-arm, per-scenario raw row (the original `arm_row`).
 internal sealed class ArmRow
 {
     public double? Qual;          // null => judge score absent ("-")

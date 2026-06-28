@@ -1,5 +1,5 @@
 # Delivery-channel unit for the custom MCP (Markout task).
-# Registers our controlled grounding_mcp.py. The gate is selected by the
+# Registers the C# grounding MCP server (grounding mcp). The gate is selected by the
 # GROUNDING_GATE env var (resident_index for the skill-oriented mode). Its
 # get_package_context resolves "Markout" -> grounding/markout/AGENTS.md (the
 # curated grounding), independent of what ships in the package cache.
