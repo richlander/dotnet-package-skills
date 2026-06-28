@@ -127,7 +127,7 @@ scenarios:
         command_timeout: 600
       - type: file_contains
         path: "Program.cs"
-        value: "DownloadToFileAsync"
+        value: ".Download"
       # The Newtonsoft.Json 13.0.3 .nupkg is ~2.4 MB, so the byte count has >= 6 digits.
       - type: run_command_and_assert
         command_to_run: "dotnet"
@@ -136,7 +136,7 @@ scenarios:
         expected_std_output_matches: "downloaded: \\d{6,}"
         command_timeout: 120
     rubric:
-      - "Uses DownloadToFileAsync(id, version, path) to write the .nupkg to disk"
+      - "Uses a NuGetFetch download method — `DownloadAsync` (stream) or `DownloadToFileAsync` — to obtain the .nupkg and write it to disk"
       - "Passes a caller-owned HttpClient to NuGetClient"
       - "Builds and prints a 'downloaded:' line with the real file size in bytes"
     timeout: 900
