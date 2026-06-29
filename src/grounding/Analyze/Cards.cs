@@ -111,7 +111,7 @@ internal sealed partial class Cards
         var gtok = Loader.GroundingTokens(sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
-        _o.WriteLine($"_Baseline (no grounding) → `AGENTS.md`{tokNote} per model; columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
         _o.WriteLine("| Metric | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, raw, _) in Spec)
@@ -135,9 +135,7 @@ internal sealed partial class Cards
         var sn = arms[0].SkillName;
         if (!NoTitle)
             _o.WriteLine($"### Model-diff — {sn} | AGENTS.md lift over baseline\n");
-        _o.WriteLine("_Each cell = grounded (AGENTS.md) change vs that model's own baseline. "
-            + "count Δ for success/func, before→after for resourcefulness, "
-            + "% for IET/output/cost (− = cheaper)._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
         _o.WriteLine("| Metric | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, _, diff) in Spec)
@@ -165,11 +163,7 @@ internal sealed partial class Cards
         var sn = agents.SkillName;
         if (!NoTitle)
             _o.WriteLine($"### Source-diff — {sn} | `{agents.Model}` | AGENTS.md benefit over README.md\n");
-        var mpref = NoTitle ? $"`{agents.Model}` | " : "";
-        _o.WriteLine($"_{mpref}Both surfaced via the grounding tool; baseline removed. Single column = "
-            + "AGENTS.md change vs README.md (− = AGENTS cheaper on cost metrics, "
-            + "+ on success/func, lower resourcefulness = AGENTS more self-sufficient). "
-            + "The README is co-tested here as a usability artifact._\n");
+        _o.WriteLine($"_`{agents.Model}` — each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Judge `{agents.Judge}`. Means across scenarios._\n");
         _o.WriteLine("| Metric | AGENTS.md − README.md |");
         _o.WriteLine("| --- | ---: |");
         foreach (var (label, _, diff) in Spec)
