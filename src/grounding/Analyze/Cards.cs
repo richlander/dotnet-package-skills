@@ -117,8 +117,8 @@ internal sealed partial class Cards
         foreach (var (label, raw, _) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg["skilledPlugin"])}")) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg["skilledPlugin"])}**")) + " |");
-        _o.WriteLine("\n_FAIL = solved fewer (correctness regressed); BETTER = solved more / archaeology→0 / IET/cost cut ≥20%; "
-            + "WORSE = IET/cost/output inflated ≥20%; NEUTRAL = held. Archaeology, web, judge are signals, not gates._\n");
+        _o.WriteLine("\n_**FAIL** = solved fewer (correctness regressed); **BETTER** = solved more / archaeology→0 / IET/cost cut ≥20%; "
+            + "**WORSE** = IET/cost/output inflated ≥20%; **NEUTRAL** = held. Archaeology, web, judge are signals, not gates._\n");
         _o.WriteLine("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
             + "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
             + "**lower bound** and grounding's advantage is understated.\n");
