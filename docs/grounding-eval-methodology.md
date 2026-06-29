@@ -17,30 +17,59 @@ matching: a *Changes* summary, a `Baseline | … | Delta` table, a representativ
 ## 1. Methodology
 
 We reuse the [`dotnet/skills`](https://github.com/dotnet/skills) **skill-validator** harness to run a
-**baseline vs. grounded** evaluation over a fixed set of scenarios (a "6-question unit", e.g. N1–N6
-for NuGetFetch, M1–M6 for Markout). Each scenario runs three **arms**:
+**baseline vs. grounded** evaluation over a fixed set of scenarios. We name the arms by the **grounding
+content** supplied — and force-feed it — *not* by skill-validator's internal delivery mechanism:
 
-- **baseline** — no grounding; model knowledge only. The agent falls back to **archaeology** — searching outside the sandbox (web fetch/search, rummaging the restored NuGet cache, etc.) to reconstruct what grounding would have told it.
-- **skilled-isolated** — grounding delivered inline. A research-only diagnostic; **not shown on ship cards**.
-- **skilled-plugin** — grounding delivered as an auto-loaded skill. Stands in for any **grounding tool** (a packed `AGENTS.md`, the NuGet MCP, `dotnet-inspect`, …); the ship gate is read off this arm.
+| Our arm | Content (force-fed) | What it answers |
+| --- | --- | --- |
+| **baseline** | none | the control — model knowledge only (web blocked) |
+| **Missing Manual** | `AGENTS.md` | does the compact, co-located doc fill the gap? |
+| **Front Door** | `README.md` | is the human README usable by an agent? |
+| **Textbook** | `SKILL.md` | (rung 2) does the full guide recover what the compact doc can't? |
 
-The grounded arms can be run with **either** grounding source: `AGENTS.md` (the curated grounding) or
-the package `README.md` (the **fallback** a grounding tool surfaces when no `AGENTS.md` ships). Running
-both feeds the **source-diff card** (§4), which isolates `AGENTS.md − README.md` as a **usability
-test of the README**: if the README arm fails questions or forces archaeology, those are README bugs to
-fix; and if a *complete* README already clears the gate as cheaply, the curated `AGENTS.md` isn't earning
-its place.
+**Why these names (and not skill-validator's).** skill-validator's own arms are named by *loader scope* —
+`baseline` (nothing loaded), `isolated` (only the target skill loaded), `plugin` (everything loaded, the
+agent self-selects). Those are **internal-facing `dotnet/skills` mechanism names** that conflate *content*
+with *delivery* (`plugin` moves both at once), so we replace them with **outward-facing, grounding-specific**
+names keyed to the document under test. Mechanically each content arm *is* skill-validator's `isolated`
+mode fed a different document (`grounding run --source agents|readme|…`); we read that arm and **relabel it
+by content**. skill-validator's `plugin` arm (everything loaded, the agent self-selects — the "shelf") is a
+**separate delivery axis**, not a content arm, and is omitted from content cards.
 
 A pairwise LLM judge scores rubric quality; the harness also records tokens, cost, tool calls, and
 assertion pass/fail. Mechanics live in [`harness.md`](./harness.md). We read results with
 `grounding analyze` (full table) or `grounding analyze --card` (the PR dump, §4).
 
-**Why grounded must be compared carefully.** The baseline is *not* a clean "model ignorance" control:
-a package's `README.md`/`AGENTS.md` are packed inside its nupkg, so any `dotnet build` restores them
-to `~/.nuget/packages`, where the baseline can read them (one form of archaeology). So **the baseline
-is partly self-grounded and the measured gap understates grounding's value** (see [harness.md](./harness.md)
-for the per-arm read attribution and the empty-cache analysis). Treat every quality delta as a *lower
-bound*.
+**Two confounds keep the baseline from being a clean control.** First, a package's `README.md`/`AGENTS.md`
+are packed inside its nupkg, so any `dotnet build` restores them to `~/.nuget/packages`, where the baseline
+can read them (archaeology) — so **the baseline is partly self-grounded and the measured gap understates
+grounding's value** (treat every delta as a *lower bound*; see [harness.md](./harness.md)). Second, to keep
+**content** arms about the *document* and not a tool, eval runs **scrub `~/.dotnet/tools` from the agent's
+PATH** (removing `dotnet-inspect`/`ildasm`/`ilspycmd`, keeping system `dotnet`/`dnx`). Tool availability is
+a **separate lever**, layered in deliberately as its own arm — not part of the content comparison.
+
+### Two regimes, a three-rung ladder, and the arm × scheme matrix
+
+Two **question regimes**, named for the doc archetype that clears them:
+
+- **Missing Manual** (~6 questions) — everyday tasks that *(model + `AGENTS.md`)* should satisfy.
+- **Complete Textbook** (~24 questions; the Missing Manual 6 are a **subset**) — advanced, discriminating
+  tasks where a compact `AGENTS.md` is *expected* to fall off. The ~24-set is also the overfitting defense
+  (broader API coverage, with room for an author/held-out split).
+
+A **cost-tiered, opt-in ladder** — run as much as the question warrants:
+
+| Rung | Arms | Scheme | Question |
+| --- | --- | --- | --- |
+| **0 — min bar** (required) | baseline vs Missing Manual | MM-6 | does grounding beat none? |
+| **1 — standard** | baseline · Front Door · Missing Manual | MM-6 | is the README usable; does `AGENTS.md` add efficiency? |
+| **2 — extended** (optional) | baseline · Missing Manual · Textbook | CT-24 | where does `AGENTS.md` fall off, and does the Textbook recover it? |
+
+Textbook is omitted from MM-6 (it passes by construction); Front Door is optional on CT-24. Rung 2 runs the
+real `SKILL.md` through the validator, so it **doubles as a skill eval** in service of sizing `AGENTS.md`'s
+remit. The **Front Door** arm *is* the README usability test (it replaces the older "source-diff card"):
+if the README-grounded agent fails a question or is forced into archaeology, that is a **README bug to fix
+in the same PR** — *if an AI given only the README can't answer it, an untrained human can't either.*
 
 ---
 
@@ -49,8 +78,8 @@ bound*.
 | Term | Meaning here |
 | --- | --- |
 | **Grounding** | A compact, package-specific `AGENTS.md` that ships in the package root and makes the package self-teaching for an agent. Records only what the model is *proven to lack* — not model-resident knowledge. |
-| **`AGENTS.md` vs `SKILL.md`** | `AGENTS.md` is the source of truth (it ships in the package). `SKILL.md` is generated from it by `grounding sync-skill` purely so the harness can toggle grounding on/off. Never hand-edit `SKILL.md`. |
-| **isolated / plugin → "grounding tool"** | The two grounded delivery channels the harness simulates. **plugin** (auto-loaded) is closest to a packed `AGENTS.md` that is always present — it stands in for any **grounding tool** (packed `AGENTS.md`, NuGet MCP, `dotnet-inspect`), so the ship gate is evaluated on it and ship cards label it **"Grounding tool"**. **isolated** is a research-only diagnostic, omitted from cards. |
+| **The three docs** | A package may ship three grounding documents: `README.md` = **Front Door** (humans; may market/onboard), `AGENTS.md` = **Missing Manual** (co-located, always-on RAG gap-filler), `SKILL.md` = **Complete Textbook** (opt-in, narrative full guide). See [authoring-principles §2d](./authoring-principles.md). The harness *also* generates a per-unit `SKILL.md` **skill-wrapper** — test scaffolding holding whichever content an arm force-feeds (skill-validator just requires that filename) — which is **not** the shipped Textbook. Never hand-edit the generated wrapper; edit `AGENTS.md`, then `grounding sync-skill`. |
+| **arm names (content, not mechanism)** | Arms are named by the document supplied — **baseline** / **Missing Manual** (`AGENTS.md`) / **Front Door** (`README.md`) / **Textbook** (`SKILL.md`), all force-fed. We do **not** use skill-validator's loader-scope names `isolated`/`plugin` (§1 explains why and gives the mapping). `plugin` (everything loaded, agent self-selects — the "shelf") is a separate **delivery** axis, omitted from content cards. |
 | **resourcefulness (archaeology)** | Out-of-sandbox lookups the agent must make to recover API knowledge that grounding would supply inline — web fetch/search **plus** local NuGet-cache rummaging / decompiling DLLs. Measured **objectively** from the timeline (not the judge). **High = the agent had to be resourceful; grounding's job is to drive it to 0, so lower is the win, not a loss.** Cards show it as one **resourcefulness (archaeology)** row; the **web** portion alone is a hard gate guard (a grounded run must never resort to the internet). |
 | **success** | A scenario is **solved** for an arm iff every functional assertion passes **and** the judge's overall quality clears the **≥4 floor** ("meets expectations"). Reported per arm as a rate (e.g. `6/6`). The headline **value** metric. The judge's 1–5 score enters **only** as this pass/fail floor — its subjective 4→5 top band is discarded (see §7). |
 | **quality** (judge `overallScore` 1–5) | Used **only** as the ≥4 success floor above — never as a reported metric or a baseline diff. Its top ~1 point is subjective and instruction-sensitive (§7), so it cannot grade harm. |

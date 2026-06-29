@@ -4,10 +4,12 @@ How this repo **builds and runs** the [`dotnet/skills`](https://github.com/dotne
 `skill-validator` to measure whether grounding helps. The root [`README`](../README.md) covers
 *what* grounding is and the findings; this file covers *how* the evals run.
 
-> **None of this is part of the shipped grounding content.** The `SKILL.md` files, the slug
-> rules, and the runner scripts are **test scaffolding** for the harness — not something a
-> package author ships, and not a marketplace plugin. The only artifact under test is the
-> `AGENTS.md` in each `grounding/<slug>/`.
+> The harness scaffolding — the **generated** per-unit `SKILL.md` skill-wrappers, the slug
+> rules, and the runner scripts — is **not** shipped grounding. The artifacts under test are the
+> package's grounding **documents**: the **Missing Manual** (`AGENTS.md`, rungs 0–1) and, at rung 2,
+> the **Complete Textbook** (a hand-authored, shipped `SKILL.md`). Don't confuse that shipped Textbook
+> with the harness's generated `SKILL.md` wrapper — same filename, different thing (skill-validator just
+> requires that name).
 
 ## Metrics vs. signals: what a claim may rest on
 
@@ -158,6 +160,12 @@ add/remove between arms. It is an implementation detail of the harness, **not** 
 skill and **not** something the package ships. Never hand-edit `SKILL.md`. Edit `AGENTS.md`, then
 run `grounding sync-skill`.
 
+> **Two things named `SKILL.md`.** The file in `grounding/<slug>/SKILL.md` is this **generated
+> wrapper** (never hand-edit it). A *package's* shipped **`SKILL.md` is the Complete Textbook** — a
+> hand-authored, narrative full guide and the **rung-2 content arm** — an entirely different artifact
+> that merely shares the filename. To test the Textbook the harness force-feeds *its* content through
+> the same wrapper (`grounding run --source` selects which document fills each content arm).
+
 Grounding `AGENTS.md` files must stay **concise**: `grounding sync-skill` fails if any exceeds the
 budget in `eng/agents-line-limit.txt` (currently **60** lines). Keep content tight and prefer a
 short "see also" link over inlining depth. Raise the limit deliberately, not casually.
@@ -199,6 +207,15 @@ eng/run-evals.sh System.CommandLine
 
 `run-evals.sh` clones `dotnet/skills` at the pinned SHA into `./.tools`, builds
 `skill-validator`, and caches it per-SHA, so only the first run pays the build cost.
+
+### Keeping content arms tool-clean
+
+For a clean **content** measurement the agent must not substitute a tool for the document, so eval runs
+**scrub `~/.dotnet/tools` from the agent's PATH** (removing `dotnet-inspect`, `ildasm`, `ilspycmd`) while
+keeping the system `dotnet`/`dnx`. Tool availability — e.g. a `dotnet-inspect` pointer — is a **separate
+lever**, layered in deliberately as its own arm, not part of the baseline / Missing Manual / Front Door /
+Textbook content comparison. (Verify post-hoc: the `di` signal in `grounding analyze` must be `0` on the
+content arms.)
 
 ## Adding a package
 

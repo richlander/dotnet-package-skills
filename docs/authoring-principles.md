@@ -155,6 +155,31 @@ discipline is *not* "clear a higher quality bar." It is **scope**:
 > stopped being grounding and become a skill — cut it or move it. Grounding asserts *your*
 > facts, nothing else.
 
+#### 2d. Three documents, three distributions: `README.md`, `AGENTS.md`, `SKILL.md`
+
+§2b's asymmetry becomes a **three-way** split once a package also ships a `SKILL.md`. The three are
+**not** points on a "more vs less content" line — they differ by *who reads them and how they are
+distributed*:
+
+| Doc | Reader | Distribution | Shape | Nickname |
+| --- | --- | --- | --- | --- |
+| `README.md` | humans | pulled (you open it) | narrative, progressive, may market | **Front Door** |
+| `AGENTS.md` | trained agents | **co-located, always-on** | targeted RAG gap-fill | **Missing Manual** |
+| `SKILL.md` | agents (opt-in) | **opted-in** (you load it) | narrative, near-complete | **Complete Textbook** |
+
+The axis that matters is **RAG-gap-filler vs narrative-complete**, not size (by bytes it is usually
+`AGENTS.md` < `README.md` < `SKILL.md`). `README.md` and `SKILL.md` are the *same kind* of artifact —
+coherent documents meant to be **read** — for two different readers: the Front Door *sells and onboards*,
+the Textbook *teaches completely*. `AGENTS.md` is the odd one out: a **gap-filler** evaluated only as
+*(model + `AGENTS.md`)*, never standalone — the Missing Manual *fills gaps*.
+
+**Why the pressure differs — distribution, not taste.** A `SKILL.md` is **opt-in**: the agent chose to
+load it, so it can spend tokens to be *complete* — any reader, human or agent, should finish the task from
+it alone. `AGENTS.md` is a **co-location play**: it rides along always-on, unasked, so it must be the
+**best-behaved citizen** — minimal footprint, section-retrievable, recording only the non-resident delta
+(§1). That is why `AGENTS.md` is under the **most** pressure to stay lean, and why eval (which rewards
+frugality) is *safe* for it but must be **resisted** for `SKILL.md`, whose job is completeness.
+
 ### Cross-package data point (System.Text.Json unit)
 
 | Scenario | Baseline → Grounded | Improvement | Lesson |
