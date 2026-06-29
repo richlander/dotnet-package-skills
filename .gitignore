@@ -15,3 +15,6 @@ grounding/*mcp/plugin.json
 
 # Tool pack output
 src/grounding/nupkg/
+
+# Scratch eval datasets (ship blessed runs via `grounding export` into target repos)
+data/*-fc/

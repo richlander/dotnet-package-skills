@@ -174,6 +174,20 @@ var mcp = new Command("mcp", "Run the stdio JSON-RPC grounding MCP server (GROUN
 mcp.SetAction(parse => Grounding.Mcp.McpServer.Run(parse.GetValue(mcpRootOpt)));
 root.Subcommands.Add(mcp);
 
+// ---- tasks / export -----------------------------------------------------
+var tUnit = new Argument<string>("unit") { Description = "Grounding unit." };
+var tOut = new Option<string?>("--out") { Description = "Write TASKS.md here (else stdout)." };
+var tasks = new Command("tasks", "Render TASKS.md (jobs-to-be-done) from tests/<unit>/eval.yaml.") { tUnit, tOut };
+tasks.SetAction(p => Grounding.Bundle.Bundle.Tasks(p.GetValue(tUnit)!, p.GetValue(tOut)));
+root.Subcommands.Add(tasks);
+
+var eUnit = new Argument<string>("unit") { Description = "Grounding unit." };
+var eTo = new Option<string>("--to") { Description = "Target dir (e.g. <repo>/grounding/<unit>).", Required = true };
+var eData = new Option<string?>("--data") { Description = "Blessed dataset dir (default data/<unit>-fc)." };
+var export = new Command("export", "Export a self-contained grounding bundle into a target repo.") { eUnit, eTo, eData };
+export.SetAction(p => Grounding.Bundle.Bundle.Export(p.GetValue(eUnit)!, p.GetValue(eTo)!, p.GetValue(eData)));
+root.Subcommands.Add(export);
+
 root.SetAction(_ =>
 {
     Console.WriteLine("grounding: specify a command (analyze, run). Try --help.");
