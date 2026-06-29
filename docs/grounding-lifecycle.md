@@ -40,11 +40,11 @@ already knows this package — **do not author grounding**. Grounding is justifi
 3. **Evaluate both tiers, n ≥ 3:**
    - **mini** (e.g. `claude-haiku-4.5`) — the tier that *needs* grounding.
    - **frontier** (e.g. `claude-opus-4.8`) — the tier that doesn't.
-4. **Read the cards** (§4). Each card grades grounding uniformly as **BETTER / NEUTRAL / WORSE** (same
+4. **Read the cards** (see [scoring.md](./scoring.md)). Each card grades grounding uniformly as **BETTER / NEUTRAL / WORSE** (same
    rubric for every model — the card grades, it doesn't decide). Apply the higher-level ship rule
-   (methodology §3): **require BETTER on the mini tier** (it needs grounding) and **merely not-WORSE on
+   (see [scoring.md](./scoring.md)): **require BETTER on the mini tier** (it needs grounding) and **merely not-WORSE on
    the frontier tier** (a frontier BETTER is a welcome bonus). Ship only if both hold.
-5. **Complete the README too (if the package has one).** The source-diff card is a **usability test
+5. **Complete the README too (if the package has one).** The Front Door comparison is a **usability test
    of the README**: any question its arm fails, or archaeology it forces, is a README bug. Fix the README
    **in this PR**, using the finished `AGENTS.md` as the checklist of facts it must cover (human prose —
    not token-optimized; authoring-principles §2c), and re-run to confirm it also reaches success + 0
@@ -70,7 +70,7 @@ Trigger an update when the package's API changes, the README is rewritten, the m
 knowledge shifts, or a new trap appears. The operation is the same as CREATE plus one extra question:
 
 - **Re-run the matched matrix** (mini + frontier, AGENTS + README).
-- **Read the source-diff card** — a **usability test of the README** (AGENTS.md vs README.md, both via
+- **Read the Front Door comparison** — a **usability test of the README** (Missing Manual vs Front Door, both via
   the grounding tool, baseline removed). Any question the README arm fails, or archaeology it forces, is a
   README bug to fix here too. Once the README is complete, AGENTS's remaining edge is efficiency/retrieval —
   if even that edge has vanished (the README now carries the same knowledge as cheaply), the curated file
@@ -93,59 +93,16 @@ Deletion is also a claim and needs evidence:
 
 ---
 
-## 4. EVALUATE — the three cards
+## 4. EVALUATE — read the cards
 
-All operations are decided off `grounding analyze`. It emits **three single-variable cards**, each
-isolating exactly one comparison so the data is trivial to read. Every card shows the same metric rows
-and a **Conclusion** — a single **uniform, model-independent grade** of grounding's effect vs baseline,
-on **objective axes** (no judge-quality diff; see methodology §7). The same rubric grades every model;
-the card grades, it does **not** decide shipping (that is §1 step 4 / methodology §3).
-
-**Metric legend** — every card shows these rows, each read **per arm in isolation**:
-
-| Row | Meaning | Better |
-| --- | --- | :---: |
-| **success (scenarios)** | A scenario is *solved* for an arm when every functional assertion passes **and** the judge's quality clears the **≥4 floor** ("meets expectations"). The 1–5 judge score is used *only* as this pass/fail floor — its subjective top band is discarded (methodology §7). | higher |
-| **func passed (assertions)** | Build + file + run-output assertions met (target 100%) — the objective correctness signal inside `success`. | higher |
-| **resourcefulness (archaeology)** | Out-of-sandbox lookups the agent had to make to recover the API: web fetch/search **+** local NuGet-cache rummaging / decompiling. Measured from the timeline, not the judge. Grounding's job is to drive it to **0**, so **lower is the win**. The **web** portion must be 0 in a grounded arm (hard guard). | lower |
-| **IET** | Input-Equivalent Tokens = `(input − cache-reads) + output` — the cache-discounted token cost. | lower |
-| **output tok** | Output / thinking tokens (priciest per token, most variable). | lower |
-| **cost** | Premium-request multiplier (cache-discounted). | lower |
-
-**Conclusion grade** — keyed off objective axes only:
-
-| Grade | When |
-| --- | --- |
-| **BETTER** | success held **and** a real win — more scenarios solved, resourcefulness eliminated, or IET/cost cut ≥ 25%. |
-| **NEUTRAL** | success held, no material efficiency win. |
-| **WORSE** | success dropped, the grounded arm did open-web archaeology, or cost/IET/output inflated past the cap. |
-
-**The three cards** — each isolates exactly one comparison:
-
-| Card | Flag | Holds fixed | Varies | Answers |
-| --- | --- | --- | --- | --- |
-| **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
-| **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
-| **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | A **usability test of the README** (not a floor to beat): does the README also answer every question with 0 archaeology? Its failures are bugs to fix in the same PR; once it's complete, AGENTS's edge is efficiency/retrieval. |
-
-```bash
-# primary, one card per model
-grounding analyze --card data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
-# model-diff (AGENTS lift, models side by side)
-grounding analyze --model-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
-# source-diff (AGENTS − README, one model)
-grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>-readme.n3.haiku.json
-```
-
-A dataset whose filename contains `readme` is automatically read as the **README arm**. The mini tier
-(haiku) is the primary deliverable — it is the tier grounding exists to help; the frontier card is the
-safety check.
-
----
+All operations are decided off `grounding analyze`, which emits the copy-paste cards and the uniform
+**BETTER / NEUTRAL / WORSE** grade. The grade model, the metric legend, the three cards, and the
+tier-aware ship gate live in **[`scoring.md`](./scoring.md)**. The mini tier (haiku) is the primary
+deliverable — the tier grounding exists to help; the frontier card is the no-harm safety check.
 
 ## 5. What every grounding PR contains
 
-Same artifact list and reviewer checklist as methodology §5–§6:
+Same artifact list and reviewer checklist as [scoring.md](./scoring.md):
 
 - `grounding/<unit>/AGENTS.md` (within the line limit) + regenerated `SKILL.md` (`grounding sync-skill --check`).
 - Matched n ≥ 3 datasets for **both** tiers under `data/<unit>-6q/`.
@@ -160,7 +117,7 @@ Same artifact list and reviewer checklist as methodology §5–§6:
 
 ---
 
-_See also: [`grounding-eval-methodology.md`](./grounding-eval-methodology.md) (the gate + terms),
+*See also: [`grounding-eval-methodology.md`](./grounding-eval-methodology.md) (the gate + terms),
 [`harness.md`](./harness.md) (mechanics), [`authoring-principles.md`](./authoring-principles.md) (how to
 write the body), [`delivery-and-retrieval.md`](./delivery-and-retrieval.md) (how grounding reaches the
-agent)._
+agent).*
