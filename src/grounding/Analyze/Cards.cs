@@ -145,8 +145,8 @@ internal sealed partial class Cards
             var cells = arms.Select(a => diff(a.Agg["skilledPlugin"], a.Agg["baseline"]));
             _o.WriteLine($"| {label} | " + string.Join(" | ", cells) + " |");
         }
-        var verdicts = arms.Select(a => Grade(a.Agg["baseline"], a.Agg["skilledPlugin"]));
-        _o.WriteLine("| **→ verdict** | " + string.Join(" | ", verdicts) + " |");
+        var verdicts = arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg["skilledPlugin"])}**");
+        _o.WriteLine("| **verdict** | " + string.Join(" | ", verdicts) + " |");
     }
 
     public void SourceDiff(IReadOnlyList<string> files)
