@@ -28,12 +28,20 @@ internal sealed partial class Cards
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
     private static string DiffCost(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Cost, o.Cost));
 
+    // Document cost (the grounding doc loaded into the arm; baseline = 0) and the
+    // doc-excluded "work" IET, so a bigger doc isn't charged as agent effort.
+    private static string RawDoc(ArmAgg a) => a.DocTok.ToString(Inv);
+    private static string RawWorkIet(ArmAgg a) => F0(a.Iet - a.DocTok);
+    private static string DiffDoc(ArmAgg n, ArmAgg o) => $"{o.DocTok}\u2192{n.DocTok}";
+    private static string DiffWorkIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet - n.DocTok, o.Iet - o.DocTok));
+
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
         ("success (scenarios)",       RawSuccess, DiffSuccess),
         ("func passed (assertions)",  RawFunc,    DiffFunc),
         ("resourcefulness (archaeology)", RawArch, DiffArch),
-        ("IET",                       RawIet,     DiffIet),
+        ("grounding load (tok)",      RawDoc,     DiffDoc),
+        ("work IET (iet - doc)",      RawWorkIet, DiffWorkIet),
         ("output tok",                RawOut,     DiffOut),
         ("cost",                      RawCost,    DiffCost),
     };
@@ -45,13 +53,13 @@ internal sealed partial class Cards
     // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet, b.Iet);
+        var iet = Pct(g.Iet - g.DocTok, b.Iet - b.DocTok);   // work IET (document netted out)
         var cost = Pct(g.Cost, b.Cost);
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
         int bArch = b.Arch, gArch = g.Arch;
         var tail = $"success {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}, cost {SignedPct(cost)}";
+                 + $"resourcefulness {bArch}\u2192{gArch}, work-IET {SignedPct(iet)}, cost {SignedPct(cost)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)

@@ -124,13 +124,20 @@ internal static class Loader
         var d = Parse(path);
         var model = d.Model ?? "?";
         var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : new Verdict();
+        var sn = v.SkillName ?? "?";
+        var agg = Aggregate(v.Scenarios ?? new());
+        // The grounding document is loaded into the grounded arms only; net it out of
+        // "work" so a bigger doc (e.g. SKILL.md) isn't charged as agent effort.
+        var gtok = GroundingTokens(sn) ?? 0;
+        foreach (var (key, arm) in agg)
+            arm.DocTok = key == "baseline" ? 0 : gtok;
         return new LoadedArm
         {
             Model = model,
             Judge = d.JudgeModel ?? model,
             Tier = Metrics.Tier(model),
-            SkillName = v.SkillName ?? "?",
-            Agg = Aggregate(v.Scenarios ?? new()),
+            SkillName = sn,
+            Agg = agg,
             IsReadme = System.IO.Path.GetFileName(path).ToLowerInvariant().Contains("readme"),
             Path = path,
         };
