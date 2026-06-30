@@ -1,28 +1,171 @@
 config:
   max_parallel_scenarios: 1
 
-scenarios:
-  # ---------------------------------------------------------------------------
-  # M1 — 2.0.0-beta to 3.x migration of a REAL beta4 CLI (vendored ZeroDaySearch).
-  #
-  # This unit focuses SOLELY on migration: empirically it is the scenario shape that
-  # produces eval signal. Greenfield authoring and "new-in-3.x member" tasks proved
-  # model-resident (a web-blocked baseline already gets them right) — see
-  # docs/authoring-principles.md. The beta API ZeroDaySearch uses (Handler.SetHandler,
-  # AddOption, getDefaultValue, beta constructors, rootCommand.InvokeAsync(args)) was
-  # REMOVED before GA, so a literal version bump does NOT compile — the agent must know
-  # the precise beta -> 3.x member mapping to migrate every command.
-  #
-  # It also plants ONE silent-break trap: the --verbose option uses the beta4 positional
-  # ctor `new Option<bool>("--verbose", "detailed")` (2nd arg = description in beta4). In
-  # 3.x the 2nd positional arg is an ALIAS, so a naive migration compiles but silently
-  # turns the description into a bogus alias and drops the help text. This is the one part
-  # of the migration that compile errors + reflection CANNOT recover — only the documented
-  # gotcha in AGENTS.md does — so it is the dimension where grounding should move the
-  # quality/judgment score (which dominates the improvement metric), not just efficiency.
-  # ---------------------------------------------------------------------------
+# =============================================================================
+# System.CommandLine — Mini-6. A representative spread of CLI-authoring tasks
+# against the CURRENT 3.x API (M1-M5, greenfield) plus one specialized migration
+# task (M6). HYPOTHESIS: the shipped AGENTS.md is narrow on PURPOSE — it documents
+# only the beta->GA/3.x migration mapping and the silent alias-vs-description
+# gotcha. So M1-M5 are expected to be MODEL-RESIDENT (a strong model already
+# writes correct 3.x; grounding should be NEUTRAL / no-harm and the README answers
+# them too). M6 is the one durable, measured gap where grounding moves the score.
+# Greenfield fixtures already reference System.CommandLine 3.0.0-preview.5.26302.115;
+# the agent writes Program.cs. Web is blocked so the test reads model knowledge,
+# not archaeology. All outputs verified against 3.0.0-preview.5.26302.115.
+# =============================================================================
 
-  - name: "M1: migrate a System.CommandLine 2.0.0-beta4 CLI to 3.x"
+scenarios:
+  - name: "M1: greet with a --name/-n option"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, build a CLI whose
+      root command has a string option `--name` with alias `-n` and description
+      "Your name"; when run it prints `Hello, <name>!`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m1-greet/App.csproj }
+        - { path: Program.cs, source: fixtures/m1-greet/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --name World"
+        expected_exit_code: 0
+        expected_std_output_matches: "Hello, World!"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*-n, --name)(?=[\\s\\S]*Your name)"
+        command_timeout: 120
+    rubric:
+      - "Uses Option<string> with --name plus the -n alias and a Description"
+      - "Adds it to RootCommand.Options and reads it via ParseResult.GetValue inside SetAction"
+    timeout: 900
+
+  - name: "M2: a subcommand with a positional argument"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add a subcommand
+      `greet` that takes a required positional argument `<name>` and prints
+      `Hello, <name>!`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m2-subcommand/App.csproj }
+        - { path: Program.cs, source: fixtures/m2-subcommand/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- greet World"
+        expected_exit_code: 0
+        expected_std_output_matches: "Hello, World!"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_matches: "greet"
+        command_timeout: 120
+    rubric:
+      - "Creates a Command \"greet\" with an Argument<string> added via Arguments.Add"
+      - "Registers it with RootCommand.Subcommands.Add and reads the arg via ParseResult.GetValue"
+    timeout: 900
+
+  - name: "M3: a required option and an option with a default"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add a required string
+      option `--message` and an int option `--count` that defaults to 1, then print the
+      message `--count` times (one per line). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m3-required/App.csproj }
+        - { path: Program.cs, source: fixtures/m3-required/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --message Hi --count 2"
+        expected_exit_code: 0
+        expected_std_output_matches: "Hi\\nHi"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --message Solo"
+        expected_exit_code: 0
+        expected_std_output_matches: "Solo"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 1
+        expected_std_output_matches: "(?=[\\s\\S]*--message)(?=[\\s\\S]*required)"
+        command_timeout: 120
+    rubric:
+      - "Marks --message Required and gives --count a DefaultValueFactory of 1"
+      - "Prints the message --count times; a missing --message is a parse error (exit 1)"
+    timeout: 900
+
+  - name: "M4: an option constrained to a fixed set of values"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add a string option
+      `--level` whose value must be one of `low`, `medium`, or `high`, and print
+      `level: <value>`. An out-of-set value must be rejected as a parse error. Build and run.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m4-constrained/App.csproj }
+        - { path: Program.cs, source: fixtures/m4-constrained/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --level high"
+        expected_exit_code: 0
+        expected_std_output_matches: "level: high"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --level bogus"
+        expected_exit_code: 1
+        command_timeout: 120
+    rubric:
+      - "Constrains the option with AcceptOnlyFromAmong(\"low\",\"medium\",\"high\")"
+      - "Prints the chosen level; an out-of-set value fails parsing (exit 1)"
+    timeout: 900
+
+  - name: "M5: an async action that returns a process exit code"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add an int option
+      `--code` defaulting to 0. The command's action must be ASYNC, print `done`, and make
+      the process exit with the value of `--code`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m5-exitcode/App.csproj }
+        - { path: Program.cs, source: fixtures/m5-exitcode/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --code 3"
+        expected_exit_code: 3
+        expected_std_output_matches: "done"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: "done"
+        command_timeout: 120
+    rubric:
+      - "Uses an async SetAction (returns Task<int>) and root.Parse(args).InvokeAsync()"
+      - "Returns --code as the exit code; prints done"
+    timeout: 900
+
+  - name: "M6: migrate a System.CommandLine 2.0.0-beta4 CLI to 3.x"
     prompt: |
       This project (ZeroDaySearch) targets System.CommandLine `2.0.0-beta4.22272.1`,
       which uses an API that was removed before the 2.0 GA release. Migrate it to the
@@ -115,4 +258,165 @@ scenarios:
       - "Replaces rootCommand.InvokeAsync(args) with rootCommand.Parse(args).Invoke() or InvokeAsync()"
       - "All seven commands and their options/arguments are preserved; the project compiles"
       - "Preserves the --verbose option's description instead of letting the 2nd positional ctor arg become a bogus alias (the alias-vs-description gotcha)"
+    timeout: 900
+
+  - name: "M7: several options of different types on one command"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add three options on
+      the root command: `--name` (string), `--count` (int, default 1), and `--verbose`
+      (a boolean flag). Print one line: `name=<name> count=<count> verbose=<true/false>`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m7-options/App.csproj }
+        - { path: Program.cs, source: fixtures/m7-options/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --name Bob --count 3 --verbose"
+        expected_exit_code: 0
+        expected_std_output_matches: "name=Bob count=3 verbose=[Tt]rue"
+        command_timeout: 120
+    rubric:
+      - "Declares Option<string>, Option<int> (DefaultValueFactory 1), and a bool flag Option<bool>"
+      - "Reads all three via ParseResult.GetValue and prints the combined line"
+    timeout: 900
+
+  - name: "M8: an option that can be supplied multiple times"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add an option `--item`
+      that may be supplied multiple times and collects all values, then print
+      `items: <comma-joined values>`. Build and run to confirm (e.g. `--item a --item b`).
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m8-multivalue/App.csproj }
+        - { path: Program.cs, source: fixtures/m8-multivalue/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --item a --item b --item c"
+        expected_exit_code: 0
+        expected_std_output_matches: "items: a,b,c"
+        command_timeout: 120
+    rubric:
+      - "Uses Option<string[]> (or equivalent multi-valued option) for --item"
+      - "Joins and prints every supplied value"
+    timeout: 900
+
+  - name: "M9: an option shared by all subcommands"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, create a root command
+      with two subcommands `a` and `b`, and a single boolean option `--verbose` that BOTH
+      subcommands can accept (a recursive / global option declared once on the root). Each
+      subcommand prints `<name> verbose=<true/false>`. Build and run to confirm
+      (e.g. `a --verbose` prints `a verbose=True`). 
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m9-recursive/App.csproj }
+        - { path: Program.cs, source: fixtures/m9-recursive/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- a --verbose"
+        expected_exit_code: 0
+        expected_std_output_matches: "a verbose=[Tt]rue"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- b"
+        expected_exit_code: 0
+        expected_std_output_matches: "b verbose=[Ff]alse"
+        command_timeout: 120
+    rubric:
+      - "Declares --verbose once with Recursive = true on the root command"
+      - "Both subcommands read it via ParseResult.GetValue"
+    timeout: 900
+
+  - name: "M10: an option with a custom range validator"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add an int option
+      `--port` with a custom validator that rejects values outside 1-65535 with a parse
+      error; on success print `port: <value>`. Build and run to confirm
+      (`--port 8080` succeeds; `--port 99999` is a parse error).
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m10-validator/App.csproj }
+        - { path: Program.cs, source: fixtures/m10-validator/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --port 8080"
+        expected_exit_code: 0
+        expected_std_output_matches: "port: 8080"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --port 99999"
+        expected_exit_code: 1
+        command_timeout: 120
+    rubric:
+      - "Adds a validator via option.Validators.Add that calls result.AddError when out of range"
+      - "Prints the port on success; out-of-range fails parsing (exit 1)"
+    timeout: 900
+
+  - name: "M11: a file option that must point at an existing file"
+    prompt: |
+      This project references System.CommandLine 3.x and ships a file `data.txt`. In
+      Program.cs, add a `FileInfo` option `--file` that only accepts a file that already
+      exists, and print `file: <file name>`. A non-existent path must be a parse error.
+      Build and run to confirm (`--file data.txt` succeeds; `--file missing.txt` fails).
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m11-fileexists/App.csproj }
+        - { path: Program.cs, source: fixtures/m11-fileexists/Program.cs }
+        - { path: data.txt, source: fixtures/m11-fileexists/data.txt }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --file data.txt"
+        expected_exit_code: 0
+        expected_std_output_matches: "file: data.txt"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --file missing.txt"
+        expected_exit_code: 1
+        command_timeout: 120
+    rubric:
+      - "Uses Option<FileInfo> with AcceptExistingOnly()"
+      - "Prints the file name on success; a missing file fails parsing (exit 1)"
+    timeout: 900
+
+  - name: "M12: an argument that captures all remaining tokens"
+    prompt: |
+      This project references System.CommandLine 3.x. In Program.cs, add a positional
+      argument that greedily captures ALL remaining command-line tokens (including ones
+      that look like options), and print `captured: <comma-joined tokens>`. Build and run
+      to confirm (e.g. `a b c` prints `captured: a,b,c`).
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/m12-remaining/App.csproj }
+        - { path: Program.cs, source: fixtures/m12-remaining/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- a b c"
+        expected_exit_code: 0
+        expected_std_output_matches: "captured: a,b,c"
+        command_timeout: 120
+    rubric:
+      - "Uses an Argument<string[]> with CaptureRemainingTokens = true"
+      - "Prints every captured token"
     timeout: 900
