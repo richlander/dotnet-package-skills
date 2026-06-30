@@ -268,3 +268,253 @@ scenarios:
       - "Registers the type on a partial MarkoutSerializerContext and serializes through it"
       - "The project builds and prints the tree; does not hand-write the tree"
     timeout: 900
+
+  # ---------------------------------------------------------------------------
+  # MM tier (+6 -> 12): the rest of what the compact AGENTS.md documents — the
+  # remaining built-in shapes, section levels, and formatters. AGENTS.md should
+  # clear these (overfit guard: it was tuned on MM1-6, must generalize here too).
+  # ---------------------------------------------------------------------------
+
+  # MM7 (q13) — Metric shape. Step timings under a "## Performance" section.
+  - name: "MM7: step timings as metric shapes"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds build step timings in plain objects. Using that library, print a
+      GitHub-flavored Markdown report to the console with:
+        - an H1 title ("Build Report")
+        - a "## Performance" section showing each step's time using the library's built-in
+          metric shape
+      Produce the output through that library's serializer (do not hand-write the table).
+      Build and run the project to confirm it prints the report.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/metrics/Report.csproj
+        - path: Program.cs
+          source: fixtures/metrics/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "Metric"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Build Report)(?=[\\s\\S]*## Performance)(?=[\\s\\S]*\\| Compile \\| 4\\.8 \\|)"
+        command_timeout: 120
+    rubric:
+      - "Uses the built-in Metric shape for the step timings under a [MarkoutSection(Name = \"Performance\")] with [MarkoutIgnoreInTable]"
+      - "Registers every type on a partial MarkoutSerializerContext and serializes through it; the project builds and prints the report"
+    timeout: 900
+
+  # MM8 (q14) — Breakdown/Segment shape. Severity counts as a proportional breakdown.
+  - name: "MM8: severity counts as a breakdown"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds severity counts in plain objects. Using that library, print a
+      GitHub-flavored Markdown report to the console with:
+        - an H1 title ("Scan Summary")
+        - a "## Severity" section rendering the counts as a proportional breakdown using the
+          library's built-in breakdown/segment shapes
+      Produce the output through that library's serializer (do not hand-write the table).
+      Build and run the project to confirm it prints the report.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/breakdown/Report.csproj
+        - path: Program.cs
+          source: fixtures/breakdown/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "Breakdown"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Scan Summary)(?=[\\s\\S]*## Severity)(?=[\\s\\S]*\\| Critical \\| 3 \\|)"
+        command_timeout: 120
+    rubric:
+      - "Uses the built-in Breakdown + Segment shapes for the distribution under a [MarkoutSection] with [MarkoutIgnoreInTable]"
+      - "Registers every type on a partial MarkoutSerializerContext and serializes through it; the project builds and prints the report"
+    timeout: 900
+
+  # MM9 (q17) — Description shape. A glossary of term + explanation.
+  - name: "MM9: a glossary with description shapes"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds glossary entries in plain objects. Using that library, print a
+      GitHub-flavored Markdown report to the console with:
+        - an H1 title ("Glossary")
+        - a "## Terms" section rendering each entry as a term + explanation using the
+          library's built-in description shape
+      Produce the output through that library's serializer (do not hand-write the list).
+      Build and run the project to confirm it prints the report.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/glossary/Report.csproj
+        - path: Program.cs
+          source: fixtures/glossary/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "Description"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Glossary)(?=[\\s\\S]*## Terms)(?=[\\s\\S]*\\*\\*API:\\*\\* Application Programming Interface)"
+        command_timeout: 120
+    rubric:
+      - "Uses the built-in Description shape (term + text) under a [MarkoutSection(Name = \"Terms\")] with [MarkoutIgnoreInTable]"
+      - "Registers every type on a partial MarkoutSerializerContext and serializes through it; the project builds and prints the report"
+    timeout: 900
+
+  # MM10 (q18) — CodeSection shape. A fenced code block with a language.
+  - name: "MM10: a fenced code block via the code-section shape"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds a code snippet and its language in plain values. Using that library,
+      print a GitHub-flavored Markdown report to the console with:
+        - an H1 title ("Example")
+        - the snippet rendered as a fenced code block (with the language) using the library's
+          built-in code-section shape
+      Produce the output through that library's serializer (do not hand-write the ``` fence).
+      Build and run the project to confirm it prints the report.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/codesection/Report.csproj
+        - path: Program.cs
+          source: fixtures/codesection/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "CodeSection"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Example)(?=[\\s\\S]*```csharp)(?=[\\s\\S]*public class Foo \\{ \\})"
+        command_timeout: 120
+    rubric:
+      - "Uses the built-in CodeSection shape (language + content) as a scalar [MarkoutIgnoreInTable] property"
+      - "Registers the type on a partial MarkoutSerializerContext and serializes through it; the project builds and prints the fenced code block"
+    timeout: 900
+
+  # MM11 (q19) — section heading at a custom level. A "### Breaking Changes" subsection.
+  - name: "MM11: a section heading at a custom level"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds release breaking-changes in plain objects. Using that library, print a
+      GitHub-flavored Markdown report to the console with:
+        - an H1 title ("Release v2.0")
+        - the changes under a "Breaking Changes" subheading rendered at heading LEVEL 3
+          ("### ", not "## ") as a table
+      Use the library's section attribute to set the heading level (do not hand-write the
+      heading). Build and run the project to confirm it prints the report.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/levels/Report.csproj
+        - path: Program.cs
+          source: fixtures/levels/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "Level"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Release v2\\.0)(?=[\\s\\S]*### Breaking Changes)(?=[\\s\\S]*\\| API \\| removed Foo\\(\\) \\|)"
+        command_timeout: 120
+    rubric:
+      - "Renders the changes as a table under [MarkoutSection(Name = \"Breaking Changes\", Level = 3)] so the heading is ### (level 3)"
+      - "Registers every type on a partial MarkoutSerializerContext and serializes through it; the project builds and prints the report"
+    timeout: 900
+
+  # MM12 (q23) — formatter selection. Emit the package list as TSV.
+  - name: "MM12: emit a package list as TSV"
+    prompt: |
+      This console project references a source-generated .NET serializer library that can
+      render annotated objects in several formats (see the package reference in the .csproj).
+      Program.cs holds a list of NuGet packages in plain objects. Using that library, emit
+      the packages as TSV (tab-separated values, one row per package with name and version)
+      to the console so the output can be piped into another tool. Produce the output through
+      the library (do not hand-write tab-delimited strings). Build and run the project to
+      confirm it prints tab-separated rows.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/tsv/Report.csproj
+        - path: Program.cs
+          source: fixtures/tsv/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "Tsv"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*Serilog\\t3\\.1\\.1)(?=[\\s\\S]*Polly\\t8\\.2\\.0)(?=[\\s\\S]*Newtonsoft\\.Json\\t13\\.0\\.3)"
+        command_timeout: 120
+    rubric:
+      - "Selects the TableFormatter and sets MarkoutWriterOptions.TableMode = MarkoutTableMode.Tsv"
+      - "Passes the options + context to MarkoutSerializer.Serialize; the output is genuinely tab-separated, one row per package; the project builds and runs"
+    timeout: 900
