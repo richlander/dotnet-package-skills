@@ -55,28 +55,35 @@ grounding's value** (treat every delta as a *lower bound*; see [harness.md](./ha
 PATH** (removing `dotnet-inspect`/`ildasm`/`ilspycmd`, keeping system `dotnet`/`dnx`). Tool availability is
 a **separate lever**, layered in deliberately as its own arm — not part of the content comparison.
 
-### Two regimes, a three-rung ladder, and the arm × scheme matrix
+### Three question tiers, the arms that run them, and a cost-tiered ladder
 
-Two **question regimes**, named for the doc archetype that clears them:
+Three **nested** question tiers, named for the doc that should clear each (`Mini ⊂ MM ⊂ CT`):
 
-- **Missing Manual** (~6 questions) — everyday tasks that *(model + `AGENTS.md`)* should satisfy.
-- **Complete Textbook** (~24 questions; the Missing Manual 6 are a **subset**) — advanced, discriminating
-  tasks where a compact `AGENTS.md` is *expected* to fall off. The ~24-set is also the overfitting defense
-  (broader API coverage, with room for an author/held-out split).
+| Tier | Size | Role |
+| --- | --- | --- |
+| **Mini** | **6** | smoke test — fast sanity for any doc |
+| **MM** (Missing Manual) | **12** (6 + 6) | what `AGENTS.md` should clear — and, being broader than the smoke 6, the **overfit guard** |
+| **CT** (Complete Textbook) | **24** (12 + 12) | the full exam; the top 12 are **`SKILL.md` territory** |
 
 A **cost-tiered, opt-in ladder** — run as much as the question warrants:
 
-| Rung | Arms | Scheme | Question |
+| Rung | Arms | Tier | Question |
 | --- | --- | --- | --- |
-| **0 — min bar** (required) | baseline vs Missing Manual | MM-6 | does grounding beat none? |
-| **1 — standard** | baseline · Front Door · Missing Manual | MM-6 | is the README usable; does `AGENTS.md` add efficiency? |
-| **2 — extended** (optional) | baseline · Missing Manual · Textbook | CT-24 | where does `AGENTS.md` fall off, and does the Textbook recover it? |
+| **0 — smoke** | baseline vs Missing Manual | Mini-6 | does grounding beat none, quickly? |
+| **1 — remit** | baseline · Front Door · Missing Manual | MM-12 | does `AGENTS.md` clear its remit without overfitting; is the README usable? |
+| **2 — full** (optional) | baseline · Missing Manual · Front Door · **Textbook** | CT-24 | where does `AGENTS.md` fall off, and **what do `SKILL.md`'s extra tokens buy** (`AGENTS.md`@24 vs `SKILL.md`@24)? |
 
-Textbook is omitted from MM-6 (it passes by construction); Front Door is optional on CT-24. Rung 2 runs the
-real `SKILL.md` through the validator, so it **doubles as a skill eval** in service of sizing `AGENTS.md`'s
-remit. The **Front Door** arm *is* the README usability test (it replaces the older "source-diff card"):
-if the README-grounded agent fails a question or is forced into archaeology, that is a **README bug to fix
-in the same PR** — *if an AI given only the README can't answer it, an untrained human can't either.*
+**Mini** is the cheap smoke; **MM-12** is the overfit guard (a compact doc tuned to the smoke 6 must still
+generalize to 12); **CT-24** runs the real `SKILL.md` (so it **doubles as a skill eval**) and, by also
+running `AGENTS.md` across all 24, measures the Textbook's marginal value. The **Front Door** arm *is* the
+README usability test (it replaces the older "source-diff card"): if the README-grounded agent fails a
+question or is forced into archaeology, that is a **README bug to fix in the same PR** — *if an AI given
+only the README can't answer it, an untrained human can't either.*
+
+> **Sizing — double is the north star.** 6 / 12 / 24 is the **starting** size, chosen because eval is
+> expensive. The aspirational target is **double** — 12 / 24 / 48 — for sharper overfit and falloff
+> signal, but we **defer it until more packages, users, and feedback motivate the cost**. Start small;
+> scale the tiers when the evidence demands it.
 
 ---
 

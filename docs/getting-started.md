@@ -88,7 +88,7 @@ evidence dump and the [PR template](./templates/canonical-grounding-pr.md).
 ## Where to go next
 
 - [`grounding-eval-methodology.md`](./grounding-eval-methodology.md) — the arms, the two regimes
-  (Missing Manual ~6 / Complete Textbook ~24), the three-rung ladder, and the ship gate.
+  (Mini 6 / MM 12 / CT 24, nested), the cost-tiered ladder, and the ship gate.
 - [`authoring-principles.md`](./authoring-principles.md) — how to write the three documents
   (Front Door / Missing Manual / Complete Textbook).
 - [`harness.md`](./harness.md) — how `skill-validator` is built and run, and the confounds.
