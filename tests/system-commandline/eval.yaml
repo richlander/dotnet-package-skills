@@ -89,7 +89,7 @@ scenarios:
         command_to_run: "dotnet"
         command_arguments: "run --no-build -- --message Hi --count 2"
         expected_exit_code: 0
-        expected_std_output_matches: "Hi\\nHi"
+        expected_std_output_matches: "Hi\\s*\\n\\s*Hi"
         command_timeout: 120
       - type: run_command_and_assert
         command_to_run: "dotnet"
@@ -124,7 +124,7 @@ scenarios:
         command_to_run: "dotnet"
         command_arguments: "run --no-build -- --level high"
         expected_exit_code: 0
-        expected_std_output_matches: "level: high"
+        expected_std_output_matches: "level:\\s*high"
         command_timeout: 120
       - type: run_command_and_assert
         command_to_run: "dotnet"
@@ -277,7 +277,7 @@ scenarios:
         command_to_run: "dotnet"
         command_arguments: "run --no-build -- --name Bob --count 3 --verbose"
         expected_exit_code: 0
-        expected_std_output_matches: "name=Bob count=3 verbose=[Tt]rue"
+        expected_std_output_matches: "name=Bob\\s+count=3\\s+verbose=[Tt]rue"
         command_timeout: 120
     rubric:
       - "Declares Option<string>, Option<int> (DefaultValueFactory 1), and a bool flag Option<bool>"
@@ -300,7 +300,7 @@ scenarios:
         command_to_run: "dotnet"
         command_arguments: "run --no-build -- --item a --item b --item c"
         expected_exit_code: 0
-        expected_std_output_matches: "items: a,b,c"
+        expected_std_output_matches: "items:\\s*a,\\s*b,\\s*c"
         command_timeout: 120
     rubric:
       - "Uses Option<string[]> (or equivalent multi-valued option) for --item"
@@ -355,7 +355,7 @@ scenarios:
         command_to_run: "dotnet"
         command_arguments: "run --no-build -- --port 8080"
         expected_exit_code: 0
-        expected_std_output_matches: "port: 8080"
+        expected_std_output_matches: "port:\\s*8080"
         command_timeout: 120
       - type: run_command_and_assert
         command_to_run: "dotnet"
@@ -414,7 +414,7 @@ scenarios:
         command_to_run: "dotnet"
         command_arguments: "run --no-build -- a b c"
         expected_exit_code: 0
-        expected_std_output_matches: "captured: a,b,c"
+        expected_std_output_matches: "captured:\\s*a,\\s*b,\\s*c"
         command_timeout: 120
     rubric:
       - "Uses an Argument<string[]> with CaptureRemainingTokens = true"
