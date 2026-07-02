@@ -107,12 +107,13 @@ a small efficiency gain bought with a large output-token increase is still a **f
 ## The eval dump (copy-paste into the PR)
 
 `grounding analyze` emits **three single-variable cards**, each isolating exactly one comparison so the
-data is trivial to read. Every card shows the same metric rows — `success (scenarios)`, `func passed`,
-`resourcefulness (archaeology)`, `IET`, `output tok`, `cost` — and a **Conclusion**: a single **uniform,
-model-independent grade** of grounding's effect vs baseline, **BETTER / NEUTRAL / WORSE** (the same rubric
-for every model — the card grades, it does not decide shipping; that is the ship decision above). Grading keys off **objective
-axes only** (success, web archaeology, cost/IET); there is **no judge-quality diff** (the judge-floor section below). A dataset whose
-filename contains `readme` is read as the **README arm**.
+data is trivial to read. Every card's first column is `Metric (goal)`: `(+)` means higher is better,
+`(-)` means lower is better, and `(context)` is explanatory. Each card also emits a **Conclusion**: a
+single **uniform, model-independent grade** of grounding's effect vs baseline, **BETTER / NEUTRAL /
+WORSE** (the same rubric for every model — the card grades, it does not decide shipping; that is the
+ship decision above). Grading keys off **objective axes only** (success, web archaeology, cost/IET);
+there is **no judge-quality diff** (the judge-floor section below). A dataset whose filename contains
+`readme` is read as the **README arm**.
 
 - **BETTER** — success held and a real win: solves more scenarios, resourcefulness eliminated, or IET/cost down ≥ 25%; no regression.
 - **NEUTRAL** — success held, no material efficiency win.
@@ -139,16 +140,17 @@ grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-
 ```text
 ### Grounding eval — nugetfetch · `claude-haiku-4.5`
 
-| Metric | Baseline | AGENTS.md |
+| Metric (goal) | Baseline | AGENTS.md |
 | --- | ---: | ---: |
-| success (scenarios) | 5/6 | 6/6 |
-| func passed (assertions) | 17/18 | 18/18 |
-| resourcefulness (archaeology) | 35 | 0 |
-| IET | 31276 | 17558 |
-| output tok | 5782 | 1716 |
-| cost | 7.75 | 2.28 |
+| success (scenarios) (+) | 5/6 | 6/6 |
+| func passed (assertions) (+) | 17/18 | 18/18 |
+| resourcefulness (archaeology) (-) | 35 | 0 |
+| grounding load (tok) (context) | 0 | 540 |
+| work IET (iet - doc) (-) | 31276 | 17018 |
+| output tok (-) | 5782 | 1716 |
+| cost (-) | 7.75 | 2.28 |
 
-> **Conclusion:** **BETTER** — success 6/6 vs 5/6, resourcefulness 35→0, IET -44%, cost -71%.
+> **Conclusion:** **BETTER** — success 6/6 vs 5/6, resourcefulness 35→0, work-IET -46%, cost -71%.
 ```
 
 The card emits a shared **Legend** explaining each row and the BETTER / NEUTRAL / WORSE grade. For the

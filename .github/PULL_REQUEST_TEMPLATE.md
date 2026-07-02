@@ -17,7 +17,8 @@ Unit: `grounding/<unit>` · Package: `<Name> <version>` · `AGENTS.md` body line
      grounding analyze --card data/<unit>-6q/<unit>.n3.haiku.json   # mini WIN
      grounding analyze --card data/<unit>-6q/<unit>.n3.opus.json    # frontier NO-HARM
 Each card prints its metrics table, a term Legend, and the tier gate (PASS/FAIL per threshold).
-Keep the Legend — outside readers need it to interpret IET / output tok / func / the arm names. -->
+Keep the Legend — outside readers need it to interpret IET / output tok / func / the arm names.
+Metric rows carry goal markers: (+) means higher is better; (-) means lower is better. -->
 
 <!-- mini-tier (WIN) card here -->
 

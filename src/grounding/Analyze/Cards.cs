@@ -44,13 +44,13 @@ internal sealed partial class Cards
 
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
-        ("success (scenarios)",       RawSuccess, DiffSuccess),
-        ("func passed (assertions)",  RawFunc,    DiffFunc),
-        ("resourcefulness (archaeology)", RawArch, DiffArch),
-        ("grounding load (tok)",      RawDoc,     DiffDoc),
-        ("work IET (iet - doc)",      RawWorkIet, DiffWorkIet),
-        ("output tok",                RawOut,     DiffOut),
-        ("cost",                      RawCost,    DiffCost),
+        ("success (scenarios) (+)",            RawSuccess, DiffSuccess),
+        ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
+        ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
+        ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
+        ("work IET (iet - doc) (-)",           RawWorkIet, DiffWorkIet),
+        ("output tok (-)",                     RawOut,     DiffOut),
+        ("cost (-)",                           RawCost,    DiffCost),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
@@ -107,7 +107,7 @@ internal sealed partial class Cards
         var mpref = NoTitle ? $"`{a.Model}` | " : "";
         var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
         _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. Means across scenarios._\n");
-        _o.WriteLine("| Metric | Baseline | AGENTS.md |");
+        _o.WriteLine("| Metric (goal) | Baseline | AGENTS.md |");
         _o.WriteLine("| --- | ---: | ---: |");
         foreach (var (label, raw, _) in Spec)
             _o.WriteLine($"| {label} | {raw(b)} | {raw(g)} |");
@@ -127,7 +127,7 @@ internal sealed partial class Cards
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
         _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
-        _o.WriteLine("| Metric | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
+        _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, raw, _) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
@@ -151,7 +151,7 @@ internal sealed partial class Cards
         if (!NoTitle)
             _o.WriteLine($"### Model-diff — {sn} | AGENTS.md lift over baseline\n");
         _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
-        _o.WriteLine("| Metric | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
+        _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, _, diff) in Spec)
         {
@@ -181,7 +181,7 @@ internal sealed partial class Cards
         var sn = models[0].Agents!.SkillName;
         if (!NoTitle) _o.WriteLine($"### Comparison to README.md — {sn}\n");
         _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. Means across scenarios._\n");
-        _o.WriteLine("| Metric | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
+        _o.WriteLine("| Metric (goal) | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", models.Count)));
         foreach (var (label, _, diff) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", models.Select(m => diff(m.Agents!.Agg[Arm], m.Readme!.Agg[Arm]))) + " |");
