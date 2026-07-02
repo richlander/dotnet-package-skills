@@ -4,11 +4,14 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
 
 ## Primary
 
+- **[overview.md](./overview.md)** — **read this first**: the whole system in one pass — the three
+  documents (Brochure / Missing Manual / Complete Textbook), the three task tiers
+  (Core-6 / MM-12 / CT-24), and the eval-diff triangulation that gives each its confidence signal.
 - **[getting-started.md](./getting-started.md)** — build the `grounding` CLI, author a unit, run the
   ladder, read the card.
 - **[grounding-eval-methodology.md](./grounding-eval-methodology.md)** — the *approach*: content arms
-  (baseline / Missing Manual / Front Door / Textbook), the three nested tiers (Mini 6 / MM 12 /
-  CT 24), the cost-tiered ladder, and the confounds.
+  (baseline / Missing Manual / Brochure / Complete Textbook), the three nested tiers
+  (Core-6 / MM-12 / CT-24), the cost-tiered ladder, and the confounds.
 - **[scoring.md](./scoring.md)** — *grading and shipping*: the **BETTER / NEUTRAL / WORSE** grade model,
   the tier-aware ship gate, the cards, the PR contents + checklist, and the judge-floor finding.
 - **[eval-protocol.md](./eval-protocol.md)** — *measurement discipline*: the pre-registered rules that

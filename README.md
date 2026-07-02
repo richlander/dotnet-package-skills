@@ -5,8 +5,11 @@ root and make the package *self-teaching* for an AI agent — and to **measuring
 content actually helps.
 
 **Why this is needed.** When an agent touches a package today, the best it gets is the package's
-README — a median of ~4–5 kB across popular packages, with a substantial tail to **~26 kB**
-([survey of the top 40 Microsoft-owned and top 40 community packages](docs/reports/readme-size-survey.md)).
+README — and **often not even that**: across the **top 1,000** Microsoft/Azure/System packages,
+**62% ship no in-package README at all** (and ~50% of the top 1,000 community packages don't either);
+where one exists it is small — a median of **~2–3 kB** — with a long tail to **44–94 kB**
+([top-1,000 README survey](docs/reports/readme-size-survey-top1000.md); earlier
+[top-40 study](docs/reports/readme-size-survey.md)).
 That prose is
 written to **onboard a human browsing nuget.org**: install steps, prerequisites, "key concepts,"
 contributing boilerplate (2–4 kB on its own in the Azure-SDK template), and broad usage examples —
@@ -32,6 +35,26 @@ using pairwise LLM judging. The harness mechanics live in [`docs/harness.md`](do
 this page is about the *concept* and the *findings*. How we evaluate a grounding change and decide
 whether it ships — the methodology, terms, threshold gate, and evidence dump — is the
 [grounding eval methodology](docs/grounding-eval-methodology.md).
+
+## The three documents and three tiers
+
+A package can carry up to three grounding documents — each for a different reader and delivery —
+and the eval runs three nested task tiers. See **[docs/overview.md](docs/overview.md)** for the full
+model; the salient shape:
+
+| Document | Nickname | Reader | Delivery | Job |
+| --- | --- | --- | --- | --- |
+| `README.md` / `PACKAGE.md` | **Brochure** | humans | pulled (you open it) | introduce, market, onboard |
+| `AGENTS.md` | **Missing Manual** | models | co-located, always-on | fill the model's gaps; terse |
+| `SKILL.md` | **Complete Textbook** | models (opt-in) | opted-in repo asset — *not* packed | complete instruction; the eval **ceiling** |
+
+Three nested task tiers — **Core-6 ⊂ MM-12 ⊂ CT-24** — grow from day-1 common tasks to niche
+day-100 ones. We run head-to-head per tier (baseline vs each document, on a mini *and* a frontier
+model) and read the **eval diff across the documents**. That triangulation is the payoff: it shows
+where each document earns its keep, whether `AGENTS.md` generalizes up the ladder, and whether
+[Pareto](https://en.wikipedia.org/wiki/Pareto_efficiency) holds across model tiers — while paying
+eval dividends for all three. `SKILL.md` isn't shipped in the package; it serves as the
+completeness ceiling every question should clear.
 
 ## How we measure cost: IET
 
