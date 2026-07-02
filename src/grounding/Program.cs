@@ -183,9 +183,8 @@ root.Subcommands.Add(tasks);
 
 var eUnit = new Argument<string>("unit") { Description = "Grounding unit." };
 var eTo = new Option<string>("--to") { Description = "Target dir (e.g. <repo>/grounding/<unit>).", Required = true };
-var eData = new Option<string?>("--data") { Description = "Blessed dataset dir (default data/<unit>-fc)." };
-var export = new Command("export", "Export a self-contained grounding bundle into a target repo.") { eUnit, eTo, eData };
-export.SetAction(p => Grounding.Bundle.Bundle.Export(p.GetValue(eUnit)!, p.GetValue(eTo)!, p.GetValue(eData)));
+var export = new Command("export", "Export a self-contained grounding bundle into a target repo.") { eUnit, eTo };
+export.SetAction(p => Grounding.Bundle.Bundle.Export(p.GetValue(eUnit)!, p.GetValue(eTo)!));
 root.Subcommands.Add(export);
 
 root.SetAction(_ =>

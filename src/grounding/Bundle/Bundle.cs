@@ -53,7 +53,9 @@ internal static partial class Bundle
         sb.Append("Real jobs a developer asks an AI to do with this package. Each is gated by a\n");
         sb.Append("build + run with a deterministic anchor, so the grounding (AGENTS.md) is proven\n");
         sb.Append("to move an agent from \"fails / hand-rolls\" to \"uses the API correctly, first try.\"\n");
-        sb.Append("Machine form + fixtures: `eval.yaml`. Datasets/cards: `data/`.\n\n");
+        sb.Append("Machine form + fixtures: `eval.yaml`. Regenerate results with `run.sh` — datasets\n");
+        sb.Append("land in the grounding cache (`$GROUNDING_DATA_DIR`, not the repo); the distilled\n");
+        sb.Append("quality card lives in the PR.\n\n");
         sb.Append("| # | Task | Key API | Anchor |\n| --- | --- | --- | --- |\n");
         for (var i = 0; i < s.Count; i++)
         {
@@ -77,7 +79,7 @@ internal static partial class Bundle
         return 0;
     }
 
-    public static int Export(string unit, string to, string? dataDir)
+    public static int Export(string unit, string to)
     {
         var root = RepoRoot.Find(); if (root is null) { Console.Error.WriteLine("no repo root"); return 1; }
         Directory.CreateDirectory(to);
@@ -86,12 +88,8 @@ internal static partial class Bundle
         File.Copy(Path.Combine(root, "tests", unit, "eval.yaml"), Path.Combine(to, "eval.yaml"), true);
         CopyDir(Path.Combine(root, "tests", unit, "fixtures"), Path.Combine(to, "fixtures"));
         File.WriteAllText(Path.Combine(to, "TASKS.md"), RenderTasks(unit, Parse(Path.Combine(to, "eval.yaml"))));
-        var src = dataDir ?? Path.Combine(root, "data", $"{unit}-fc");
-        if (Directory.Exists(src))
-        {
-            var dd = Path.Combine(to, "data"); Directory.CreateDirectory(dd);
-            foreach (var f in Directory.GetFiles(src, "*.json")) File.Copy(f, Path.Combine(dd, Path.GetFileName(f)), true);
-        }
+        // Datasets are regenerable outputs and are NOT bundled: `run.sh` writes them to
+        // the user cache ($GROUNDING_DATA_DIR); the distilled card lives in the PR.
         Console.WriteLine($"exported {unit} bundle -> {to}");
         return 0;
     }
