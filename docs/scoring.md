@@ -43,17 +43,17 @@ Correctness may never regress; then at least one win axis must clear:
 
 | Axis | Type | Threshold |
 | --- | --- | --- |
-| `success` | guard (hard) | Δ ≥ 0 — grounding must not solve fewer scenarios |
+| `tasks correct` | guard (hard) | Δ ≥ 0 — grounding must not solve fewer tasks |
 | `func` | guard (hard) | Δ ≥ 0 — no functional-assertion regression |
 | `web` | guard (hard) | grounded **web** calls = 0 (never resort to the internet; local cache peeks are allowed) |
-| `success` | **win** | Δ > 0 — solves scenarios the baseline failed, **or** |
+| `tasks correct` | **win** | Δ > 0 — solves tasks the baseline failed, **or** |
 | `iet` | **win** | ≥ 25% reduction vs baseline, **or** |
 | `cost` | **win** | ≥ 25% reduction vs baseline, **or** |
 | `resourcefulness` | **win** | eliminated (baseline > 0 → grounded 0) |
 
-On the mini tier a large cost/IET reduction (or eliminated resourcefulness) with **success held** **is**
+On the mini tier a large cost/IET reduction (or eliminated resourcefulness) with **task correctness held** **is**
 a legitimate ship — tokens are cheap, the binding constraint was the model otherwise flailing or
-failing. A success *gain* (solving scenarios the baseline failed) is the strongest mini win.
+failing. A task-correctness gain (solving tasks the baseline failed) is the strongest mini win.
 
 ### Frontier tier — require *not WORSE* (a BETTER is a welcome bonus)
 
@@ -67,9 +67,9 @@ ourselves into only ever saying "no harm" on opus once, and the uniform grade fi
 
 So, reading the **uniform card grade** for the frontier ship decision:
 
-- **BETTER** — grounding pays off even here (cheaper, or eliminates resourcefulness, with success held). Ships; a bonus.
-- **NEUTRAL** — success held, no material efficiency win. **Ships** — this is all the frontier tier is required to show.
-- **WORSE** — success dropped, grounded web archaeology, or IET/cost/output inflated past the cap. **Blocks the ship.**
+- **BETTER** — grounding pays off even here (cheaper, or eliminates resourcefulness, with task correctness held). Ships; a bonus.
+- **NEUTRAL** — task correctness held, no material efficiency win. **Ships** — this is all the frontier tier is required to show.
+- **WORSE** — fewer tasks correct, grounded web archaeology, or IET/cost/output inflated past the cap. **Blocks the ship.**
 
 **WORSE is bounded by a number, not a bool.** The headline harm metric is the **IET diff from baseline**
 (`IET_grounded − IET_baseline`, signed). It need not be zero — it carries a **hard cap** (a budget):
@@ -80,7 +80,7 @@ the number so the effect is *tracked as a quantity*, not collapsed to a pass/fai
 
 | Axis | Threshold |
 | --- | --- |
-| `success` | Δ ≥ 0 — grounding must not solve fewer scenarios |
+| `tasks correct` | Δ ≥ 0 — grounding must not solve fewer tasks |
 | `func` | Δ ≥ 0 — no functional-assertion drop |
 | **`IET diff`** | **≤ hard cap** — `IET_grounded − IET_baseline` may not inflate past the budget (**the headline harm number**) |
 | `cost` | ≤ hard cap — grounded cost may not inflate past the budget |
@@ -111,13 +111,13 @@ data is trivial to read. Every card's first column is `Metric (goal)`: `(+)` mea
 `(-)` means lower is better, and `(context)` is explanatory. Each card also emits a **Conclusion**: a
 single **uniform, model-independent grade** of grounding's effect vs baseline, **BETTER / NEUTRAL /
 WORSE** (the same rubric for every model — the card grades, it does not decide shipping; that is the
-ship decision above). Grading keys off **objective axes only** (success, web archaeology, cost/IET);
+ship decision above). Grading keys off **objective axes only** (task correctness, web archaeology, cost/IET);
 there is **no judge-quality diff** (the judge-floor section below). A dataset whose filename contains
 `readme` is read as the **README arm**.
 
-- **BETTER** — success held and a real win: solves more scenarios, resourcefulness eliminated, or IET/cost down ≥ 25%; no regression.
-- **NEUTRAL** — success held, no material efficiency win.
-- **WORSE** — success dropped, grounded web archaeology, or cost/IET/output inflated past the cap.
+- **BETTER** — task correctness held and a real win: more tasks correct, resourcefulness eliminated, or IET/cost down ≥ 25%; no regression.
+- **NEUTRAL** — task correctness held, no material efficiency win.
+- **WORSE** — fewer tasks correct, grounded web archaeology, or cost/IET/output inflated past the cap.
 
 | Card | Flag | Holds fixed | Varies | Answers |
 | --- | --- | --- | --- | --- |
@@ -142,7 +142,7 @@ grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-
 
 | Metric (goal) | Baseline | AGENTS.md |
 | --- | ---: | ---: |
-| success (scenarios) (+) | 5/6 | 6/6 |
+| tasks correct (+) | 5/6 | 6/6 |
 | func passed (assertions) (+) | 17/18 | 18/18 |
 | resourcefulness (archaeology) (-) | 35 | 0 |
 | grounding load (tok) (context) | 0 | 540 |
@@ -150,7 +150,7 @@ grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-
 | output tok (-) | 5782 | 1716 |
 | cost (-) | 7.75 | 2.28 |
 
-> **Conclusion:** **BETTER** — success 6/6 vs 5/6, resourcefulness 35→0, work-IET -46%, cost -71%.
+> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, resourcefulness 35→0, work-IET -46%, cost -71%.
 ```
 
 The card emits a shared **Legend** explaining each row and the BETTER / NEUTRAL / WORSE grade. For the
@@ -195,8 +195,8 @@ cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # comm
 - [ ] `AGENTS.md` within the line limit; `grounding sync-skill --check` passes.
 - [ ] Datasets committed under `data/<unit>-6q/`; both `--card` dumps in the PR match them.
 - [ ] n ≥ 3; model and judge named, for **both** tiers.
-- [ ] Mini tier graded **BETTER** (a success gain, eliminated resourcefulness, or ≥25% cost/IET cut; no success/func/web regression).
-- [ ] Frontier tier graded **not WORSE** (BETTER or NEUTRAL — IET/cost/output under the cap; no success/func regression).
+- [ ] Mini tier graded **BETTER** (more tasks correct, eliminated resourcefulness, or ≥25% cost/IET cut; no task/func/web regression).
+- [ ] Frontier tier graded **not WORSE** (BETTER or NEUTRAL — IET/cost/output under the cap; no task/func regression).
 - [ ] Claims cite normative metrics; signals only explain.
 - [ ] Grounding text is package-specific, justified by the package's actual trap.
 - [ ] Required caveats present; cache reads attributed per arm (not grepped).
@@ -233,12 +233,12 @@ whose entire value is to make that effort unnecessary.
 
 **The fix — two parts:**
 
-1. **Decompose quality into `success` + `resourcefulness`.** `success` uses the judge's score
+1. **Decompose quality into `tasks correct` + `resourcefulness`.** `tasks correct` uses the judge's score
    *only* as a coarse ≥4 pass/fail floor (a robust judgment). `resourcefulness` — the "how hard did
    it have to work" signal the top band was groping at — is measured **objectively** from the
    timeline (archaeology), never from the judge. Grounding's job is to make resourcefulness
    *unnecessary*, so lower-for-grounded is the win, never a quality penalty. Harm is then keyed on
-   objective axes only (success, web archaeology, cost/IET).
+   objective axes only (task correctness, web archaeology, cost/IET).
 
 2. **De-bias the judge's floor.** Even the ≥4 floor can be nudged by the effort bias (a grounded
    scenario sat at 3.7 under the original judge, 4.3 under a de-biased one). Two judge-prompt clauses

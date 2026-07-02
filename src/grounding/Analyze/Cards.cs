@@ -44,7 +44,7 @@ internal sealed partial class Cards
 
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
-        ("success (scenarios) (+)",            RawSuccess, DiffSuccess),
+        ("tasks correct (+)",                  RawSuccess, DiffSuccess),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
@@ -65,12 +65,12 @@ internal sealed partial class Cards
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
         int bArch = b.Arch, gArch = g.Arch;
-        var tail = $"success {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
+        var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
                  + $"resourcefulness {bArch}\u2192{gArch}, work-IET {SignedPct(iet)}, cost {SignedPct(cost)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)
-            return $"**FAIL** — solved fewer ({tail})";
+            return $"**FAIL** — fewer tasks correct ({tail})";
 
         // WORSE: real cost/IET/output inflation (a harm signal), not a stray web call.
         var worse = new List<string>();
@@ -132,7 +132,7 @@ internal sealed partial class Cards
         foreach (var (label, raw, _) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
-        _o.WriteLine("\n_**FAIL** = solved fewer (correctness regressed); **BETTER** = solved more / archaeology→0 / IET/cost cut ≥20%; "
+        _o.WriteLine("\n_**FAIL** = fewer tasks correct; **BETTER** = more tasks correct / archaeology→0 / IET/cost cut ≥20%; "
             + "**WORSE** = IET/cost/output inflated ≥20%; **NEUTRAL** = held. Archaeology, web, judge are signals, not gates._\n");
         _o.WriteLine("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
             + "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
