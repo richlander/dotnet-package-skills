@@ -67,7 +67,7 @@ var runsOpt = new Option<int>("--runs") { Description = "Runs per scenario.", De
 var judgeOpt = new Option<string>("--judge-model") { Description = "Judge model.", DefaultValueFactory = _ => "claude-haiku-4.5" };
 var noJudgeOpt = new Option<bool>("--no-judge") { Description = "Skip judging." };
 var testsDirOpt = new Option<string>("--tests-dir") { Description = "Tests directory.", DefaultValueFactory = _ => "tests" };
-var outOpt = new Option<string?>("--out") { Description = "Output dataset dir (default data/<unit>-6q)." };
+var outOpt = new Option<string?>("--out") { Description = "Output dataset dir (default $GROUNDING_DATA_DIR or ~/.cache/grounding/<unit>-6q; not committed)." };
 var readmeFileOpt = new Option<string?>("--readme-file") { Description = "README path for --source readme." };
 var dryRunOpt = new Option<bool>("--dry-run") { Description = "Print the plan without invoking skill-validator." };
 var emitSkillOpt = new Option<string?>("--emit-skill") { Description = "Write the generated SKILL.md to a path and exit." };

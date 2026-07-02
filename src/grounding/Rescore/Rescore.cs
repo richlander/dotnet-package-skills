@@ -182,8 +182,7 @@ internal static class Rescore
 
     public static int All(double wOut)
     {
-        var root = RepoRoot.Find() ?? Directory.GetCurrentDirectory();
-        var resultsRoot = Path.Combine(root, ".skill-validator-results");
+        var resultsRoot = DataCache.ResultsRoot();
         var rows = new List<(string Lib, string Scenario, string Agent, double BaseQ, double? Harness,
             double GateDq, double GateCred, double GateOur, double BestCred, double Biet, string Dir)>();
 

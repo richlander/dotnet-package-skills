@@ -74,7 +74,7 @@ internal static class Runner
             return 0;
         }
 
-        var outDir = o.OutDir ?? Path.Combine(root, "data", $"{o.Unit}-6q");
+        var outDir = o.OutDir ?? DataCache.DatasetDir(o.Unit);
         var bin = FindSkillValidator(root);
         var skillPath = Path.Combine(unitDir, "SKILL.md");
         var groundingArg = Path.Combine("grounding", o.Unit);
@@ -89,7 +89,7 @@ internal static class Runner
                 "none" => $"{o.Unit}-none.{ms}",
                 _ => $"{o.Unit}.{ms}",
             };
-            var resultsDir = Path.Combine(root, ".skill-validator-results", $"{o.Unit}-{tag}");
+            var resultsDir = DataCache.ResultsDir(o.Unit, tag);
             var cmd = BuildCommand(bin ?? "<skill-validator>", o, model, resultsDir, groundingArg);
 
             Console.WriteLine($"#### {o.Unit}  source={o.Source}  model={ms}  runs={o.Runs} ####");
