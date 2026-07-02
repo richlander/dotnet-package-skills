@@ -57,25 +57,6 @@ MarkoutSerializer.Serialize(report, Console.Out, ReportContext.Default);
 - **Put `[MarkoutIgnoreInTable]` on non-tabular list properties** (`List<Metric>`, `List<Breakdown>`,
   `List<TreeNode>`, `List<Description>`) — and on a **scalar** `Callout` (one per alert, never a list) — or they get mistreated as table columns.
 
-## Advanced attributes (exact names — the generator only honors these; JSON/guessed attrs fail)
-
-Class-level on `[MarkoutSerializable(...)]`:
-`AutoFields = false` (stop auto-rendering scalars as a field table — emit only `[MarkoutSection]`s) ·
-`FieldLayout = FieldLayout.Inline` (also `Bulleted`/`Numbered`/`Plain`; default `Table`).
-
-Property-level:
-- `[MarkoutPropertyName("Open Issues")]` — rename the field/column heading.
-- `[MarkoutDisplayFormat("{0:N0}")]` — .NET format string (`N0` thousands, `C` currency, `P` percent).
-- `[MarkoutBoolFormat("✓","✗")]` — true/false glyphs (e.g. `"Yes","No"`).
-- `[MarkoutSkipNull]` / `[MarkoutSkipDefault]` — drop the row when null / default.
-- `[MarkoutShowWhen(nameof(HasErrors))]` — render only when that bool property is true.
-- `[MarkoutMaxItems(10)]` — cap a long list. `[MarkoutUnwrap]` — inline a list with NO `##` heading.
-- `[MarkoutLink(TextProperty = nameof(Title))]` — put ON the URL/string prop → `[Title](thatUrl)`.
-- `[MarkoutValueMap("open=🟢 Open", "closed=🔴 Closed")]` — map raw values to display badges.
-
-Section-level on `[MarkoutSection(...)]`: `GroupBy = nameof(Milestone)` (one sub-heading per value) ·
-`ShowWhenProperty = nameof(Flag)` · `Level = 3` (→ `###`) · `EmptyText = "None"`.
-
 ## Built-in shape types (use as model properties for rich output)
 
 `Metric` (bar chart), `Breakdown`/`Segment` (stacked bar), `Callout` (alert; `CalloutSeverity.Warning/Caution/Note/Tip/Important`), `TreeNode`
