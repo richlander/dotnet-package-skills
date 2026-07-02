@@ -65,13 +65,19 @@ normalizes each token class to fresh-input units:
 IET = fresh + 0.1·cacheRead + 1.25·cacheWrite + 5·output
 ```
 
-where `fresh = inputTokens − cacheReadTokens`. This **diverges from the `dotnet/skills` harness
+where `fresh = inputTokens − cacheReadTokens` is Anthropic's **Base Input Tokens** at 1× (the
+SDK's `inputTokens` is cache-read-inclusive, verified against every dataset — cacheRead never
+exceeds it). The formula maps 1:1 onto Anthropic's four billed categories (Base / cache read /
+cache write / output). This **diverges from the `dotnet/skills` harness
 metric**, which reports an unweighted `tokenEstimate = inputTokens + outputTokens` (cache reads
 counted at full price, output counted the same as input). We diverged because that estimate
 inflates the exploration-heavy raw baseline — the channel that does the most cheap prompt-cache
-reads looks the most expensive — and undercounts output, which is the dominant real cost. IET
-prices each token class closer to what it actually costs (see
-[dotnet/sdk#54417](https://github.com/dotnet/sdk/issues/54417) on model token pricing), so the
+reads looks the most expensive — and undercounts output, which is the dominant real cost. The
+weights are **Anthropic's published pricing multipliers**
+([price sheet](https://platform.claude.com/docs/en/about-claude/pricing)): cache read **0.1×**
+base input, 5-min cache write **1.25×**, and **output 5×** — uniform and exact across current Claude
+models (Opus 4.8 $5→$25, Sonnet $3→$15, Haiku 4.5 $1→$5; see also
+[dotnet/sdk#54417](https://github.com/dotnet/sdk/issues/54417)). So the
 weights also expose the **arbitrage** between classes — spending cheap cached input to avoid
 expensive output is a win the unweighted metric can't see. Cross-channel comparisons then reflect
 spend rather than cache-read volume. Tables still cite the harness's raw `tokenEstimate` (`tEst`)

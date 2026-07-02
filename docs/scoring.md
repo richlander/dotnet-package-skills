@@ -9,7 +9,7 @@ regimes, and the three-rung ladder — is in
 > **Arm naming.** This doc and the `grounding analyze` cards still speak of a single grounded
 > "**AGENTS.md** arm" vs **baseline**, and a "**source-diff** (AGENTS.md vs README.md)" comparison.
 > Under the current content-arm naming (methodology §1), read those as the **Missing Manual** arm and
-> the **Front Door** comparison. The `analyze`/card tooling relabel is a tracked follow-up; the grade
+> the **Brochure** comparison. The `analyze`/card tooling relabel is a tracked follow-up; the grade
 > logic is unchanged.
 
 ---

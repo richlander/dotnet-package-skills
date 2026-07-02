@@ -67,7 +67,7 @@ grounding --help
    ```bash
    # Rung 0/1 — Missing Manual scheme (the ~6-question everyday floor).
    grounding run <slug> --source agents                                   # baseline vs Missing Manual
-   grounding run <slug> --source readme --readme-file path/to/README.md   # adds Front Door
+   grounding run <slug> --source readme --readme-file path/to/README.md   # adds Brochure
    ```
 
    For a **clean content measurement**, runs scrub `~/.dotnet/tools` from the agent's PATH so
@@ -88,7 +88,7 @@ evidence dump and the [PR template](./templates/canonical-grounding-pr.md).
 ## Where to go next
 
 - [`grounding-eval-methodology.md`](./grounding-eval-methodology.md) — the arms, the two regimes
-  (Mini 6 / MM 12 / CT 24, nested), the cost-tiered ladder, and the ship gate.
+  (Core 6 / MM 12 / CT 24, nested), the cost-tiered ladder, and the ship gate.
 - [`authoring-principles.md`](./authoring-principles.md) — how to write the three documents
-  (Front Door / Missing Manual / Complete Textbook).
+  (Brochure / Missing Manual / Complete Textbook).
 - [`harness.md`](./harness.md) — how `skill-validator` is built and run, and the confounds.

@@ -42,7 +42,13 @@ internal static class Loader
             Di = di, Mcp = mcp, Cache = cache,
             Bash = Tb("bash"),
             Tok = input + output,
-            Iet = input - m.CacheReadTokens + output,
+            // Price-weighted, input-equivalent cost stick (Claude-family ratios): fresh input 1x,
+            // cacheRead 0.1x, cacheWrite 1.25x, output 5x. Maps to spend (IET x input_price ~= $),
+            // and — unlike an unweighted count — does not undercount output, the class grounding
+            // most reduces. See README.md "How we measure cost: IET".
+            Iet = (long)System.Math.Round(
+                (input - m.CacheReadTokens) + 0.1 * m.CacheReadTokens
+                + 1.25 * m.CacheWriteTokens + 5.0 * output),
             Out = output,
             Cost = Metrics.Round1(m.Cost),
             CostDisplay = m.CostIsInteger

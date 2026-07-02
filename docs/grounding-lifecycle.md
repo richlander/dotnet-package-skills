@@ -44,7 +44,7 @@ already knows this package — **do not author grounding**. Grounding is justifi
    rubric for every model — the card grades, it doesn't decide). Apply the higher-level ship rule
    (see [scoring.md](./scoring.md)): **require BETTER on the mini tier** (it needs grounding) and **merely not-WORSE on
    the frontier tier** (a frontier BETTER is a welcome bonus). Ship only if both hold.
-5. **Complete the README too (if the package has one).** The Front Door comparison is a **usability test
+5. **Complete the README too (if the package has one).** The Brochure comparison is a **usability test
    of the README**: any question its arm fails, or archaeology it forces, is a README bug. Fix the README
    **in this PR**, using the finished `AGENTS.md` as the checklist of facts it must cover (human prose —
    not token-optimized; authoring-principles §2c), and re-run to confirm it also reaches success + 0
@@ -70,7 +70,7 @@ Trigger an update when the package's API changes, the README is rewritten, the m
 knowledge shifts, or a new trap appears. The operation is the same as CREATE plus one extra question:
 
 - **Re-run the matched matrix** (mini + frontier, AGENTS + README).
-- **Read the Front Door comparison** — a **usability test of the README** (Missing Manual vs Front Door, both via
+- **Read the Brochure comparison** — a **usability test of the README** (Missing Manual vs Brochure, both via
   the grounding tool, baseline removed). Any question the README arm fails, or archaeology it forces, is a
   README bug to fix here too. Once the README is complete, AGENTS's remaining edge is efficiency/retrieval —
   if even that edge has vanished (the README now carries the same knowledge as cheaply), the curated file

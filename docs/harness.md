@@ -213,7 +213,7 @@ eng/run-evals.sh System.CommandLine
 For a clean **content** measurement the agent must not substitute a tool for the document, so eval runs
 **scrub `~/.dotnet/tools` from the agent's PATH** (removing `dotnet-inspect`, `ildasm`, `ilspycmd`) while
 keeping the system `dotnet`/`dnx`. Tool availability — e.g. a `dotnet-inspect` pointer — is a **separate
-lever**, layered in deliberately as its own arm, not part of the baseline / Missing Manual / Front Door /
+lever**, layered in deliberately as its own arm, not part of the baseline / Missing Manual / Brochure /
 Textbook content comparison. (Verify post-hoc: the `di` signal in `grounding analyze` must be `0` on the
 content arms.)
 

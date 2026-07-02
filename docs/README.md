@@ -21,7 +21,7 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
 ## Supporting references
 
 - **[authoring-principles.md](./authoring-principles.md)** — how to write the three documents
-  (Front Door / Missing Manual / Complete Textbook).
+  (Brochure / Missing Manual / Complete Textbook).
 - **[delivery-and-retrieval.md](./delivery-and-retrieval.md)** — how grounding reaches the agent: the
   resident index, MCP delivery, and retrieval gates.
 - **[harness.md](./harness.md)** — how `skill-validator` is built and run, and the confounds.

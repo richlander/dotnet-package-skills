@@ -163,13 +163,13 @@ distributed*:
 
 | Doc | Reader | Distribution | Shape | Nickname |
 | --- | --- | --- | --- | --- |
-| `README.md` | humans | pulled (you open it) | narrative, progressive, may market | **Front Door** |
+| `README.md` | humans | pulled (you open it) | narrative, progressive, may market | **Brochure** |
 | `AGENTS.md` | trained agents | **co-located, always-on** | targeted RAG gap-fill | **Missing Manual** |
 | `SKILL.md` | agents (opt-in) | **opted-in** (you load it) | narrative, near-complete | **Complete Textbook** |
 
 The axis that matters is **RAG-gap-filler vs narrative-complete**, not size (by bytes it is usually
 `AGENTS.md` < `README.md` < `SKILL.md`). `README.md` and `SKILL.md` are the *same kind* of artifact —
-coherent documents meant to be **read** — for two different readers: the Front Door *sells and onboards*,
+coherent documents meant to be **read** — for two different readers: the Brochure *sells and onboards*,
 the Textbook *teaches completely*. `AGENTS.md` is the odd one out: a **gap-filler** evaluated only as
 *(model + `AGENTS.md`)*, never standalone — the Missing Manual *fills gaps*.
 

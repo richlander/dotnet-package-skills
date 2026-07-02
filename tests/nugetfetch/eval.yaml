@@ -259,7 +259,7 @@ scenarios:
     timeout: 900
 
   # ---------------------------------------------------------------------------
-  # MM tier (+6 -> 12): the documented methods the Mini-6 doesn't cover. nuget-fetch's
+  # MM tier (+6 -> 12): the documented methods the Core-6 doesn't cover. nuget-fetch's
   # surface caps here — it does not earn a SKILL.md, so there is no CT tier.
   # ---------------------------------------------------------------------------
 

@@ -24,7 +24,7 @@ content** supplied — and force-feed it — *not* by skill-validator's internal
 | --- | --- | --- |
 | **baseline** | none | the control — model knowledge only (web blocked) |
 | **Missing Manual** | `AGENTS.md` | does the compact, co-located doc fill the gap? |
-| **Front Door** | `README.md` | is the human README usable by an agent? |
+| **Brochure** | `README.md` | is the human README usable by an agent? |
 | **Textbook** | `SKILL.md` | (rung 2) does the full guide recover what the compact doc can't? |
 
 **Why these names (and not skill-validator's).** skill-validator's own arms are named by *loader scope* —
@@ -57,11 +57,11 @@ a **separate lever**, layered in deliberately as its own arm — not part of the
 
 ### Three question tiers, the arms that run them, and a cost-tiered ladder
 
-Three **nested** question tiers, named for the doc that should clear each (`Mini ⊂ MM ⊂ CT`):
+Three **nested** question tiers, named for the doc that should clear each (`Core ⊂ MM ⊂ CT`):
 
 | Tier | Size | Role |
 | --- | --- | --- |
-| **Mini** | **6** | smoke test — fast sanity for any doc |
+| **Core** | **6** | smoke test — fast sanity for any doc |
 | **MM** (Missing Manual) | **12** (6 + 6) | what `AGENTS.md` should clear — and, being broader than the smoke 6, the **overfit guard** |
 | **CT** (Complete Textbook) | **24** (12 + 12) | the full exam; the top 12 are **`SKILL.md` territory** |
 
@@ -69,13 +69,13 @@ A **cost-tiered, opt-in ladder** — run as much as the question warrants:
 
 | Rung | Arms | Tier | Question |
 | --- | --- | --- | --- |
-| **0 — smoke** | baseline vs Missing Manual | Mini-6 | does grounding beat none, quickly? |
-| **1 — remit** | baseline · Front Door · Missing Manual | MM-12 | does `AGENTS.md` clear its remit without overfitting; is the README usable? |
-| **2 — full** (optional) | baseline · Missing Manual · Front Door · **Textbook** | CT-24 | where does `AGENTS.md` fall off, and **what do `SKILL.md`'s extra tokens buy** (`AGENTS.md`@24 vs `SKILL.md`@24)? |
+| **0 — smoke** | baseline vs Missing Manual | Core-6 | does grounding beat none, quickly? |
+| **1 — remit** | baseline · Brochure · Missing Manual | MM-12 | does `AGENTS.md` clear its remit without overfitting; is the README usable? |
+| **2 — full** (optional) | baseline · Missing Manual · Brochure · **Textbook** | CT-24 | where does `AGENTS.md` fall off, and **what do `SKILL.md`'s extra tokens buy** (`AGENTS.md`@24 vs `SKILL.md`@24)? |
 
-**Mini** is the cheap smoke; **MM-12** is the overfit guard (a compact doc tuned to the smoke 6 must still
+**Core** is the cheap smoke; **MM-12** is the overfit guard (a compact doc tuned to the smoke 6 must still
 generalize to 12); **CT-24** runs the real `SKILL.md` (so it **doubles as a skill eval**) and, by also
-running `AGENTS.md` across all 24, measures the Textbook's marginal value. The **Front Door** arm *is* the
+running `AGENTS.md` across all 24, measures the Textbook's marginal value. The **Brochure** arm *is* the
 README usability test (it replaces the older "source-diff card"): if the README-grounded agent fails a
 question or is forced into archaeology, that is a **README bug to fix in the same PR** — *if an AI given
 only the README can't answer it, an untrained human can't either.*
@@ -92,16 +92,16 @@ only the README can't answer it, an untrained human can't either.*
 | Term | Meaning here |
 | --- | --- |
 | **Grounding** | A compact, package-specific `AGENTS.md` that ships in the package root and makes the package self-teaching for an agent. Records only what the model is *proven to lack* — not model-resident knowledge. |
-| **The three docs** | A package may ship three grounding documents: `README.md` = **Front Door** (humans; may market/onboard), `AGENTS.md` = **Missing Manual** (co-located, always-on RAG gap-filler), `SKILL.md` = **Complete Textbook** (opt-in, narrative full guide). See [authoring-principles §2d](./authoring-principles.md). The harness *also* generates a per-unit `SKILL.md` **skill-wrapper** — test scaffolding holding whichever content an arm force-feeds (skill-validator just requires that filename) — which is **not** the shipped Textbook. Never hand-edit the generated wrapper; edit `AGENTS.md`, then `grounding sync-skill`. |
-| **arm names (content, not mechanism)** | Arms are named by the document supplied — **baseline** / **Missing Manual** (`AGENTS.md`) / **Front Door** (`README.md`) / **Textbook** (`SKILL.md`), all force-fed. We do **not** use skill-validator's loader-scope names `isolated`/`plugin` (§1 explains why and gives the mapping). `plugin` (everything loaded, agent self-selects — the "shelf") is a separate **delivery** axis, omitted from content cards. |
+| **The three docs** | A package ships **two** grounding documents at its root — `README.md` = **Brochure** (humans; may market/onboard) and `AGENTS.md` = **Missing Manual** (co-located, always-on RAG gap-filler). A third, `SKILL.md` = **Complete Textbook** (opt-in, narrative full guide), is kept as a **repo asset used as the eval ceiling** — *not* shipped in the package. See [authoring-principles §2d](./authoring-principles.md). The harness *also* generates a per-unit `SKILL.md` **skill-wrapper** — test scaffolding holding whichever content an arm force-feeds (skill-validator just requires that filename) — which is **not** the shipped Textbook. Never hand-edit the generated wrapper; edit `AGENTS.md`, then `grounding sync-skill`. |
+| **arm names (content, not mechanism)** | Arms are named by the document supplied — **baseline** / **Missing Manual** (`AGENTS.md`) / **Brochure** (`README.md`) / **Textbook** (`SKILL.md`), all force-fed. We do **not** use skill-validator's loader-scope names `isolated`/`plugin` (§1 explains why and gives the mapping). `plugin` (everything loaded, agent self-selects — the "shelf") is a separate **delivery** axis, omitted from content cards. |
 | **resourcefulness (archaeology)** | Out-of-sandbox lookups the agent must make to recover API knowledge that grounding would supply inline — web fetch/search **plus** local NuGet-cache rummaging / decompiling DLLs. Measured **objectively** from the timeline (not the judge). **High = the agent had to be resourceful; grounding's job is to drive it to 0, so lower is the win, not a loss.** Cards show it as one **resourcefulness (archaeology)** row; the **web** portion alone is a hard gate guard (a grounded run must never resort to the internet). |
 | **success** | A scenario is **solved** for an arm iff every functional assertion passes **and** the judge's overall quality clears the **≥4 floor** ("meets expectations"). Reported per arm as a rate (e.g. `6/6`). The headline **value** metric. The judge's 1–5 score enters **only** as this pass/fail floor — its subjective 4→5 top band is discarded (see [scoring.md](./scoring.md)). |
 | **quality** (judge `overallScore` 1–5) | Used **only** as the ≥4 success floor above — never as a reported metric or a baseline diff. Its top ~1 point is subjective and instruction-sensitive (see [scoring.md](./scoring.md)), so it cannot grade harm. |
 | **func** | Functional assertions passed (build + file + run-output regex). A **value** metric; the objective correctness signal that, with the ≥4 floor, defines `success`. |
 | **tok** | Gross tokens (`input + output`); `input` *includes* cache reads. Inflated by cache re-reads, so not the harm by itself. |
-| **IET** | **Input-Equivalent Tokens** — cache-excluded effective tokens, `(input − cacheRead) + output`. Our headline cost stick (see `README.md`) and the **frontier harm number** (see [scoring.md](./scoring.md)). Empirically **input-dominated**: output is only ~7–21% of IET, non-cached input ~79–93%, so IET mainly tracks context/read bloat (the likeliest grounding harm). `tok` and `iet` bracket the real spend; `cost` sits between. |
+| **IET** | **Input-Equivalent Tokens** — a price-weighted cost stick that maps 1:1 onto [Anthropic's four billed categories](https://platform.claude.com/docs/en/about-claude/pricing): `(input − cacheRead) + 0.1·cacheRead + 1.25·cacheWrite + 5·output`. The SDK's `inputTokens` is **cache-read-inclusive** (verified: cacheRead never exceeds it), so `input − cacheRead` = Anthropic's **Base Input Tokens** at **1×** (the unit); cache read = **0.1×**, 5-min cache write = **1.25×**, output = **5×** — *uniform and exact* across current Claude models (Opus 4.8 $5→$25, Sonnet $3→$15, Haiku 4.5 $1→$5). So `IET × input_price ≈ $`. Weighting **output 5×** is the point: output is the expensive, grounding-sensitive class, and an unweighted count would undercount exactly the savings grounding delivers. Our headline cost stick (see `README.md`) and the **frontier harm number** (see [scoring.md](./scoring.md)). `tok` (gross) and `iet` bracket the spend; `cost` sits between. |
 | **cost** | Premium-request multiplier (cache-discounted). The truest single harm proxy. |
-| **output tok** | Output/thinking tokens. The most expensive *per-token* and most variable component. A small share of IET, so kept as its **own visible guard row** (see [scoring.md](./scoring.md)) lest an output-only blow-up be masked when input nets down. |
+| **output tok** | Output/thinking tokens — the most expensive *per-token* class (≈5× input) and the one grounding most reduces. Weighted 5× inside IET, and **also** kept as its own visible guard row (see [scoring.md](./scoring.md)) lest an output-only blow-up be masked when input nets down. |
 | **Normative metric** | A quantity we *claim* as value or harm: `success`, `func`, `resourcefulness`, `tok`, `iet`, `cost`, `secs`. A conclusion may rest only on these. |
 | **Informative signal** | Corroborating behavioral data that *explains* a metric move but is never the claim: `web`, `tools`, `turns`, `cache` (bash rummaging `~/.nuget/packages`), `di`, `mcp`, `bash`. A tool call adds nothing to the bill on its own; many signals together trace the narrative arc (archaeology, cache-reflection, retry loops). |
 | **warm / cold cache** | Whether the package is restored on disk. For build-based scenarios the agent restores it within its first few tool calls, so **starting cache state is not a variable** — treat it as warm (see harness.md). |
