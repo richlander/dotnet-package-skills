@@ -13,6 +13,7 @@ internal sealed class ArmRow
     public double? Tools;
     public int? Turns;
     public long Tok, Iet, Out;
+    public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnOut, ToolTurnOutPct;
     public double Cost;           // rounded to 1 decimal, like Python (for aggregation)
     public string CostDisplay = ""; // raw-table cell, preserving JSON int/float type
     public long Secs;
@@ -29,6 +30,7 @@ internal static class Loader
         var tb = m.ToolCallBreakdown ?? new();
         int Tb(string k) => tb.TryGetValue(k, out var v) ? v : 0;
         var (di, mcp, cache) = CountToolEvents(m);
+        var (toolTurnSecs, toolTurnOut) = CountToolTurns(m);
         long input = m.InputTokens, output = m.OutputTokens;
         return new ArmRow
         {
@@ -50,6 +52,10 @@ internal static class Loader
                 (input - m.CacheReadTokens) + 0.1 * m.CacheReadTokens
                 + 1.25 * m.CacheWriteTokens + 5.0 * output),
             Out = output,
+            ToolTurnSecs = toolTurnSecs,
+            ToolTurnSecsPct = m.WallTimeMs > 0 ? toolTurnSecs * 1000.0 / m.WallTimeMs * 100.0 : 0.0,
+            ToolTurnOut = toolTurnOut,
+            ToolTurnOutPct = output > 0 ? toolTurnOut / (double)output * 100.0 : 0.0,
             Cost = Metrics.Round1(m.Cost),
             CostDisplay = m.CostIsInteger
                 ? ((long)m.Cost).ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -78,6 +84,44 @@ internal static class Loader
         return (di, mcp, cache);
     }
 
+    // Sum wall-clock duration and assistant output tokens for turns that initiate at
+    // least one tool call. Turns are inferred from the event stream's turn boundaries.
+    private static (double secs, long outputTokens) CountToolTurns(Json.Metrics m)
+    {
+        bool inTurn = false, hasTool = false;
+        long start = 0, output = 0, toolOutput = 0, toolDurationMs = 0;
+
+        foreach (var e in m.Events ?? new())
+        {
+            switch (e.Type)
+            {
+                case "assistant.turn_start":
+                    inTurn = true;
+                    hasTool = false;
+                    start = e.Timestamp;
+                    output = 0;
+                    break;
+                case "assistant.usage" when inTurn:
+                    output = e.Data?.OutputTokens ?? 0;
+                    break;
+                case "tool.execution_start" when inTurn:
+                    hasTool = true;
+                    break;
+                case "assistant.turn_end" when inTurn:
+                    if (hasTool)
+                    {
+                        toolOutput += output;
+                        if (e.Timestamp >= start)
+                            toolDurationMs += e.Timestamp - start;
+                    }
+                    inTurn = false;
+                    break;
+            }
+        }
+
+        return (toolDurationMs / 1000.0, toolOutput);
+    }
+
     public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios)
     {
         var acc = Metrics.Arms.ToDictionary(a => a.Key, _ => new ArmAgg());
@@ -98,6 +142,8 @@ internal static class Loader
                     a.Succ++;
                 a.Iet += r.Iet; a.Cost += r.Cost; a.Tok += r.Tok;
                 a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache;
+                a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
+                a.ToolTurnOut += r.ToolTurnOut; a.ToolTurnOutPct += r.ToolTurnOutPct;
             }
         }
         foreach (var (key, _) in Metrics.Arms)
@@ -106,6 +152,8 @@ internal static class Loader
             var n = Math.Max(a.N, 1);
             a.Qual = quals[key].Count > 0 ? quals[key].Average() : null;
             a.Iet /= n; a.Cost /= n; a.Tok /= n; a.Out /= n;
+            a.ToolTurnSecs /= n; a.ToolTurnSecsPct /= n;
+            a.ToolTurnOut /= n; a.ToolTurnOutPct /= n;
         }
         return acc;
     }

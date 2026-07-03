@@ -26,6 +26,8 @@ internal sealed partial class Cards
     private static string RawArch(ArmAgg a) => a.Arch.ToString(Inv);
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawOut(ArmAgg a) => F0(a.Out);
+    private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
+    private static string RawToolTurnOut(ArmAgg a) => $"{F0(a.ToolTurnOut)} ({F0(a.ToolTurnOutPct)}%)";
     private static string RawCost(ArmAgg a) => F2(a.Cost);
 
     private static string DiffSuccess(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Succ - o.Succ)} ({n.Succ}/{n.N})";
@@ -33,6 +35,10 @@ internal sealed partial class Cards
     private static string DiffArch(ArmAgg n, ArmAgg o) => $"{o.Arch}\u2192{n.Arch}";
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
+    private static string DiffToolTurnSecs(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.ToolTurnSecs)}\u2192{F0(n.ToolTurnSecs)}s ({F0(o.ToolTurnSecsPct)}\u2192{F0(n.ToolTurnSecsPct)}%)";
+    private static string DiffToolTurnOut(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.ToolTurnOut)}\u2192{F0(n.ToolTurnOut)} ({F0(o.ToolTurnOutPct)}\u2192{F0(n.ToolTurnOutPct)}%)";
     private static string DiffCost(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Cost, o.Cost));
 
     // Document cost (the grounding doc loaded into the arm; baseline = 0) and the
@@ -50,6 +56,8 @@ internal sealed partial class Cards
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
         ("work IET (iet - doc) (-)",           RawWorkIet, DiffWorkIet),
         ("output tok (-)",                     RawOut,     DiffOut),
+        ("tool-turn secs (% session) (-)",      RawToolTurnSecs, DiffToolTurnSecs),
+        ("tool-turn output tok (% output) (-)", RawToolTurnOut,  DiffToolTurnOut),
         ("cost (-)",                           RawCost,    DiffCost),
     };
 

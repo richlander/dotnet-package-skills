@@ -85,6 +85,7 @@ public sealed class Assertion
 public sealed class EventRecord
 {
     [JsonPropertyName("type")] public string? Type { get; set; }
+    [JsonPropertyName("timestamp")] public long Timestamp { get; set; }
     [JsonPropertyName("data")] public EventData? Data { get; set; }
 }
 
@@ -93,6 +94,7 @@ public sealed class EventData
     [JsonPropertyName("toolName")] public string? ToolName { get; set; }
     [JsonPropertyName("arguments")] public string? Arguments { get; set; }
     [JsonPropertyName("cacheReadTokens")] public long? CacheReadTokens { get; set; }
+    [JsonPropertyName("outputTokens")] public long? OutputTokens { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
