@@ -31,8 +31,7 @@ jobs:
       - name: Build skill-validator
         run: |
           dotnet publish .tools/skills-src/eng/skill-validator/src/SkillValidator.csproj \
-            -c Release -o .tools/skill-validator \
-            -p:NuGetAudit=false
+            -c Release -o .tools/skill-validator
 
       # The GitHub Copilot SDK that skill-validator uses picks up gh credentials.
       - name: Verify gh authentication
