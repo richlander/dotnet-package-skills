@@ -30,7 +30,7 @@ internal static class Loader
         var tb = m.ToolCallBreakdown ?? new();
         int Tb(string k) => tb.TryGetValue(k, out var v) ? v : 0;
         var (di, mcp, cache) = CountToolEvents(m);
-        var (toolTurnSecs, toolTurnIet) = CountToolTurns(m);
+        var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet) = CountToolTurns(m);
         long input = m.InputTokens, output = m.OutputTokens;
         var iet = (long)System.Math.Round(Iet(input, m.CacheReadTokens, m.CacheWriteTokens, output));
         return new ArmRow
@@ -52,9 +52,15 @@ internal static class Loader
             Iet = iet,
             Out = output,
             ToolTurnSecs = toolTurnSecs,
-            ToolTurnSecsPct = m.WallTimeMs > 0 ? toolTurnSecs * 1000.0 / m.WallTimeMs * 100.0 : 0.0,
+            // Share of model turn-time spent in tool-calling turns. Denominator is the all-turn
+            // duration sum (same basis as the numerator) — NOT WallTimeMs, which is measured on a
+            // different basis (excludes tool-execution wait) and would let this exceed 100%.
+            ToolTurnSecsPct = allTurnSecs > 0 ? toolTurnSecs / allTurnSecs * 100.0 : 0.0,
             ToolTurnIet = toolTurnIet,
-            ToolTurnIetPct = iet > 0 ? toolTurnIet / iet * 100.0 : 0.0,
+            // Share of per-turn IET spent in tool-calling turns. Denominator is the all-turn
+            // event-sum (same basis as the numerator) — NOT the session IET, which is on a
+            // different accounting basis and would let this exceed 100%.
+            ToolTurnIetPct = allTurnIet > 0 ? toolTurnIet / allTurnIet * 100.0 : 0.0,
             Cost = Metrics.Round1(m.Cost),
             CostDisplay = m.CostIsInteger
                 ? ((long)m.Cost).ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -86,13 +92,16 @@ internal static class Loader
         return (di, mcp, cache);
     }
 
-    // Sum wall-clock duration and IET for turns that initiate at least one tool call.
-    // Turns are inferred from the event stream's turn boundaries.
-    private static (double secs, double iet) CountToolTurns(Json.Metrics m)
+    // Sum wall-clock duration and IET for turns that initiate at least one tool call, plus the
+    // IET over ALL turns (the consistent denominator for the tool-turn share). Turns are inferred
+    // from the event stream's turn boundaries. Note: per-turn `input` is the cumulative re-sent
+    // context, so per-turn IET is NOT the billed session IET — it is only meaningful as a ratio
+    // (tool-turn IET / all-turn IET), both summed the same way here.
+    private static (double toolSecs, double allSecs, double toolIet, double allIet) CountToolTurns(Json.Metrics m)
     {
         bool inTurn = false, hasTool = false;
-        long start = 0, input = 0, cacheRead = 0, cacheWrite = 0, output = 0, toolDurationMs = 0;
-        double toolIet = 0;
+        long start = 0, input = 0, cacheRead = 0, cacheWrite = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
+        double toolIet = 0, allIet = 0;
 
         foreach (var e in m.Events ?? new())
         {
@@ -117,18 +126,21 @@ internal static class Loader
                     hasTool = true;
                     break;
                 case "assistant.turn_end" when inTurn:
+                    var turnIet = Iet(input, cacheRead, cacheWrite, output);
+                    var turnMs = e.Timestamp >= start ? e.Timestamp - start : 0;
+                    allIet += turnIet;
+                    allDurationMs += turnMs;
                     if (hasTool)
                     {
-                        toolIet += Iet(input, cacheRead, cacheWrite, output);
-                        if (e.Timestamp >= start)
-                            toolDurationMs += e.Timestamp - start;
+                        toolIet += turnIet;
+                        toolDurationMs += turnMs;
                     }
                     inTurn = false;
                     break;
             }
         }
 
-        return (toolDurationMs / 1000.0, toolIet);
+        return (toolDurationMs / 1000.0, allDurationMs / 1000.0, toolIet, allIet);
     }
 
     public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios)
