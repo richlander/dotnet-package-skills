@@ -21,6 +21,7 @@ internal sealed class LoadedArm
     public required string Judge;
     public required string Tier;
     public required string SkillName;
+    public string? SkillPath;
     public required Dictionary<string, ArmAgg> Agg;
     public required bool IsReadme;
     public required string Path;

@@ -66,16 +66,17 @@ var modelOpt = new Option<string[]>("--model", "-m")
 var runsOpt = new Option<int>("--runs") { Description = "Runs per scenario.", DefaultValueFactory = _ => 1 };
 var judgeOpt = new Option<string>("--judge-model") { Description = "Judge model.", DefaultValueFactory = _ => "claude-haiku-4.5" };
 var noJudgeOpt = new Option<bool>("--no-judge") { Description = "Skip judging." };
-var testsDirOpt = new Option<string>("--tests-dir") { Description = "Tests directory.", DefaultValueFactory = _ => "tests" };
+var testsDirOpt = new Option<string?>("--tests-dir") { Description = "Tests directory (default: auto — 'grounding' for a co-located bundle, else 'tests')." };
 var outOpt = new Option<string?>("--out") { Description = "Output dataset dir (default $GROUNDING_DATA_DIR or ~/.cache/grounding/<unit>-6q; not committed)." };
 var readmeFileOpt = new Option<string?>("--readme-file") { Description = "README path for --source readme." };
 var dryRunOpt = new Option<bool>("--dry-run") { Description = "Print the plan without invoking skill-validator." };
 var emitSkillOpt = new Option<string?>("--emit-skill") { Description = "Write the generated SKILL.md to a path and exit." };
+var rootOpt = new Option<string?>("--root") { Description = "Grounding root holding grounding/<unit> — a target package repo (default: the infra repo). Also GROUNDING_ROOT. Eval reads AGENTS.md in place; no packing." };
 
 var run = new Command("run", "Run a grounding unit through skill-validator with a chosen source.")
 {
     unitArg, sourceOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
-    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt,
+    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt,
 };
 run.SetAction(parse =>
 {
@@ -91,11 +92,12 @@ run.SetAction(parse =>
         Runs = parse.GetValue(runsOpt),
         JudgeModel = parse.GetValue(judgeOpt)!,
         NoJudge = parse.GetValue(noJudgeOpt),
-        TestsDir = parse.GetValue(testsDirOpt)!,
+        TestsDir = parse.GetValue(testsDirOpt),
         OutDir = parse.GetValue(outOpt),
         ReadmeFile = parse.GetValue(readmeFileOpt),
         DryRun = parse.GetValue(dryRunOpt),
         EmitSkill = parse.GetValue(emitSkillOpt),
+        Root = parse.GetValue(rootOpt),
     };
     return Runner.Run(opts);
 });

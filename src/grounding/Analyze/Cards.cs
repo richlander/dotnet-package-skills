@@ -101,7 +101,7 @@ internal sealed partial class Cards
         var a = Loader.LoadArm(path);
         var b = a.Agg["baseline"];
         var g = a.Agg[Arm];
-        var gtok = Loader.GroundingTokens(a.SkillName);
+        var gtok = Loader.GroundingTokens(a.SkillPath, a.SkillName);
         if (!NoTitle)
             _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
         var mpref = NoTitle ? $"`{a.Model}` | " : "";
@@ -123,7 +123,7 @@ internal sealed partial class Cards
             _o.WriteLine("--card needs at least one AGENTS.md dataset (non-'readme' path)."); return;
         }
         var sn = arms[0].SkillName;
-        var gtok = Loader.GroundingTokens(sn);
+        var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
         _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
@@ -205,7 +205,7 @@ internal sealed partial class Cards
             foreach (var v in d.Verdicts ?? new())
             {
                 var sn = v.SkillName ?? "?";
-                var gtok = Loader.GroundingTokens(sn);
+                var gtok = Loader.GroundingTokens(v.SkillPath, sn);
                 var gnote = gtok is { } t ? $"   grounding=~{t} tok (loaded into each grounded arm)" : "";
                 _o.WriteLine($"\n===== {sn}   ({f})   model={d.Model}{gnote} =====");
                 _o.WriteLine(Grp);

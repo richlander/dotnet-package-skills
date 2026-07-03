@@ -16,6 +16,7 @@ public sealed class ResultsFile
 public sealed class Verdict
 {
     [JsonPropertyName("skillName")] public string? SkillName { get; set; }
+    [JsonPropertyName("skillPath")] public string? SkillPath { get; set; }
     [JsonPropertyName("scenarios")] public List<Scenario>? Scenarios { get; set; }
 }
 

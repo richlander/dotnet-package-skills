@@ -10,37 +10,49 @@ internal sealed class RunOptions
     public int Runs = 1;
     public string JudgeModel = "claude-haiku-4.5";
     public bool NoJudge;
-    public string TestsDir = "tests";
+    public string? TestsDir;              // null => auto (co-located bundle "grounding", else "tests")
     public string? OutDir;
     public string? ReadmeFile;
     public bool DryRun;
     public string? EmitSkill;             // write generated SKILL.md here and exit
+    public string? Root;                  // grounding root (a target repo); default = infra root
 }
 
 internal static class Runner
 {
     public static int Run(RunOptions o)
     {
-        var root = RepoRoot.Find();
-        if (root is null)
+        // The INFRA root holds the harness (skill-validator under .tools/). The GROUNDING
+        // root holds grounding/<unit> — it may be a target package repo (--root / GROUNDING_ROOT),
+        // so we eval that repo's AGENTS.md in place with no packing or publishing.
+        var infraRoot = RepoRoot.Find();
+        if (infraRoot is null)
         {
-            Console.Error.WriteLine("grounding: cannot locate repo root (need grounding/ and eng/).");
+            Console.Error.WriteLine("grounding: cannot locate infra root (need grounding/ and eng/ with .tools/).");
             return 1;
         }
+        var gRoot = o.Root ?? Environment.GetEnvironmentVariable("GROUNDING_ROOT");
+        var root = string.IsNullOrWhiteSpace(gRoot) ? infraRoot : Path.GetFullPath(gRoot);
 
         var unitDir = Path.Combine(root, "grounding", o.Unit);
         if (!Directory.Exists(unitDir))
         {
-            Console.Error.WriteLine($"grounding: unit not found: grounding/{o.Unit}");
+            Console.Error.WriteLine($"grounding: unit not found: {Path.Combine(root, "grounding", o.Unit)}");
             return 1;
         }
         var agentsPath = Path.Combine(unitDir, "AGENTS.md");
         var metaPath = Path.Combine(unitDir, "meta.yaml");
         if (!File.Exists(agentsPath))
         {
-            Console.Error.WriteLine($"grounding: grounding/{o.Unit}/AGENTS.md missing.");
+            Console.Error.WriteLine($"grounding: {agentsPath} missing.");
             return 1;
         }
+
+        // Resolve the tests dir. Explicit --tests-dir wins; otherwise auto-detect a
+        // co-located bundle (grounding/<unit>/eval.yaml => tests-dir "grounding"),
+        // else the classic split layout ("tests").
+        if (o.TestsDir is null)
+            o.TestsDir = File.Exists(Path.Combine(unitDir, "eval.yaml")) ? "grounding" : "tests";
 
         var doc = SkillDoc.ParseAgents(agentsPath, metaPath);
         string skillText;
@@ -75,39 +87,61 @@ internal static class Runner
         }
 
         var outDir = o.OutDir ?? DataCache.DatasetDir(o.Unit);
-        var bin = FindSkillValidator(root);
+        var bin = FindSkillValidator(infraRoot);
         var skillPath = Path.Combine(unitDir, "SKILL.md");
         var groundingArg = Path.Combine("grounding", o.Unit);
 
-        var rc = 0;
-        foreach (var model in o.Models)
+        // skill-validator requires a plugin.json above the skill dir. Infra ships one at
+        // grounding/plugin.json; a target repo need not. If absent, synthesize a transient
+        // one (cleaned up below) so target repos hold ONLY grounding inputs — no scaffolding.
+        var pluginJson = Path.Combine(root, "grounding", "plugin.json");
+        var wrotePlugin = false;
+        if (!o.DryRun && !File.Exists(pluginJson))
         {
-            var ms = ShortModel(model);
-            var tag = o.Source switch
+            Directory.CreateDirectory(Path.GetDirectoryName(pluginJson)!);
+            File.WriteAllText(pluginJson,
+                "{\n  \"name\": \"grounding\",\n  \"version\": \"0.0.0\",\n" +
+                "  \"description\": \"Transient plugin manifest (grounding harness).\",\n" +
+                "  \"skills\": [\"./\"]\n}\n");
+            wrotePlugin = true;
+        }
+
+        var rc = 0;
+        try
+        {
+            foreach (var model in o.Models)
             {
-                "readme" => $"{o.Unit}-readme.{ms}",
-                "none" => $"{o.Unit}-none.{ms}",
-                _ => $"{o.Unit}.{ms}",
-            };
-            var resultsDir = DataCache.ResultsDir(o.Unit, tag);
-            var cmd = BuildCommand(bin ?? "<skill-validator>", o, model, resultsDir, groundingArg);
+                var ms = ShortModel(model);
+                var tag = o.Source switch
+                {
+                    "readme" => $"{o.Unit}-readme.{ms}",
+                    "none" => $"{o.Unit}-none.{ms}",
+                    _ => $"{o.Unit}.{ms}",
+                };
+                var resultsDir = DataCache.ResultsDir(o.Unit, tag);
+                var cmd = BuildCommand(bin ?? "<skill-validator>", o, model, resultsDir, groundingArg);
 
-            Console.WriteLine($"#### {o.Unit}  source={o.Source}  model={ms}  runs={o.Runs} ####");
-            Console.WriteLine($"    SKILL.md <- {o.Source}   dataset -> {Path.Combine(outDir, tag + ".json")}");
-            Console.WriteLine("    " + cmd);
+                Console.WriteLine($"#### {o.Unit}  source={o.Source}  model={ms}  runs={o.Runs} ####");
+                Console.WriteLine($"    SKILL.md <- {o.Source}   dataset -> {Path.Combine(outDir, tag + ".json")}");
+                Console.WriteLine("    " + cmd);
 
-            if (o.DryRun)
-                continue;
+                if (o.DryRun)
+                    continue;
 
-            if (bin is null)
-            {
-                Console.Error.WriteLine(
-                    "grounding: skill-validator not found under .tools/skill-validator-*/. Build the harness first.");
-                return 1;
+                if (bin is null)
+                {
+                    Console.Error.WriteLine(
+                        "grounding: skill-validator not found under .tools/skill-validator-*/. Build the harness first.");
+                    return 1;
+                }
+
+                Directory.CreateDirectory(outDir);
+                rc |= RunOne(root, skillPath, skillText, bin, o, model, resultsDir, groundingArg, outDir, tag);
             }
-
-            Directory.CreateDirectory(outDir);
-            rc |= RunOne(root, skillPath, skillText, bin, o, model, resultsDir, groundingArg, outDir, tag);
+        }
+        finally
+        {
+            if (wrotePlugin && File.Exists(pluginJson)) File.Delete(pluginJson);
         }
         return rc;
     }
@@ -153,7 +187,10 @@ internal static class Runner
         }
         finally
         {
+            // Restore a pre-existing SKILL.md; if we created a transient one (target-repo
+            // bundle ships no SKILL.md), remove it so we never leave an artifact in the tree.
             if (backup is not null) File.WriteAllText(skillPath, backup);
+            else if (File.Exists(skillPath)) File.Delete(skillPath);
         }
     }
 

@@ -134,7 +134,7 @@ internal static class Loader
         var agg = Aggregate(v.Scenarios ?? new());
         // The grounding document is loaded into the grounded arms only; net it out of
         // "work" so a bigger doc (e.g. SKILL.md) isn't charged as agent effort.
-        var gtok = GroundingTokens(sn) ?? 0;
+        var gtok = GroundingTokens(v.SkillPath, sn) ?? 0;
         foreach (var (key, arm) in agg)
             arm.DocTok = key == "baseline" ? 0 : gtok;
         return new LoadedArm
@@ -143,6 +143,7 @@ internal static class Loader
             Judge = d.JudgeModel ?? model,
             Tier = Metrics.Tier(model),
             SkillName = sn,
+            SkillPath = v.SkillPath,
             Agg = agg,
             IsReadme = System.IO.Path.GetFileName(path).ToLowerInvariant().Contains("readme"),
             Path = path,
@@ -150,16 +151,25 @@ internal static class Loader
     }
 
     // ~tokens of the grounding loaded into each grounded arm (SKILL.md, else AGENTS.md).
-    public static int? GroundingTokens(string skillName)
+    // Resolve the ACTUAL doc via the dataset's skillPath (the grounding/<unit> dir the run
+    // used); fall back to skillName only when skillPath is absent. Using skillName alone is
+    // wrong when several units share a frontmatter `name` (e.g. markout experiment variants).
+    public static int? GroundingTokens(string? skillPath, string? skillName)
     {
         var root = RepoRoot.Find();
         if (root is null) return null;
-        foreach (var art in new[] { "SKILL.md", "AGENTS.md" })
-        {
-            var p = System.IO.Path.Combine(root, "grounding", skillName, art);
-            if (File.Exists(p))
-                return (int)Math.Round(File.ReadAllText(p).Length / 4.0, MidpointRounding.ToEven);
-        }
+        var dirs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(skillPath))
+            dirs.Add(System.IO.Path.IsPathRooted(skillPath) ? skillPath : System.IO.Path.Combine(root, skillPath));
+        if (!string.IsNullOrWhiteSpace(skillName))
+            dirs.Add(System.IO.Path.Combine(root, "grounding", skillName));
+        foreach (var dir in dirs)
+            foreach (var art in new[] { "SKILL.md", "AGENTS.md" })
+            {
+                var p = System.IO.Path.Combine(dir, art);
+                if (File.Exists(p))
+                    return (int)Math.Round(File.ReadAllText(p).Length / 4.0, MidpointRounding.ToEven);
+            }
         return null;
     }
 }

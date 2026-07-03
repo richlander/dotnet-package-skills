@@ -1,7 +1,10 @@
 namespace Grounding;
 
-// Locates the repository root by walking up from the cwd (then the binary
-// location) until a directory holding both `grounding/` and `eng/` is found.
+// Locates the INFRA repository root (holding the harness: grounding/, eng/,
+// .tools/) by walking up from the cwd, then the binary location. This is where
+// skill-validator is found. The grounding UNIT can live elsewhere (a target
+// repo) — see RunOptions.Root — so eval reads that repo's grounding/<unit>
+// in place, with no packing or publishing required to iterate.
 internal static class RepoRoot
 {
     private static string? _cached;
