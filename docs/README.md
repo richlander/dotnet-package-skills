@@ -9,6 +9,8 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
   (Core-6 / MM-12 / CT-24), and the eval-diff triangulation that gives each its confidence signal.
 - **[getting-started.md](./getting-started.md)** — build the `grounding` CLI, author a unit, run the
   ladder, read the card.
+- **[running-eval.md](./running-eval.md)** — point the harness at a package repo's grounding and read
+  the result. Grounding lives in the target repo; the harness reads it in place (no packing).
 - **[grounding-eval-methodology.md](./grounding-eval-methodology.md)** — the *approach*: content arms
   (baseline / Missing Manual / Brochure / Complete Textbook), the three nested tiers
   (Core-6 / MM-12 / CT-24), the cost-tiered ladder, and the confounds.

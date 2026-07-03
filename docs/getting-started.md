@@ -74,19 +74,28 @@ grounding --help
    `dotnet-inspect` can't substitute for the document (tool availability is a separate lever). Verify with
    `di == 0` on the content arms.
 
-4. **Read the result:**
+4. **Read the result** (datasets land in the grounding cache, not the tree —
+   `$GROUNDING_DATA_DIR`, else `$XDG_CACHE_HOME/grounding`, else `~/.cache/grounding/<slug>-6q/`):
 
    ```bash
-   grounding analyze data/<slug>-6q/<slug>.<model>.json     # full table (baseline + content arms)
-   grounding analyze --card data/<slug>-6q                  # the PR dump (BETTER / NEUTRAL / WORSE)
+   DATA="${GROUNDING_DATA_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/grounding}/<slug>-6q"
+   grounding analyze        "$DATA/<slug>.<model>.json"   # full table (baseline + content arms)
+   grounding analyze --card "$DATA/<slug>.haiku.json" "$DATA/<slug>.opus.json"   # the PR dump
    ```
 
 Iterate **eval-driven**: run, find where the grounding falls short, patch the doc *generally* (not to the
 specific prompts), repeat. Then ship per [`grounding-lifecycle.md`](./grounding-lifecycle.md) with the
 evidence dump and the [PR template](./templates/canonical-grounding-pr.md).
 
+> The layout above authors a unit **inside this repo** for convenience. Grounding's real home is the
+> **package's own repo**: the harness reads `grounding/<unit>/` in place from any target via
+> `grounding run <unit> --root <target-repo>` — no packing or publishing to iterate. See
+> [`running-eval.md`](./running-eval.md).
+
 ## Where to go next
 
+- [`running-eval.md`](./running-eval.md) — how to point the harness at a package repo's grounding and
+  read the result (grounding lives in the target repo, not here).
 - [`grounding-eval-methodology.md`](./grounding-eval-methodology.md) — the arms, the two regimes
   (Core 6 / MM 12 / CT 24, nested), the cost-tiered ladder, and the ship gate.
 - [`authoring-principles.md`](./authoring-principles.md) — how to write the three documents
