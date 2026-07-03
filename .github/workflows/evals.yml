@@ -35,8 +35,8 @@ jobs:
             -p:NuGetAudit=false
 
       # The GitHub Copilot SDK that skill-validator uses picks up gh credentials.
-      - name: Authenticate gh
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+      - name: Verify gh authentication
+        run: gh auth token >/dev/null
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -45,6 +45,8 @@ jobs:
 
       - name: Run package-grounding evals
         run: .tools/skill-validator/skill-validator evaluate --tests-dir ./tests ./grounding
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload results
         if: always()
