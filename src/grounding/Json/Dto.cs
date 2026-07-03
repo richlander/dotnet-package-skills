@@ -93,7 +93,9 @@ public sealed class EventData
 {
     [JsonPropertyName("toolName")] public string? ToolName { get; set; }
     [JsonPropertyName("arguments")] public string? Arguments { get; set; }
+    [JsonPropertyName("inputTokens")] public long? InputTokens { get; set; }
     [JsonPropertyName("cacheReadTokens")] public long? CacheReadTokens { get; set; }
+    [JsonPropertyName("cacheWriteTokens")] public long? CacheWriteTokens { get; set; }
     [JsonPropertyName("outputTokens")] public long? OutputTokens { get; set; }
 }
 
