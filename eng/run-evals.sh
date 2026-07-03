@@ -36,7 +36,8 @@ if [ ! -x "$bin" ]; then
   git -C "$src_dir" fetch --depth 1 origin "$sha" -q
   git -C "$src_dir" checkout -q FETCH_HEAD
   dotnet publish "$src_dir/eng/skill-validator/src/SkillValidator.csproj" \
-    -c Release -o "$bin_dir"
+    -c Release -o "$bin_dir" \
+    -p:NuGetAudit=false
 fi
 
 paths=()
