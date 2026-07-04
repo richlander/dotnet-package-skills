@@ -7,6 +7,8 @@ on:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
+    env:
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,19 +36,28 @@ jobs:
             -c Release -o .tools/skill-validator
 
       # The GitHub Copilot SDK that skill-validator uses picks up gh credentials.
-      - name: Authenticate gh
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+      - name: Verify gh authentication
+        if: env.COPILOT_GITHUB_TOKEN != ''
+        run: gh auth token >/dev/null
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ env.COPILOT_GITHUB_TOKEN }}
+
+      - name: Skip live evals without Copilot token
+        if: env.COPILOT_GITHUB_TOKEN == ''
+        run: |
+          echo "COPILOT_GITHUB_TOKEN is not configured; skipping live package-grounding evals."
 
       - name: Verify generated SKILL.md is in sync
         run: ./eng/grounding sync-skill --check
 
       - name: Run package-grounding evals
+        if: env.COPILOT_GITHUB_TOKEN != ''
         run: .tools/skill-validator/skill-validator evaluate --tests-dir ./tests ./grounding
+        env:
+          GH_TOKEN: ${{ env.COPILOT_GITHUB_TOKEN }}
 
       - name: Upload results
-        if: always()
+        if: always() && env.COPILOT_GITHUB_TOKEN != ''
         uses: actions/upload-artifact@v4
         with:
           name: skill-validator-results

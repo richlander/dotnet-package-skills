@@ -42,9 +42,13 @@ _baseline -> `AGENTS.md` (~`<tok>` tok). Columns are models. Means across scenar
 | tasks correct (+) | 11/12 -> 12/12 | 12/12 -> 12/12 |
 | func passed (assertions) (+) | 35/36 -> 36/36 | 36/36 -> 36/36 |
 | resourcefulness (archaeology) (-) | 42 -> 0 | 19 -> 0 |
-| IET (-) | 24977 -> 15905 | ... |
-| output tok (-) | 4602 -> 1661 | ... |
-| cost (-) | 5.90 -> 1.98 | ... |
+| grounding load (tok) (context) | 0 -> `<tok>` | 0 -> `<tok>` |
+| read grounding (%) | 0% -> 100% | 0% -> 100% |
+| output tok (% of IET) (-) | 4602 (27%) -> 1661 (25%) | ... |
+| tool-call turns (% of total) (-) | 22 (95%) -> 9 (88%) | ... |
+| Session turns (-) | 23 -> 10 | ... |
+| Session IET (-) | 24977 -> 15905 | ... |
+| Session Cost (-) | 5.90 -> 1.98 | ... |
 | **verdict** | **BETTER** | **BETTER** |
 
 ## Comparison to README.md (Brochure)
@@ -57,8 +61,8 @@ lower archaeology = AGENTS more self-sufficient). At MM-12._
 | tasks correct (+) | +0 (12/12) | +0 (12/12) |
 | func passed (assertions) (+) | +0 (36/36) | +0 (36/36) |
 | resourcefulness (archaeology) (-) | 2 -> 1 | 4 -> 0 |
-| IET (-) | +2% | +7% |
-| cost (-) | +7% | -23% |
+| Session IET (-) | +2% | +7% |
+| Session Cost (-) | +7% | -23% |
 | **verdict** | **NEUTRAL** | **BETTER** |
 
 Both reach the ceiling — the README is a real usability test and it passes. `AGENTS.md`'s edge is

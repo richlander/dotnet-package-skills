@@ -67,7 +67,8 @@ grounding --help
    ```bash
    # Rung 0/1 — Missing Manual scheme (the ~6-question everyday floor).
    grounding run <slug> --source agents                                   # baseline vs Missing Manual
-   grounding run <slug> --source readme --readme-file path/to/README.md   # adds Brochure
+   grounding run <slug> --source readme --readme-file path/to/README.md   # adds Front Door
+   grounding run <slug> --source skill                                    # adds Complete Textbook (SKILL.md)
    ```
 
    For a **clean content measurement**, runs scrub `~/.dotnet/tools` from the agent's PATH so

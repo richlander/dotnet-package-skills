@@ -28,6 +28,13 @@ public sealed class Scenario
     [JsonPropertyName("baseline")] public Arm? Baseline { get; set; }
     [JsonPropertyName("skilledIsolated")] public Arm? SkilledIsolated { get; set; }
     [JsonPropertyName("skilledPlugin")] public Arm? SkilledPlugin { get; set; }
+    [JsonPropertyName("skillActivationIsolated")] public SkillActivation? SkillActivationIsolated { get; set; }
+    [JsonPropertyName("skillActivationPlugin")] public SkillActivation? SkillActivationPlugin { get; set; }
+}
+
+public sealed class SkillActivation
+{
+    [JsonPropertyName("activated")] public bool Activated { get; set; }
 }
 
 public sealed class Arm
@@ -85,6 +92,7 @@ public sealed class Assertion
 public sealed class EventRecord
 {
     [JsonPropertyName("type")] public string? Type { get; set; }
+    [JsonPropertyName("timestamp")] public long Timestamp { get; set; }
     [JsonPropertyName("data")] public EventData? Data { get; set; }
 }
 
@@ -92,7 +100,10 @@ public sealed class EventData
 {
     [JsonPropertyName("toolName")] public string? ToolName { get; set; }
     [JsonPropertyName("arguments")] public string? Arguments { get; set; }
+    [JsonPropertyName("inputTokens")] public long? InputTokens { get; set; }
     [JsonPropertyName("cacheReadTokens")] public long? CacheReadTokens { get; set; }
+    [JsonPropertyName("cacheWriteTokens")] public long? CacheWriteTokens { get; set; }
+    [JsonPropertyName("outputTokens")] public long? OutputTokens { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]

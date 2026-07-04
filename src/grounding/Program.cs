@@ -13,27 +13,36 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | model-diff | source-diff | tools-card | web-card",
+    Description = "table | card | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "model-diff", "source-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
 var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
 };
+var ietModelOpt = new Option<string>("--iet-model")
+{
+    Description = $"IET cost model: {IetModels.Names}. Default 'auto' = per-model (Anthropic for Claude, OpenAI for GPT); any other value forces that model for every column.",
+    DefaultValueFactory = _ => "auto",
+};
+ietModelOpt.AcceptOnlyFromAmong("auto", "anthropic", "claude", "openai", "gpt", "no-cache", "nocache", "gpt-pro", "gpt-5.5-pro");
 // View flags (aliases for --view): --card / --model-diff / etc.
-var legacy = new[] { "card", "model-diff", "source-diff", "tools-card", "web-card" }
+var legacy = new[] { "card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card" }
     .ToDictionary(v => v, v => new Option<bool>($"--{v}") { Description = $"Alias for --view {v}." });
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
 {
-    filesArg, viewOpt, noTitleOpt,
+    filesArg, viewOpt, noTitleOpt, ietModelOpt,
 };
 foreach (var o in legacy.Values) analyze.Options.Add(o);
 analyze.SetAction(parse =>
 {
     var files = FileArgs.Expand(parse.GetValue(filesArg) ?? Array.Empty<string>());
     if (files.Count == 0) { Console.Error.WriteLine("analyze: no input files."); return 1; }
+    var ietSel = (parse.GetValue(ietModelOpt) ?? "auto").Trim().ToLowerInvariant();
+    // "auto" (default): choose the cost model per run from its model. Anything else forces it.
+    IetModels.Override = ietSel is "" or "auto" ? null : IetModels.Parse(ietSel);
     var cards = new Cards { NoTitle = parse.GetValue(noTitleOpt) };
     var view = legacy.FirstOrDefault(kv => parse.GetValue(kv.Value)).Key ?? parse.GetValue(viewOpt);
     switch (view)
@@ -41,6 +50,7 @@ analyze.SetAction(parse =>
         case "card": cards.Card(files); break;
         case "model-diff": cards.ModelDiff(files); break;
         case "source-diff": cards.SourceDiff(files); break;
+        case "skill-diff": cards.SkillDiff(files); break;
         case "tools-card": cards.ToolsCard(files); break;
         case "web-card": cards.WebCard(files); break;
         default: cards.Table(files); break;
@@ -53,10 +63,10 @@ root.Subcommands.Add(analyze);
 var unitArg = new Argument<string>("unit") { Description = "Grounding unit (grounding/<unit>)." };
 var sourceOpt = new Option<string>("--source", "-s")
 {
-    Description = "Grounding source to test: agents | readme | none.",
+    Description = "Grounding source to test: agents | skill | readme | none.",
     DefaultValueFactory = _ => "agents",
 };
-sourceOpt.AcceptOnlyFromAmong("agents", "readme", "none");
+sourceOpt.AcceptOnlyFromAmong("agents", "skill", "readme", "none");
 var modelOpt = new Option<string[]>("--model", "-m")
 {
     Description = "Model id(s); repeat or space-separate. Default claude-haiku-4.5.",

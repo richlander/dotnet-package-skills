@@ -26,7 +26,8 @@ bugs) at **zero tolerance** — the grounding gate is two-sided:
 
 A complete decision therefore needs **two runs**: a mini-tier run (default `claude-haiku-4.5`) for the
 win, and a frontier-tier run (e.g. `claude-opus-*`) for the no-harm check. Each is n ≥ 3, model and
-judge named. The gate is evaluated on the **grounding-tool** arm (the `plugin` channel) vs **baseline**, on means across the unit's
+judge named. The gate is evaluated on the **grounding-tool** arm (the `isolated` channel — only the
+target grounding loaded) vs **baseline**, on means across the unit's
 scenarios.
 
 > **The card grades; this section decides.** The `--card` conclusion is a single **uniform,
@@ -84,20 +85,21 @@ the number so the effect is *tracked as a quantity*, not collapsed to a pass/fai
 | `func` | Δ ≥ 0 — no functional-assertion drop |
 | **`IET diff`** | **≤ hard cap** — `IET_grounded − IET_baseline` may not inflate past the budget (**the headline harm number**) |
 | `cost` | ≤ hard cap — grounded cost may not inflate past the budget |
-| `output tok` | shown as a guard row (see below) — output overspend must be visible even when IET nets out |
+| `output tok` | shown as a visible row (`output tok (% of IET)`) — output overspend must be visible; output is priced 5× and is ~24–30% of IET |
 | `web` | grounded **web** calls = 0 (cache peeks allowed) |
 
 **Why IET, not output-tokens-only.** A natural objection: the harm we most fear is output/thinking
-overspend, so why not gate on output tokens alone? Because in our data **output is *not* the dominant
-share of IET** — it is only ~7–21%; non-cached input is ~79–93% (`IET = (input − cacheRead) + output`,
-and nothing guarantees output dominates). The **most likely grounding-induced harm on a strong model is
-input bloat** — a fat `AGENTS.md`, or one that induces large file reads / extra tool results — and it
-lands on *every* request. An output-only gate would be **blind to exactly that failure mode**. IET
-catches input bloat *and* output overspend, while correctly discounting cache reads (cheap, and any
-cache/input churn it hides reliably shows up in the informative signals — `turns`, `archaeology`,
-flailing). The one tradeoff: because IET is input-dominated, a pure "reasons-in-circles" output blow-up
-could be partly masked if input nets down — so we keep **`output tok` as its own visible guard row**, and
-a small efficiency gain bought with a large output-token increase is still a **fail**.
+overspend, so why not gate on output tokens alone? Because output is *not* the whole story of IET —
+under the price-weighted model (`IET = 1.25·(input − cacheRead) + 0.1·cacheRead + 5·output`) output is
+~24–30% of IET; the price-weighted input (fresh suffix + cheap cached prefix) is the rest. The **most
+likely grounding-induced harm on a strong model is input bloat** — a fat `AGENTS.md`, or one that
+induces large file reads / extra tool results — and it lands on *every* request. An output-only gate
+would be **blind to exactly that failure mode**. IET catches input bloat *and* output overspend (which
+it prices at 5×), while correctly discounting cache reads (0.1×, and any cache/input churn it hides
+reliably shows up in the informative signals — `Session turns`, `archaeology`, tool-turn activity).
+The one tradeoff: because IET still carries a large input component, a pure "reasons-in-circles" output
+blow-up could be partly masked if input nets down — so we keep **`output tok (% of IET)` as its own
+visible row**, and a small efficiency gain bought with a large output-token increase is still a **fail**.
 
 > These thresholds are the team's starting line (haiku/opus tiers, n=3). They are tunable in one place
 > — `GATE` in `grounding analyze` — and the analyzer applies them automatically per `--card`.
@@ -113,7 +115,20 @@ single **uniform, model-independent grade** of grounding's effect vs baseline, *
 WORSE** (the same rubric for every model — the card grades, it does not decide shipping; that is the
 ship decision above). Grading keys off **objective axes only** (task correctness, web archaeology, cost/IET);
 there is **no judge-quality diff** (the judge-floor section below). A dataset whose filename contains
-`readme` is read as the **README arm**.
+`readme` is read as the **README arm**; one containing `skill` is the **SKILL.md arm**; a bare
+`<unit>.<model>.json` is the **AGENTS.md arm**.
+
+**Which delivery arm the cards grade: `isolated`.** Each run produces three arms — `baseline` (no
+grounding), `isolated` (only the target grounding loaded), and `plugin` (the whole skills shelf loaded,
+agent self-selects). All final graded cards use **`isolated`** (default; override with
+`GROUNDING_CARD_ARM`), because it is the **clean content measure**: it isolates the doc from the shelf,
+it is faithful to AGENTS.md's always-on co-located delivery, and it still charges single-skill
+activation (the `read grounding (%)` row). `plugin` is a **separate delivery/discovery axis** — "does
+the agent still find and pick the grounding among many?" — and is **contaminated** for units that share
+a grounding dir with unrelated skills, so it flatters/distorts the grade. Run `plugin` only as an
+explicit discovery sidebar (`GROUNDING_CARD_ARM=skilledPlugin`) on a curated shelf, never as the headline
+grade. The arm is applied to **both sides of every diff**, so `source-diff`/`skill-diff` always compare
+like-for-like (mixing isolated on one side with plugin on the other would conflate content with discovery).
 
 - **BETTER** — task correctness held and a real win: more tasks correct, resourcefulness eliminated, or IET/cost down ≥ 25%; no regression.
 - **NEUTRAL** — task correctness held, no material efficiency win.
@@ -124,6 +139,11 @@ there is **no judge-quality diff** (the judge-floor section below). A dataset wh
 | **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
 | **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
 | **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | A **usability test of the README** (not a floor to beat): does the README also answer every question with 0 archaeology? README failures are bugs to **fix in the same PR**. Once the README is complete, AGENTS's edge narrows to efficiency/retrieval. |
+| **Skill-diff** | `--skill-diff` | one model, grounding-tool delivery | SKILL.md vs AGENTS.md | What the **Complete Textbook's extra tokens buy** over the Missing Manual: does the fuller SKILL.md win more tasks / cut more archaeology, and at what added cost? |
+
+Cost model: by default (`--iet-model auto`) each dataset is priced by **its own model** — `anthropic`
+for Claude/Opus, `openai` for GPT — so an Opus-vs-GPT card is faithful in one render. Pass an explicit
+`--iet-model` to force one model for every column. See [iet-model.md](iet-model.md).
 
 ```bash
 # primary, one card per model
@@ -132,6 +152,8 @@ grounding analyze --card data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<uni
 grounding analyze --model-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
 # source-diff (AGENTS − README, one model — usually the mini tier)
 grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>-readme.n3.haiku.json
+# skill-diff (SKILL − AGENTS, per model — what the Textbook's extra tokens buy)
+grounding analyze --skill-diff data/<unit>/<unit>.opus.json data/<unit>/<unit>-skill.opus.json
 ```
 
 **Paste the cards verbatim** into the PR's *Metrics* section. The PR carries four: primary (mini), primary
@@ -146,15 +168,23 @@ grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-
 | func passed (assertions) (+) | 17/18 | 18/18 |
 | resourcefulness (archaeology) (-) | 35 | 0 |
 | grounding load (tok) (context) | 0 | 540 |
-| work IET (iet - doc) (-) | 31276 | 17018 |
-| output tok (-) | 5782 | 1716 |
-| cost (-) | 7.75 | 2.28 |
+| read grounding (%) | 0% | 100% |
+| output tok (% of IET) (-) | 5782 (28%) | 1716 (26%) |
+| tool-call turns (% of total) (-) | 18 (95%) | 8 (89%) |
+| tool-turn secs (% of turn time) (-) | 120s (96%) | 44s (91%) |
+| tool-turn IET (% of turn IET) (-) | 96% | 92% |
+| Session turns (-) | 19 | 9 |
+| Session IET (-) | 31816 | 17558 |
+| Session Cost (-) | 7.75 | 2.28 |
 
-> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, resourcefulness 35→0, work-IET -46%, cost -71%.
+> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, resourcefulness 35→0, session IET -45%, cost -71%.
 ```
 
-The card emits a shared **Legend** explaining each row and the BETTER / NEUTRAL / WORSE grade. For the
-operational "which card for which lifecycle operation" guide, see
+The card reads **outcome → detail → session summary** (the bottom three rows are the session totals:
+turns, IET, cost). Sizes are in tokens (`grounding load`, `output tok`), costs in IET/$ — no row mixes
+dimensions. `read grounding (%)` flags a grounded run that never invoked the `skill` tool (effectively
+baseline). See [`iet-model.md`](./iet-model.md#practical-card-interpretation) for the per-row guide.
+For the operational "which card for which lifecycle operation" guide, see
 [`grounding-lifecycle.md`](./grounding-lifecycle.md).
 
 ---

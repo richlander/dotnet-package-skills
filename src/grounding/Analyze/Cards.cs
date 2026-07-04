@@ -25,22 +25,37 @@ internal sealed partial class Cards
     private static string RawFunc(ArmAgg a) => $"{a.Fp}/{a.Ft}";
     private static string RawArch(ArmAgg a) => a.Arch.ToString(Inv);
     private static string RawIet(ArmAgg a) => F0(a.Iet);
-    private static string RawOut(ArmAgg a) => F0(a.Out);
+    private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
+    private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
+    private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * 100)}%";
+    private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
+    private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
+    private static string RawToolCallTurns(ArmAgg a) => $"{F0(a.ToolTurns)} ({F0(a.ToolTurnPct)}%)";
     private static string RawCost(ArmAgg a) => F2(a.Cost);
 
     private static string DiffSuccess(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Succ - o.Succ)} ({n.Succ}/{n.N})";
     private static string DiffFunc(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Fp - o.Fp)} ({n.Fp}/{n.Ft})";
     private static string DiffArch(ArmAgg n, ArmAgg o) => $"{o.Arch}\u2192{n.Arch}";
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
+    private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
+    private static string DiffReadGrounding(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.Activated * 100)}%\u2192{F0(n.Activated * 100)}%";
+    private static string DiffToolTurnSecs(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.ToolTurnSecs)}\u2192{F0(n.ToolTurnSecs)}s ({F0(o.ToolTurnSecsPct)}\u2192{F0(n.ToolTurnSecsPct)}%)";
+    private static string DiffToolTurnIet(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.ToolTurnIetPct)}\u2192{F0(n.ToolTurnIetPct)}%";
+    private static string DiffToolCallTurns(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.ToolTurns)}\u2192{F0(n.ToolTurns)} ({F0(o.ToolTurnPct)}\u2192{F0(n.ToolTurnPct)}%)";
     private static string DiffCost(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Cost, o.Cost));
 
-    // Document cost (the grounding doc loaded into the arm; baseline = 0) and the
-    // doc-excluded "work" IET, so a bigger doc isn't charged as agent effort.
+    // The grounding doc's size (tokens loaded into the arm; baseline = 0), shown as size
+    // context only. The doc's cost is a real cost and is NOT netted out — it is reported in
+    // full by session IET below. (Netting raw DocTok out of weighted IET was dimensionally
+    // unfaithful anyway: the doc is cache-read every turn, so its IET footprint != its token
+    // count.)
     private static string RawDoc(ArmAgg a) => a.DocTok.ToString(Inv);
-    private static string RawWorkIet(ArmAgg a) => F0(a.Iet - a.DocTok);
     private static string DiffDoc(ArmAgg n, ArmAgg o) => $"{o.DocTok}\u2192{n.DocTok}";
-    private static string DiffWorkIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet - n.DocTok, o.Iet - o.DocTok));
 
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
@@ -48,9 +63,15 @@ internal sealed partial class Cards
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
-        ("work IET (iet - doc) (-)",           RawWorkIet, DiffWorkIet),
-        ("output tok (-)",                     RawOut,     DiffOut),
-        ("cost (-)",                           RawCost,    DiffCost),
+        ("read grounding (%)",                 RawReadGrounding, DiffReadGrounding),
+        ("output tok (% of IET) (-)",          RawOut,     DiffOut),
+        ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
+        ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
+        ("tool-turn IET (% of turn IET) (-)",  RawToolTurnIet,  DiffToolTurnIet),
+        // Session summary (bottom line): total turns, price-weighted cost, dollars.
+        ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
+        ("Session IET (-)",                    RawIet,     DiffIet),
+        ("Session Cost (-)",                   RawCost,    DiffCost),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
@@ -60,13 +81,13 @@ internal sealed partial class Cards
     // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet - g.DocTok, b.Iet - b.DocTok);   // work IET (document netted out)
+        var iet = Pct(g.Iet, b.Iet);   // session IET (full cost, doc included — not netted)
         var cost = Pct(g.Cost, b.Cost);
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
         int bArch = b.Arch, gArch = g.Arch;
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {bArch}\u2192{gArch}, work-IET {SignedPct(iet)}, cost {SignedPct(cost)}";
+                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}, cost {SignedPct(cost)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)
@@ -106,7 +127,7 @@ internal sealed partial class Cards
             _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
         var mpref = NoTitle ? $"`{a.Model}` | " : "";
         var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
-        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | Baseline | AGENTS.md |");
         _o.WriteLine("| --- | ---: | ---: |");
         foreach (var (label, raw, _) in Spec)
@@ -116,17 +137,17 @@ internal sealed partial class Cards
 
     public void Card(IReadOnlyList<string> files)
     {
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme)
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && !a.IsSkill)
             .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
         if (arms.Count == 0)
         {
-            _o.WriteLine("--card needs at least one AGENTS.md dataset (non-'readme' path)."); return;
+            _o.WriteLine("--card needs at least one AGENTS.md dataset (non-'readme'/'skill' path)."); return;
         }
         var sn = arms[0].SkillName;
         var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
-        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, raw, _) in Spec)
@@ -141,8 +162,8 @@ internal sealed partial class Cards
 
     public void ModelDiff(IReadOnlyList<string> files)
     {
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme).ToList();
-        if (arms.Count == 0) { _o.WriteLine("model-diff needs at least one non-'readme' dataset."); return; }
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && !a.IsSkill).ToList();
+        if (arms.Count == 0) { _o.WriteLine("model-diff needs at least one AGENTS.md dataset."); return; }
         arms = arms
             .OrderBy(a => a.Tier == "mini" ? 0 : 1)
             .ThenBy(a => a.Model, StringComparer.Ordinal)
@@ -150,7 +171,7 @@ internal sealed partial class Cards
         var sn = arms[0].SkillName;
         if (!NoTitle)
             _o.WriteLine($"### Model-diff — {sn} | AGENTS.md lift over baseline\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, _, diff) in Spec)
@@ -168,7 +189,7 @@ internal sealed partial class Cards
         // Pair AGENTS + README datasets by model; columns are models (mini first).
         var models = loaded.GroupBy(a => a.Model)
             .Select(g => (Model: g.Key,
-                          Agents: g.FirstOrDefault(a => !a.IsReadme),
+                          Agents: g.FirstOrDefault(a => !a.IsReadme && !a.IsSkill),
                           Readme: g.FirstOrDefault(a => a.IsReadme)))
             .Where(x => x.Agents is not null && x.Readme is not null)
             .OrderBy(x => x.Agents!.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal)
@@ -180,12 +201,41 @@ internal sealed partial class Cards
         }
         var sn = models[0].Agents!.SkillName;
         if (!NoTitle) _o.WriteLine($"### Comparison to README.md — {sn}\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. IET model {IetModels.CaptionFor(models.Select(m => m.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", models.Count)));
         foreach (var (label, _, diff) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", models.Select(m => diff(m.Agents!.Agg[Arm], m.Readme!.Agg[Arm]))) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Readme!.Agg[Arm], m.Agents!.Agg[Arm])}**")) + " |");
+    }
+
+    // AGENTS.md vs SKILL.md, per model: what the Textbook's extra tokens buy over the Missing
+    // Manual. Each cell is SKILL − AGENTS (both via the grounding tool, baseline removed), so a
+    // positive success/func Δ or lower archaeology is SKILL pulling ahead; − on IET/output/cost
+    // means SKILL is cheaper (usually it is not — that is the token cost you are weighing).
+    public void SkillDiff(IReadOnlyList<string> files)
+    {
+        var loaded = files.Select(Loader.LoadArm).ToList();
+        var models = loaded.GroupBy(a => a.Model)
+            .Select(g => (Model: g.Key,
+                          Agents: g.FirstOrDefault(a => !a.IsReadme && !a.IsSkill),
+                          Skill: g.FirstOrDefault(a => a.IsSkill)))
+            .Where(x => x.Agents is not null && x.Skill is not null)
+            .OrderBy(x => x.Agents!.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal)
+            .ToList();
+        if (models.Count == 0)
+        {
+            _o.WriteLine("skill-diff needs an AGENTS.md + SKILL.md dataset per model (a path containing 'skill').");
+            return;
+        }
+        var sn = models[0].Agents!.SkillName;
+        if (!NoTitle) _o.WriteLine($"### SKILL.md over AGENTS.md — {sn}\n");
+        _o.WriteLine($"_Each cell: `SKILL.md` − `AGENTS.md`, both via the grounding tool, baseline removed (+ on success/func = the Textbook wins more tasks; lower archaeology = more self-sufficient; % for IET/output/cost, − = SKILL cheaper — the extra tokens are the price). Columns are models. Judge `{models[0].Agents!.Judge}`. IET model {IetModels.CaptionFor(models.Select(m => m.Model))}. Means across scenarios._\n");
+        _o.WriteLine("| Metric (goal) | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
+        _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", models.Count)));
+        foreach (var (label, _, diff) in Spec)
+            _o.WriteLine($"| {label} | " + string.Join(" | ", models.Select(m => diff(m.Skill!.Agg[Arm], m.Agents!.Agg[Arm]))) + " |");
+        _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Agents!.Agg[Arm], m.Skill!.Agg[Arm])}**")) + " |");
     }
 
     // ---- raw per-scenario table (Python main) ----------------------------
@@ -202,6 +252,7 @@ internal sealed partial class Cards
             ResultsFile d;
             try { d = Loader.Parse(f); }
             catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); continue; }
+            var ietModel = IetModels.For(d.Model);
             foreach (var v in d.Verdicts ?? new())
             {
                 var sn = v.SkillName ?? "?";
@@ -216,7 +267,7 @@ internal sealed partial class Cards
                     var name = (sc.ScenarioName ?? "").Split(':')[0];
                     foreach (var (key, label) in Metrics.Arms)
                     {
-                        var r = Loader.Row(Loader.ArmOf(sc, key));
+                        var r = Loader.Row(Loader.ArmOf(sc, key), ietModel);
                         if (r is null) continue;
                         _o.WriteLine(TableRow(name, label, r));
                     }

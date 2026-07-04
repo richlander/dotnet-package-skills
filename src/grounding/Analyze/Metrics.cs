@@ -9,6 +9,11 @@ internal sealed class ArmAgg
     public double? Qual;
     public int Fp, Ft, Succ, Web, Cache, N;
     public double Iet, Cost, Tok, Out;
+    public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
+    public double ToolTurns, AllTurns, ToolTurnPct;
+    public double OutIetPct;      // output's share of IET (%)
+    public double Activated;      // fraction of grounded scenarios that read the grounding (0..1)
+    public bool Grounded;         // this arm was handed grounding (non-baseline)
     public int DocTok;   // grounding doc tokens loaded into THIS arm (0 for baseline)
 
     public int Arch => Web + Cache;
@@ -18,12 +23,14 @@ internal sealed class ArmAgg
 internal sealed class LoadedArm
 {
     public required string Model;
+    public required IetModel Iet;      // cost model used for this run (per-model unless forced)
     public required string Judge;
     public required string Tier;
     public required string SkillName;
     public string? SkillPath;
     public required Dictionary<string, ArmAgg> Agg;
     public required bool IsReadme;
+    public required bool IsSkill;
     public required string Path;
 }
 

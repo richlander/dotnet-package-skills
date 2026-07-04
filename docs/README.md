@@ -26,6 +26,8 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
   (Brochure / Missing Manual / Complete Textbook).
 - **[delivery-and-retrieval.md](./delivery-and-retrieval.md)** — how grounding reaches the agent: the
   resident index, MCP delivery, and retrieval gates.
+- **[iet-model.md](./iet-model.md)** — how the analyzer maps Copilot token fields to IET, including
+  prompt-cache evidence, provider models, and tool-turn IET.
 - **[harness.md](./harness.md)** — how `skill-validator` is built and run, and the confounds.
 - **[grounding-lifecycle.md](./grounding-lifecycle.md)** — the team playbook: create / update / delete /
   evaluate.
