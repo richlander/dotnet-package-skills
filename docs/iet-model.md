@@ -21,6 +21,8 @@ cached prefix = cacheReadTokens
 fresh suffix = inputTokens - cacheReadTokens
 ```
 
+In this document, `input` means the prompt input reported for the configured API request mode. It does not always mean `base input` charged at the `1.00` rate. The rate applied to the non-cached part of `inputTokens` depends on the model and cache mode. In Copilot's Claude-style conversational cache mode, the non-cached suffix behaves as cache-write input. In a no-cache mode, the same kind of prompt text is base input.
+
 Raw `inputTokens + outputTokens` treats cached prompt reuse as full-price input. That overstates harm in multi-turn agent sessions, where most of the growing prompt is a cached prefix.
 
 ## Evidence from repeated-turn probes
