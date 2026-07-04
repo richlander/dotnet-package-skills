@@ -44,12 +44,13 @@ internal sealed partial class Cards
         $"{F0(o.ToolTurns)}\u2192{F0(n.ToolTurns)} ({F0(o.ToolTurnPct)}\u2192{F0(n.ToolTurnPct)}%)";
     private static string DiffCost(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Cost, o.Cost));
 
-    // Document cost (the grounding doc loaded into the arm; baseline = 0) and the
-    // doc-excluded "work" IET, so a bigger doc isn't charged as agent effort.
+    // The grounding doc's size (tokens loaded into the arm; baseline = 0), shown as size
+    // context only. The doc's cost is a real cost and is NOT netted out — it is reported in
+    // full by session IET below. (Netting raw DocTok out of weighted IET was dimensionally
+    // unfaithful anyway: the doc is cache-read every turn, so its IET footprint != its token
+    // count.)
     private static string RawDoc(ArmAgg a) => a.DocTok.ToString(Inv);
-    private static string RawWorkIet(ArmAgg a) => F0(a.Iet - a.DocTok);
     private static string DiffDoc(ArmAgg n, ArmAgg o) => $"{o.DocTok}\u2192{n.DocTok}";
-    private static string DiffWorkIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet - n.DocTok, o.Iet - o.DocTok));
 
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
@@ -57,7 +58,7 @@ internal sealed partial class Cards
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
-        ("work IET (iet - doc) (-)",           RawWorkIet, DiffWorkIet),
+        ("session IET (-)",                    RawIet,     DiffIet),
         ("output tok (-)",                     RawOut,     DiffOut),
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
@@ -72,13 +73,13 @@ internal sealed partial class Cards
     // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet - g.DocTok, b.Iet - b.DocTok);   // work IET (document netted out)
+        var iet = Pct(g.Iet, b.Iet);   // session IET (full cost, doc included — not netted)
         var cost = Pct(g.Cost, b.Cost);
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
         int bArch = b.Arch, gArch = g.Arch;
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {bArch}\u2192{gArch}, work-IET {SignedPct(iet)}, cost {SignedPct(cost)}";
+                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}, cost {SignedPct(cost)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)
