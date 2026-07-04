@@ -25,6 +25,7 @@ internal sealed partial class Cards
     private static string RawFunc(ArmAgg a) => $"{a.Fp}/{a.Ft}";
     private static string RawArch(ArmAgg a) => a.Arch.ToString(Inv);
     private static string RawIet(ArmAgg a) => F0(a.Iet);
+    private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
     private static string RawOut(ArmAgg a) => F0(a.Out);
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
     private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
@@ -35,6 +36,7 @@ internal sealed partial class Cards
     private static string DiffFunc(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Fp - o.Fp)} ({n.Fp}/{n.Ft})";
     private static string DiffArch(ArmAgg n, ArmAgg o) => $"{o.Arch}\u2192{n.Arch}";
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
+    private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
     private static string DiffToolTurnSecs(ArmAgg n, ArmAgg o) =>
         $"{F0(o.ToolTurnSecs)}\u2192{F0(n.ToolTurnSecs)}s ({F0(o.ToolTurnSecsPct)}\u2192{F0(n.ToolTurnSecsPct)}%)";
@@ -58,12 +60,14 @@ internal sealed partial class Cards
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
-        ("session IET (-)",                    RawIet,     DiffIet),
         ("output tok (-)",                     RawOut,     DiffOut),
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
         ("tool-turn IET (% of turn IET) (-)",  RawToolTurnIet,  DiffToolTurnIet),
-        ("cost (-)",                           RawCost,    DiffCost),
+        // Session summary (bottom line): total turns, price-weighted cost, dollars.
+        ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
+        ("Session IET (-)",                    RawIet,     DiffIet),
+        ("Session Cost (-)",                   RawCost,    DiffCost),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
