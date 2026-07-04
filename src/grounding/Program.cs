@@ -21,19 +21,26 @@ var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
 };
+var ietModelOpt = new Option<string>("--iet-model")
+{
+    Description = $"IET cost model: {IetModels.Names}.",
+    DefaultValueFactory = _ => IetModels.Anthropic.Name,
+};
+ietModelOpt.AcceptOnlyFromAmong("anthropic", "claude", "openai", "gpt", "no-cache", "nocache", "gpt-pro", "gpt-5.5-pro");
 // View flags (aliases for --view): --card / --model-diff / etc.
 var legacy = new[] { "card", "model-diff", "source-diff", "tools-card", "web-card" }
     .ToDictionary(v => v, v => new Option<bool>($"--{v}") { Description = $"Alias for --view {v}." });
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
 {
-    filesArg, viewOpt, noTitleOpt,
+    filesArg, viewOpt, noTitleOpt, ietModelOpt,
 };
 foreach (var o in legacy.Values) analyze.Options.Add(o);
 analyze.SetAction(parse =>
 {
     var files = FileArgs.Expand(parse.GetValue(filesArg) ?? Array.Empty<string>());
     if (files.Count == 0) { Console.Error.WriteLine("analyze: no input files."); return 1; }
+    IetModels.Current = IetModels.Parse(parse.GetValue(ietModelOpt));
     var cards = new Cards { NoTitle = parse.GetValue(noTitleOpt) };
     var view = legacy.FirstOrDefault(kv => parse.GetValue(kv.Value)).Key ?? parse.GetValue(viewOpt);
     switch (view)

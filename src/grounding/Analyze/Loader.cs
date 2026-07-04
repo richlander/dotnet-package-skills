@@ -32,7 +32,7 @@ internal static class Loader
         var (di, mcp, cache) = CountToolEvents(m);
         var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet) = CountToolTurns(m);
         long input = m.InputTokens, output = m.OutputTokens;
-        var iet = (long)System.Math.Round(Iet(input, m.CacheReadTokens, m.CacheWriteTokens, output));
+        var iet = (long)System.Math.Round(IetModels.Current.Iet(m));
         return new ArmRow
         {
             Qual = arm.JudgeResult?.OverallScore,
@@ -45,10 +45,9 @@ internal static class Loader
             Di = di, Mcp = mcp, Cache = cache,
             Bash = Tb("bash"),
             Tok = input + output,
-            // Price-weighted, input-equivalent cost stick (Claude-family ratios): fresh input 1x,
-            // cacheRead 0.1x, cacheWrite 1.25x, output 5x. Maps to spend (IET x input_price ~= $),
-            // and — unlike an unweighted count — does not undercount output, the class grounding
-            // most reduces. See README.md "How we measure cost: IET".
+            // Price-weighted, input-equivalent cost stick. The default Anthropic model treats
+            // the fresh suffix as effective cache-write input and the cached prefix as
+            // cache-read input. See README.md "How we measure cost: IET".
             Iet = iet,
             Out = output,
             ToolTurnSecs = toolTurnSecs,
@@ -68,9 +67,6 @@ internal static class Loader
             Secs = (long)Math.Round(m.WallTimeMs / 1000.0, MidpointRounding.ToEven),
         };
     }
-
-    private static double Iet(long input, long cacheRead, long cacheWrite, long output) =>
-        (input - cacheRead) + 0.1 * cacheRead + 1.25 * cacheWrite + 5.0 * output;
 
     // (dotnet-inspect calls, MCP calls, NuGet-cache pokes) from the event log.
     private static (int di, int mcp, int cache) CountToolEvents(Json.Metrics m)
@@ -100,7 +96,7 @@ internal static class Loader
     private static (double toolSecs, double allSecs, double toolIet, double allIet) CountToolTurns(Json.Metrics m)
     {
         bool inTurn = false, hasTool = false;
-        long start = 0, input = 0, cacheRead = 0, cacheWrite = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
+        long start = 0, input = 0, cacheRead = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
         double toolIet = 0, allIet = 0;
 
         foreach (var e in m.Events ?? new())
@@ -113,20 +109,18 @@ internal static class Loader
                     start = e.Timestamp;
                     input = 0;
                     cacheRead = 0;
-                    cacheWrite = 0;
                     output = 0;
                     break;
                 case "assistant.usage" when inTurn:
                     input = e.Data?.InputTokens ?? 0;
                     cacheRead = e.Data?.CacheReadTokens ?? 0;
-                    cacheWrite = e.Data?.CacheWriteTokens ?? 0;
                     output = e.Data?.OutputTokens ?? 0;
                     break;
                 case "tool.execution_start" when inTurn:
                     hasTool = true;
                     break;
                 case "assistant.turn_end" when inTurn:
-                    var turnIet = Iet(input, cacheRead, cacheWrite, output);
+                    var turnIet = IetModels.Current.Iet(input, cacheRead, output);
                     var turnMs = e.Timestamp >= start ? e.Timestamp - start : 0;
                     allIet += turnIet;
                     allDurationMs += turnMs;

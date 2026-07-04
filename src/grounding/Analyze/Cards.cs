@@ -114,7 +114,7 @@ internal sealed partial class Cards
             _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
         var mpref = NoTitle ? $"`{a.Model}` | " : "";
         var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
-        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | Baseline | AGENTS.md |");
         _o.WriteLine("| --- | ---: | ---: |");
         foreach (var (label, raw, _) in Spec)
@@ -134,7 +134,7 @@ internal sealed partial class Cards
         var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
-        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, raw, _) in Spec)
@@ -158,7 +158,7 @@ internal sealed partial class Cards
         var sn = arms[0].SkillName;
         if (!NoTitle)
             _o.WriteLine($"### Model-diff — {sn} | AGENTS.md lift over baseline\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, _, diff) in Spec)
@@ -188,7 +188,7 @@ internal sealed partial class Cards
         }
         var sn = models[0].Agents!.SkillName;
         if (!NoTitle) _o.WriteLine($"### Comparison to README.md — {sn}\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", models.Count)));
         foreach (var (label, _, diff) in Spec)
