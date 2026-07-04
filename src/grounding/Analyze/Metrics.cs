@@ -10,6 +10,7 @@ internal sealed class ArmAgg
     public int Fp, Ft, Succ, Web, Cache, N;
     public double Iet, Cost, Tok, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
+    public double ToolTurns, AllTurns, ToolTurnPct;
     public int DocTok;   // grounding doc tokens loaded into THIS arm (0 for baseline)
 
     public int Arch => Web + Cache;

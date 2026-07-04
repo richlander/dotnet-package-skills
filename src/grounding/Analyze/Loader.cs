@@ -14,6 +14,7 @@ internal sealed class ArmRow
     public int? Turns;
     public long Tok, Iet, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
+    public double ToolTurns, AllTurns, ToolTurnPct;
     public double Cost;           // rounded to 1 decimal, like Python (for aggregation)
     public string CostDisplay = ""; // raw-table cell, preserving JSON int/float type
     public long Secs;
@@ -30,7 +31,7 @@ internal static class Loader
         var tb = m.ToolCallBreakdown ?? new();
         int Tb(string k) => tb.TryGetValue(k, out var v) ? v : 0;
         var (di, mcp, cache) = CountToolEvents(m);
-        var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet) = CountToolTurns(m);
+        var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns) = CountToolTurns(m);
         long input = m.InputTokens, output = m.OutputTokens;
         var iet = (long)System.Math.Round(IetModels.Current.Iet(m));
         return new ArmRow
@@ -60,6 +61,11 @@ internal static class Loader
             // event-sum (same basis as the numerator) — NOT the session IET, which is on a
             // different accounting basis and would let this exceed 100%.
             ToolTurnIetPct = allTurnIet > 0 ? toolTurnIet / allTurnIet * 100.0 : 0.0,
+            // Count of turns that fired >=1 tool call, and all assistant turns. Deterministic
+            // activity signal; the share = tool-call turns / total turns (bounded by construction).
+            ToolTurns = toolTurns,
+            AllTurns = allTurns,
+            ToolTurnPct = allTurns > 0 ? (double)toolTurns / allTurns * 100.0 : 0.0,
             Cost = Metrics.Round1(m.Cost),
             CostDisplay = m.CostIsInteger
                 ? ((long)m.Cost).ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -93,11 +99,12 @@ internal static class Loader
     // from the event stream's turn boundaries. Note: per-turn `input` is the cumulative re-sent
     // context, so per-turn IET is NOT the billed session IET — it is only meaningful as a ratio
     // (tool-turn IET / all-turn IET), both summed the same way here.
-    private static (double toolSecs, double allSecs, double toolIet, double allIet) CountToolTurns(Json.Metrics m)
+    private static (double toolSecs, double allSecs, double toolIet, double allIet, int toolTurns, int allTurns) CountToolTurns(Json.Metrics m)
     {
         bool inTurn = false, hasTool = false;
         long start = 0, input = 0, cacheRead = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
         double toolIet = 0, allIet = 0;
+        int toolTurns = 0, allTurns = 0;
 
         foreach (var e in m.Events ?? new())
         {
@@ -124,17 +131,19 @@ internal static class Loader
                     var turnMs = e.Timestamp >= start ? e.Timestamp - start : 0;
                     allIet += turnIet;
                     allDurationMs += turnMs;
+                    allTurns++;
                     if (hasTool)
                     {
                         toolIet += turnIet;
                         toolDurationMs += turnMs;
+                        toolTurns++;
                     }
                     inTurn = false;
                     break;
             }
         }
 
-        return (toolDurationMs / 1000.0, allDurationMs / 1000.0, toolIet, allIet);
+        return (toolDurationMs / 1000.0, allDurationMs / 1000.0, toolIet, allIet, toolTurns, allTurns);
     }
 
     public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios)
@@ -159,6 +168,7 @@ internal static class Loader
                 a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache;
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
                 a.ToolTurnIet += r.ToolTurnIet; a.ToolTurnIetPct += r.ToolTurnIetPct;
+                a.ToolTurns += r.ToolTurns; a.AllTurns += r.AllTurns; a.ToolTurnPct += r.ToolTurnPct;
             }
         }
         foreach (var (key, _) in Metrics.Arms)
@@ -169,6 +179,7 @@ internal static class Loader
             a.Iet /= n; a.Cost /= n; a.Tok /= n; a.Out /= n;
             a.ToolTurnSecs /= n; a.ToolTurnSecsPct /= n;
             a.ToolTurnIet /= n; a.ToolTurnIetPct /= n;
+            a.ToolTurns /= n; a.AllTurns /= n; a.ToolTurnPct /= n;
         }
         return acc;
     }
