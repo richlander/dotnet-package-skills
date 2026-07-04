@@ -56,19 +56,47 @@ internal static class IetModels
         OutputWeight: 6.00,
         UseReportedCacheReads: false);
 
-    public static IetModel Current { get; set; } = Anthropic;
+    // Explicit override from `--iet-model`. When null (the default, "auto"), the cost model
+    // is chosen per run from the model that produced it — so a mixed Opus+GPT card prices the
+    // Claude columns with the Anthropic model and the GPT columns with the OpenAI model.
+    public static IetModel? Override { get; set; }
+
+    // The cost model for a run produced by `model`. Honours an explicit `--iet-model` override;
+    // otherwise maps the model family to its pricing shape.
+    public static IetModel For(string? model) => Override ?? FromModel(model);
+
+    // Family -> pricing shape. Claude/Copilot conversational cache is the Anthropic shape;
+    // the GPT family is the OpenAI cached-input shape. Unknown families default to Anthropic
+    // (the conversational-cache shape most agents run under).
+    public static IetModel FromModel(string? model)
+    {
+        var m = (model ?? "").ToLowerInvariant();
+        if (m.Contains("gpt") || m.Contains("openai") || m.Contains("o1") || m.Contains("o3") || m.Contains("o4"))
+            return OpenAi;
+        return Anthropic; // claude/opus/sonnet/haiku + gemini + unknown
+    }
 
     public static IetModel Parse(string? name)
     {
-        var normalized = (name ?? Anthropic.Name).Trim().ToLowerInvariant();
+        var normalized = (name ?? "auto").Trim().ToLowerInvariant();
         return normalized switch
         {
-            "" or "anthropic" or "claude" => Anthropic,
+            "" or "auto" => Anthropic, // caller decides auto vs. override; Parse yields a concrete model
+            "anthropic" or "claude" => Anthropic,
             "openai" or "gpt" => OpenAi,
             "no-cache" or "nocache" or "gpt-pro" or "gpt-5.5-pro" => NoCache,
             _ => throw new ArgumentException($"Unknown IET model '{name}'. Use: {Names}."),
         };
     }
 
-    public static string Names => "anthropic, openai, no-cache";
+    // A caption fragment describing the cost model(s) in play for the given set of run models.
+    // One family -> just its name; a mix -> "per model (anthropic=Claude, openai=GPT)".
+    public static string CaptionFor(IEnumerable<string?> models)
+    {
+        if (Override is { } ov) return $"`{ov.Name}` (forced)";
+        var names = models.Select(FromModel).Select(x => x.Name).Distinct().ToList();
+        return names.Count == 1 ? $"`{names[0]}`" : "per model (`anthropic`=Claude, `openai`=GPT)";
+    }
+
+    public static string Names => "auto, anthropic, openai, no-cache";
 }

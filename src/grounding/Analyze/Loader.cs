@@ -24,7 +24,7 @@ internal sealed class ArmRow
 
 internal static class Loader
 {
-    public static ArmRow? Row(Arm? arm)
+    public static ArmRow? Row(Arm? arm, IetModel model)
     {
         if (arm?.Metrics is not { } m) return null;
         var ar = m.AssertionResults ?? new();
@@ -33,9 +33,9 @@ internal static class Loader
         var tb = m.ToolCallBreakdown ?? new();
         int Tb(string k) => tb.TryGetValue(k, out var v) ? v : 0;
         var (di, mcp, cache) = CountToolEvents(m);
-        var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns) = CountToolTurns(m);
+        var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns) = CountToolTurns(m, model);
         long input = m.InputTokens, output = m.OutputTokens;
-        var iet = (long)System.Math.Round(IetModels.Current.Iet(m));
+        var iet = (long)System.Math.Round(model.Iet(m));
         return new ArmRow
         {
             Qual = arm.JudgeResult?.OverallScore,
@@ -53,7 +53,7 @@ internal static class Loader
             // cache-read input. See README.md "How we measure cost: IET".
             Iet = iet,
             Out = output,
-            OutIetPct = iet > 0 ? IetModels.Current.OutputWeight * output / iet * 100.0 : 0.0,
+            OutIetPct = iet > 0 ? model.OutputWeight * output / iet * 100.0 : 0.0,
             ToolTurnSecs = toolTurnSecs,
             // Share of model turn-time spent in tool-calling turns. Denominator is the all-turn
             // duration sum (same basis as the numerator) — NOT WallTimeMs, which is measured on a
@@ -102,7 +102,7 @@ internal static class Loader
     // from the event stream's turn boundaries. Note: per-turn `input` is the cumulative re-sent
     // context, so per-turn IET is NOT the billed session IET — it is only meaningful as a ratio
     // (tool-turn IET / all-turn IET), both summed the same way here.
-    private static (double toolSecs, double allSecs, double toolIet, double allIet, int toolTurns, int allTurns) CountToolTurns(Json.Metrics m)
+    private static (double toolSecs, double allSecs, double toolIet, double allIet, int toolTurns, int allTurns) CountToolTurns(Json.Metrics m, IetModel model)
     {
         bool inTurn = false, hasTool = false;
         long start = 0, input = 0, cacheRead = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
@@ -130,7 +130,7 @@ internal static class Loader
                     hasTool = true;
                     break;
                 case "assistant.turn_end" when inTurn:
-                    var turnIet = IetModels.Current.Iet(input, cacheRead, output);
+                    var turnIet = model.Iet(input, cacheRead, output);
                     var turnMs = e.Timestamp >= start ? e.Timestamp - start : 0;
                     allIet += turnIet;
                     allDurationMs += turnMs;
@@ -149,7 +149,7 @@ internal static class Loader
         return (toolDurationMs / 1000.0, allDurationMs / 1000.0, toolIet, allIet, toolTurns, allTurns);
     }
 
-    public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios)
+    public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios, IetModel model)
     {
         var acc = Metrics.Arms.ToDictionary(a => a.Key, _ => new ArmAgg());
         var quals = Metrics.Arms.ToDictionary(a => a.Key, _ => new List<double>());
@@ -157,7 +157,7 @@ internal static class Loader
         {
             foreach (var (key, _) in Metrics.Arms)
             {
-                var r = Row(ArmOf(sc, key));
+                var r = Row(ArmOf(sc, key), model);
                 if (r is null) continue;
                 var a = acc[key];
                 a.N++;
@@ -217,9 +217,10 @@ internal static class Loader
     {
         var d = Parse(path);
         var model = d.Model ?? "?";
+        var iet = IetModels.For(model);
         var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : new Verdict();
         var sn = v.SkillName ?? "?";
-        var agg = Aggregate(v.Scenarios ?? new());
+        var agg = Aggregate(v.Scenarios ?? new(), iet);
         // The grounding document is only charged when the grounded arm actually READ it
         // (skill invoked). Weight the doc's token load by the activation rate — a run that
         // never activated loaded 0 grounding tokens.
@@ -229,15 +230,20 @@ internal static class Loader
             arm.Grounded = key != "baseline";
             arm.DocTok = arm.Grounded ? (int)Math.Round(gtok * arm.Activated) : 0;
         }
+        var file = System.IO.Path.GetFileName(path).ToLowerInvariant();
         return new LoadedArm
         {
             Model = model,
+            Iet = iet,
             Judge = d.JudgeModel ?? model,
             Tier = Metrics.Tier(model),
             SkillName = sn,
             SkillPath = v.SkillPath,
             Agg = agg,
-            IsReadme = System.IO.Path.GetFileName(path).ToLowerInvariant().Contains("readme"),
+            // Source of the grounding content fed into the SKILL.md the run loaded (the run
+            // tag encodes it: `<unit>-readme.*` / `<unit>-skill.*`; bare `<unit>.*` = agents).
+            IsReadme = file.Contains("readme"),
+            IsSkill = file.Contains("skill"),
             Path = path,
         };
     }

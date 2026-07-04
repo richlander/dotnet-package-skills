@@ -67,9 +67,31 @@ Provider docs that inform this model:
 * [OpenAI prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching): cache hits require exact prefix matches; static content belongs at the beginning and variable content at the end.
 * [GitHub Copilot models and pricing](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing): Copilot pricing separates input, cached input, output, and for Anthropic models cache write.
 
-## Default model: Anthropic conversational cache
+## Default: per-model cost model (`auto`)
 
-The default analyzer model is `anthropic`. It matches Claude-style conversational cache economics:
+By default (`--iet-model auto`) the analyzer picks the cost model **per run** from the model that
+produced it, so a single card can mix models and price each faithfully:
+
+| Model family | Cost model | Why |
+|---|---|---|
+| Claude / Opus / Sonnet / Haiku (and unknown) | `anthropic` | Copilot conversational cache: fresh suffix is effective cache-write. |
+| GPT / OpenAI / o-series | `openai` | OpenAI cached-input pricing: no cache-write premium, 6× output. |
+
+This is what makes the end-game card honest: an **Opus vs GPT** comparison prices the Opus columns
+with `anthropic` and the GPT columns with `openai` automatically. The caption records which model(s)
+are in play (`IET model per model (anthropic=Claude, openai=GPT)`), or `… (forced)` when overridden.
+
+To force one model for every column (for an apples-to-apples "what if everything were Anthropic-priced"
+view), pass an explicit model — it overrides the per-run selection:
+
+```bash
+grounding analyze --iet-model auto ...        # default: per-run, by model
+grounding analyze --iet-model anthropic ...   # force Anthropic for all columns
+grounding analyze --iet-model openai ...       # force OpenAI for all columns
+grounding analyze --iet-model no-cache ...     # force the no-cache shape for all columns
+```
+
+## The `anthropic` model: conversational cache
 
 ```text
 cached = cacheReadTokens
@@ -80,23 +102,13 @@ IET = 1.25*fresh + 0.10*cached + 5.00*outputTokens
 
 Under this model, no prompt input is charged at the `1.00` base-input rate in normal cache-enabled Copilot agent turns. The input is either cached-prefix read or fresh suffix that becomes cache-readable on the next turn.
 
-Use this model for Claude-family Copilot evals and for the default quality cards.
-
-## Other analyzer models
-
-The analyzer supports named IET models:
-
-```bash
-grounding analyze --iet-model anthropic ...
-grounding analyze --iet-model openai ...
-grounding analyze --iet-model no-cache ...
-```
+## The named models
 
 | Model | Formula | Use |
 |---|---|---|
-| `anthropic` | `1.25*(input-cacheRead) + 0.10*cacheRead + 5.00*output` | Default. Claude/Copilot conversational cache. |
-| `openai` | `1.00*(input-cacheRead) + 0.10*cacheRead + 6.00*output` | OpenAI cached-input models with no cache-write premium. |
-| `no-cache` | `1.00*input + 6.00*output` | Models or request modes without prompt-cache pricing. |
+| `anthropic` | `1.25*(input-cacheRead) + 0.10*cacheRead + 5.00*output` | Claude/Copilot conversational cache. Auto-selected for Claude families. |
+| `openai` | `1.00*(input-cacheRead) + 0.10*cacheRead + 6.00*output` | OpenAI cached-input models with no cache-write premium. Auto-selected for GPT/o-series. |
+| `no-cache` | `1.00*input + 6.00*output` | Models or request modes without prompt-cache pricing. Explicit only. |
 
 The `openai` model still decomposes gross input into cached and fresh classes. The difference is that fresh input stays at `1.00` because OpenAI prompt caching has no explicit cache-write surcharge in the public docs.
 

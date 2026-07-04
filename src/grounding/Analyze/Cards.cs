@@ -127,7 +127,7 @@ internal sealed partial class Cards
             _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
         var mpref = NoTitle ? $"`{a.Model}` | " : "";
         var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
-        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
+        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | Baseline | AGENTS.md |");
         _o.WriteLine("| --- | ---: | ---: |");
         foreach (var (label, raw, _) in Spec)
@@ -137,17 +137,17 @@ internal sealed partial class Cards
 
     public void Card(IReadOnlyList<string> files)
     {
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme)
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && !a.IsSkill)
             .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
         if (arms.Count == 0)
         {
-            _o.WriteLine("--card needs at least one AGENTS.md dataset (non-'readme' path)."); return;
+            _o.WriteLine("--card needs at least one AGENTS.md dataset (non-'readme'/'skill' path)."); return;
         }
         var sn = arms[0].SkillName;
         var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
-        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, raw, _) in Spec)
@@ -162,8 +162,8 @@ internal sealed partial class Cards
 
     public void ModelDiff(IReadOnlyList<string> files)
     {
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme).ToList();
-        if (arms.Count == 0) { _o.WriteLine("model-diff needs at least one non-'readme' dataset."); return; }
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && !a.IsSkill).ToList();
+        if (arms.Count == 0) { _o.WriteLine("model-diff needs at least one AGENTS.md dataset."); return; }
         arms = arms
             .OrderBy(a => a.Tier == "mini" ? 0 : 1)
             .ThenBy(a => a.Model, StringComparer.Ordinal)
@@ -171,7 +171,7 @@ internal sealed partial class Cards
         var sn = arms[0].SkillName;
         if (!NoTitle)
             _o.WriteLine($"### Model-diff — {sn} | AGENTS.md lift over baseline\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, _, diff) in Spec)
@@ -189,7 +189,7 @@ internal sealed partial class Cards
         // Pair AGENTS + README datasets by model; columns are models (mini first).
         var models = loaded.GroupBy(a => a.Model)
             .Select(g => (Model: g.Key,
-                          Agents: g.FirstOrDefault(a => !a.IsReadme),
+                          Agents: g.FirstOrDefault(a => !a.IsReadme && !a.IsSkill),
                           Readme: g.FirstOrDefault(a => a.IsReadme)))
             .Where(x => x.Agents is not null && x.Readme is not null)
             .OrderBy(x => x.Agents!.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal)
@@ -201,12 +201,41 @@ internal sealed partial class Cards
         }
         var sn = models[0].Agents!.SkillName;
         if (!NoTitle) _o.WriteLine($"### Comparison to README.md — {sn}\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. IET model `{IetModels.Current.Name}`. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: `AGENTS.md` − `README.md`, both via the grounding tool, baseline removed (− = AGENTS cheaper; + on success/func; lower archaeology = AGENTS more self-sufficient). Columns are models. Judge `{models[0].Agents!.Judge}`. IET model {IetModels.CaptionFor(models.Select(m => m.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", models.Count)));
         foreach (var (label, _, diff) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", models.Select(m => diff(m.Agents!.Agg[Arm], m.Readme!.Agg[Arm]))) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Readme!.Agg[Arm], m.Agents!.Agg[Arm])}**")) + " |");
+    }
+
+    // AGENTS.md vs SKILL.md, per model: what the Textbook's extra tokens buy over the Missing
+    // Manual. Each cell is SKILL − AGENTS (both via the grounding tool, baseline removed), so a
+    // positive success/func Δ or lower archaeology is SKILL pulling ahead; − on IET/output/cost
+    // means SKILL is cheaper (usually it is not — that is the token cost you are weighing).
+    public void SkillDiff(IReadOnlyList<string> files)
+    {
+        var loaded = files.Select(Loader.LoadArm).ToList();
+        var models = loaded.GroupBy(a => a.Model)
+            .Select(g => (Model: g.Key,
+                          Agents: g.FirstOrDefault(a => !a.IsReadme && !a.IsSkill),
+                          Skill: g.FirstOrDefault(a => a.IsSkill)))
+            .Where(x => x.Agents is not null && x.Skill is not null)
+            .OrderBy(x => x.Agents!.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal)
+            .ToList();
+        if (models.Count == 0)
+        {
+            _o.WriteLine("skill-diff needs an AGENTS.md + SKILL.md dataset per model (a path containing 'skill').");
+            return;
+        }
+        var sn = models[0].Agents!.SkillName;
+        if (!NoTitle) _o.WriteLine($"### SKILL.md over AGENTS.md — {sn}\n");
+        _o.WriteLine($"_Each cell: `SKILL.md` − `AGENTS.md`, both via the grounding tool, baseline removed (+ on success/func = the Textbook wins more tasks; lower archaeology = more self-sufficient; % for IET/output/cost, − = SKILL cheaper — the extra tokens are the price). Columns are models. Judge `{models[0].Agents!.Judge}`. IET model {IetModels.CaptionFor(models.Select(m => m.Model))}. Means across scenarios._\n");
+        _o.WriteLine("| Metric (goal) | " + string.Join(" | ", models.Select(m => $"`{m.Model}`")) + " |");
+        _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", models.Count)));
+        foreach (var (label, _, diff) in Spec)
+            _o.WriteLine($"| {label} | " + string.Join(" | ", models.Select(m => diff(m.Skill!.Agg[Arm], m.Agents!.Agg[Arm]))) + " |");
+        _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Agents!.Agg[Arm], m.Skill!.Agg[Arm])}**")) + " |");
     }
 
     // ---- raw per-scenario table (Python main) ----------------------------
@@ -223,6 +252,7 @@ internal sealed partial class Cards
             ResultsFile d;
             try { d = Loader.Parse(f); }
             catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); continue; }
+            var ietModel = IetModels.For(d.Model);
             foreach (var v in d.Verdicts ?? new())
             {
                 var sn = v.SkillName ?? "?";
@@ -237,7 +267,7 @@ internal sealed partial class Cards
                     var name = (sc.ScenarioName ?? "").Split(':')[0];
                     foreach (var (key, label) in Metrics.Arms)
                     {
-                        var r = Loader.Row(Loader.ArmOf(sc, key));
+                        var r = Loader.Row(Loader.ArmOf(sc, key), ietModel);
                         if (r is null) continue;
                         _o.WriteLine(TableRow(name, label, r));
                     }

@@ -114,7 +114,8 @@ single **uniform, model-independent grade** of grounding's effect vs baseline, *
 WORSE** (the same rubric for every model — the card grades, it does not decide shipping; that is the
 ship decision above). Grading keys off **objective axes only** (task correctness, web archaeology, cost/IET);
 there is **no judge-quality diff** (the judge-floor section below). A dataset whose filename contains
-`readme` is read as the **README arm**.
+`readme` is read as the **README arm**; one containing `skill` is the **SKILL.md arm**; a bare
+`<unit>.<model>.json` is the **AGENTS.md arm**.
 
 - **BETTER** — task correctness held and a real win: more tasks correct, resourcefulness eliminated, or IET/cost down ≥ 25%; no regression.
 - **NEUTRAL** — task correctness held, no material efficiency win.
@@ -125,6 +126,11 @@ there is **no judge-quality diff** (the judge-floor section below). A dataset wh
 | **Primary** | `--card` | one model | baseline → AGENTS.md | Does grounding help *this* model? (one card per model, graded BETTER/NEUTRAL/WORSE) |
 | **Model-diff** | `--model-diff` | AGENTS.md vs baseline | the model | Does the grade hold across tiers — side by side. |
 | **Source-diff** | `--source-diff` | one model, grounding-tool delivery | AGENTS.md vs README.md | A **usability test of the README** (not a floor to beat): does the README also answer every question with 0 archaeology? README failures are bugs to **fix in the same PR**. Once the README is complete, AGENTS's edge narrows to efficiency/retrieval. |
+| **Skill-diff** | `--skill-diff` | one model, grounding-tool delivery | SKILL.md vs AGENTS.md | What the **Complete Textbook's extra tokens buy** over the Missing Manual: does the fuller SKILL.md win more tasks / cut more archaeology, and at what added cost? |
+
+Cost model: by default (`--iet-model auto`) each dataset is priced by **its own model** — `anthropic`
+for Claude/Opus, `openai` for GPT — so an Opus-vs-GPT card is faithful in one render. Pass an explicit
+`--iet-model` to force one model for every column. See [iet-model.md](iet-model.md).
 
 ```bash
 # primary, one card per model
@@ -133,6 +139,8 @@ grounding analyze --card data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<uni
 grounding analyze --model-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>.n3.opus.json
 # source-diff (AGENTS − README, one model — usually the mini tier)
 grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-6q/<unit>-readme.n3.haiku.json
+# skill-diff (SKILL − AGENTS, per model — what the Textbook's extra tokens buy)
+grounding analyze --skill-diff data/<unit>/<unit>.opus.json data/<unit>/<unit>-skill.opus.json
 ```
 
 **Paste the cards verbatim** into the PR's *Metrics* section. The PR carries four: primary (mini), primary

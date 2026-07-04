@@ -61,6 +61,18 @@ internal static class Runner
             case "agents":
                 skillText = doc.Render(doc.Body);
                 break;
+            case "skill":
+                // The authored Complete Textbook. It is already a full SKILL.md (frontmatter +
+                // body), so feed it verbatim rather than re-wrapping the AGENTS.md frontmatter.
+                var authoredSkill = Path.Combine(unitDir, "SKILL.md");
+                if (!File.Exists(authoredSkill))
+                {
+                    Console.Error.WriteLine(
+                        $"grounding: --source skill needs grounding/{o.Unit}/SKILL.md (run 'grounding sync-skill').");
+                    return 1;
+                }
+                skillText = File.ReadAllText(authoredSkill);
+                break;
             case "readme":
                 var readmePath = o.ReadmeFile ?? Path.Combine(unitDir, "README.md");
                 if (!File.Exists(readmePath))
@@ -114,6 +126,7 @@ internal static class Runner
                 var ms = ShortModel(model);
                 var tag = o.Source switch
                 {
+                    "skill" => $"{o.Unit}-skill.{ms}",
                     "readme" => $"{o.Unit}-readme.{ms}",
                     "none" => $"{o.Unit}-none.{ms}",
                     _ => $"{o.Unit}.{ms}",

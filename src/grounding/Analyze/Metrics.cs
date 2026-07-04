@@ -23,12 +23,14 @@ internal sealed class ArmAgg
 internal sealed class LoadedArm
 {
     public required string Model;
+    public required IetModel Iet;      // cost model used for this run (per-model unless forced)
     public required string Judge;
     public required string Tier;
     public required string SkillName;
     public string? SkillPath;
     public required Dictionary<string, ArmAgg> Agg;
     public required bool IsReadme;
+    public required bool IsSkill;
     public required string Path;
 }
 
