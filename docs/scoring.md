@@ -26,7 +26,8 @@ bugs) at **zero tolerance** — the grounding gate is two-sided:
 
 A complete decision therefore needs **two runs**: a mini-tier run (default `claude-haiku-4.5`) for the
 win, and a frontier-tier run (e.g. `claude-opus-*`) for the no-harm check. Each is n ≥ 3, model and
-judge named. The gate is evaluated on the **grounding-tool** arm (the `plugin` channel) vs **baseline**, on means across the unit's
+judge named. The gate is evaluated on the **grounding-tool** arm (the `isolated` channel — only the
+target grounding loaded) vs **baseline**, on means across the unit's
 scenarios.
 
 > **The card grades; this section decides.** The `--card` conclusion is a single **uniform,
@@ -116,6 +117,18 @@ ship decision above). Grading keys off **objective axes only** (task correctness
 there is **no judge-quality diff** (the judge-floor section below). A dataset whose filename contains
 `readme` is read as the **README arm**; one containing `skill` is the **SKILL.md arm**; a bare
 `<unit>.<model>.json` is the **AGENTS.md arm**.
+
+**Which delivery arm the cards grade: `isolated`.** Each run produces three arms — `baseline` (no
+grounding), `isolated` (only the target grounding loaded), and `plugin` (the whole skills shelf loaded,
+agent self-selects). All final graded cards use **`isolated`** (default; override with
+`GROUNDING_CARD_ARM`), because it is the **clean content measure**: it isolates the doc from the shelf,
+it is faithful to AGENTS.md's always-on co-located delivery, and it still charges single-skill
+activation (the `read grounding (%)` row). `plugin` is a **separate delivery/discovery axis** — "does
+the agent still find and pick the grounding among many?" — and is **contaminated** for units that share
+a grounding dir with unrelated skills, so it flatters/distorts the grade. Run `plugin` only as an
+explicit discovery sidebar (`GROUNDING_CARD_ARM=skilledPlugin`) on a curated shelf, never as the headline
+grade. The arm is applied to **both sides of every diff**, so `source-diff`/`skill-diff` always compare
+like-for-like (mixing isolated on one side with plugin on the other would conflate content with discovery).
 
 - **BETTER** — task correctness held and a real win: more tasks correct, resourcefulness eliminated, or IET/cost down ≥ 25%; no regression.
 - **NEUTRAL** — task correctness held, no material efficiency win.
