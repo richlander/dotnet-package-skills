@@ -28,6 +28,13 @@ public sealed class Scenario
     [JsonPropertyName("baseline")] public Arm? Baseline { get; set; }
     [JsonPropertyName("skilledIsolated")] public Arm? SkilledIsolated { get; set; }
     [JsonPropertyName("skilledPlugin")] public Arm? SkilledPlugin { get; set; }
+    [JsonPropertyName("skillActivationIsolated")] public SkillActivation? SkillActivationIsolated { get; set; }
+    [JsonPropertyName("skillActivationPlugin")] public SkillActivation? SkillActivationPlugin { get; set; }
+}
+
+public sealed class SkillActivation
+{
+    [JsonPropertyName("activated")] public bool Activated { get; set; }
 }
 
 public sealed class Arm

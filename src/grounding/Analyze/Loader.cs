@@ -15,6 +15,8 @@ internal sealed class ArmRow
     public long Tok, Iet, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
     public double ToolTurns, AllTurns, ToolTurnPct;
+    public double OutIetPct;      // output's share of IET (OutputWeight*output / IET), % — the expensive class
+    public bool Activated;        // grounded arm actually read the grounding (skill invoked)
     public double Cost;           // rounded to 1 decimal, like Python (for aggregation)
     public string CostDisplay = ""; // raw-table cell, preserving JSON int/float type
     public long Secs;
@@ -51,6 +53,7 @@ internal static class Loader
             // cache-read input. See README.md "How we measure cost: IET".
             Iet = iet,
             Out = output,
+            OutIetPct = iet > 0 ? IetModels.Current.OutputWeight * output / iet * 100.0 : 0.0,
             ToolTurnSecs = toolTurnSecs,
             // Share of model turn-time spent in tool-calling turns. Denominator is the all-turn
             // duration sum (same basis as the numerator) — NOT WallTimeMs, which is measured on a
@@ -169,6 +172,8 @@ internal static class Loader
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
                 a.ToolTurnIet += r.ToolTurnIet; a.ToolTurnIetPct += r.ToolTurnIetPct;
                 a.ToolTurns += r.ToolTurns; a.AllTurns += r.AllTurns; a.ToolTurnPct += r.ToolTurnPct;
+                a.OutIetPct += r.OutIetPct;
+                a.Activated += ActivatedOf(sc, key) ? 1 : 0;
             }
         }
         foreach (var (key, _) in Metrics.Arms)
@@ -180,6 +185,7 @@ internal static class Loader
             a.ToolTurnSecs /= n; a.ToolTurnSecsPct /= n;
             a.ToolTurnIet /= n; a.ToolTurnIetPct /= n;
             a.ToolTurns /= n; a.AllTurns /= n; a.ToolTurnPct /= n;
+            a.OutIetPct /= n; a.Activated /= n;
         }
         return acc;
     }
@@ -190,6 +196,14 @@ internal static class Loader
         "skilledIsolated" => sc.SkilledIsolated,
         "skilledPlugin" => sc.SkilledPlugin,
         _ => null,
+    };
+
+    // Did the grounded arm actually read the grounding (skill invoked)? Baseline has none.
+    public static bool ActivatedOf(Scenario sc, string key) => key switch
+    {
+        "skilledIsolated" => sc.SkillActivationIsolated?.Activated ?? false,
+        "skilledPlugin" => sc.SkillActivationPlugin?.Activated ?? false,
+        _ => false,
     };
 
     public static ResultsFile Parse(string path)
@@ -206,11 +220,15 @@ internal static class Loader
         var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : new Verdict();
         var sn = v.SkillName ?? "?";
         var agg = Aggregate(v.Scenarios ?? new());
-        // The grounding document is loaded into the grounded arms only; net it out of
-        // "work" so a bigger doc (e.g. SKILL.md) isn't charged as agent effort.
+        // The grounding document is only charged when the grounded arm actually READ it
+        // (skill invoked). Weight the doc's token load by the activation rate — a run that
+        // never activated loaded 0 grounding tokens.
         var gtok = GroundingTokens(v.SkillPath, sn) ?? 0;
         foreach (var (key, arm) in agg)
-            arm.DocTok = key == "baseline" ? 0 : gtok;
+        {
+            arm.Grounded = key != "baseline";
+            arm.DocTok = arm.Grounded ? (int)Math.Round(gtok * arm.Activated) : 0;
+        }
         return new LoadedArm
         {
             Model = model,

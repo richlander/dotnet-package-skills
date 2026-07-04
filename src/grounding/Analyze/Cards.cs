@@ -26,7 +26,8 @@ internal sealed partial class Cards
     private static string RawArch(ArmAgg a) => a.Arch.ToString(Inv);
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
-    private static string RawOut(ArmAgg a) => F0(a.Out);
+    private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
+    private static string RawReadGrounding(ArmAgg a) => a.Grounded ? $"{F0(a.Activated * 100)}%" : "\u2014";
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
     private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
     private static string RawToolCallTurns(ArmAgg a) => $"{F0(a.ToolTurns)} ({F0(a.ToolTurnPct)}%)";
@@ -38,6 +39,8 @@ internal sealed partial class Cards
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
+    private static string DiffReadGrounding(ArmAgg n, ArmAgg o) =>
+        n.Grounded ? $"{F0(n.Activated * 100)}%" : "\u2014";
     private static string DiffToolTurnSecs(ArmAgg n, ArmAgg o) =>
         $"{F0(o.ToolTurnSecs)}\u2192{F0(n.ToolTurnSecs)}s ({F0(o.ToolTurnSecsPct)}\u2192{F0(n.ToolTurnSecsPct)}%)";
     private static string DiffToolTurnIet(ArmAgg n, ArmAgg o) =>
@@ -60,7 +63,8 @@ internal sealed partial class Cards
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
-        ("output tok (-)",                     RawOut,     DiffOut),
+        ("read grounding (%)",                 RawReadGrounding, DiffReadGrounding),
+        ("output tok (% of IET) (-)",          RawOut,     DiffOut),
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
         ("tool-turn IET (% of turn IET) (-)",  RawToolTurnIet,  DiffToolTurnIet),

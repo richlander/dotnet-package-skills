@@ -11,6 +11,9 @@ internal sealed class ArmAgg
     public double Iet, Cost, Tok, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
     public double ToolTurns, AllTurns, ToolTurnPct;
+    public double OutIetPct;      // output's share of IET (%)
+    public double Activated;      // fraction of grounded scenarios that read the grounding (0..1)
+    public bool Grounded;         // this arm was handed grounding (non-baseline)
     public int DocTok;   // grounding doc tokens loaded into THIS arm (0 for baseline)
 
     public int Arch => Web + Cache;
