@@ -122,11 +122,33 @@ Very large prompts can trigger this behavior. In a 280k-character probe, turn 2 
 
 ## Practical card interpretation
 
-Use IET as the hero token metric for quality cards:
+The quality card reads top-to-bottom as **outcome → detail → session summary**. IET is the hero
+cost metric; sizes stay in tokens, costs in IET/$, so no row mixes dimensions.
 
-* `tok`: Gross visibility into prompt size.
-* `IET`: Cost-shaped prompt and output work.
-* `output tok`: The most expensive output class shown separately.
-* `cost`: Copilot-reported request cost, useful when it has enough granularity.
+Outcome and validity:
 
-For Copilot agent sessions, the `anthropic` model makes the intended comparison explicit: grounding wins when it moves expensive output and repeated search into cheaper cached prefix input without hurting correctness.
+* `tasks correct` / `func passed`: did grounding keep (or improve) correctness — the only ship gate.
+* `resourcefulness (archaeology)`: file-system / web / cache digging the grounding should remove.
+* `grounding load (tok)`: the doc's **size**, weighted by whether it was actually read (see below).
+* `read grounding (%)`: did the grounded arm invoke the `skill` tool and load the grounding? Baseline
+  is `0%`. A grounded run at `0%` never read the grounding — it is effectively a baseline run and
+  dilutes the arm; its `grounding load` is `0` accordingly.
+
+Cost detail (where the spend goes):
+
+* `output tok (% of IET)`: output tokens and their share of IET. Output is a small fraction of the
+  token **count** but a large share of **IET** (~1–2% of tokens, ~24–30% of IET) — the 50×-vs-cache
+  leverage made visible. Grounding wins by moving expensive output/thinking into cheap cached input.
+* `tool-call turns (% of total)`, `tool-turn secs (% of turn time)`, `tool-turn IET (% of turn IET)`:
+  how much of the session was tool-mediated. Counts/seconds are the signal; the shares saturate on
+  build-and-run tasks. Shares use a per-turn denominator (see *Tool-turn IET* above), bounded ≤ 100%.
+
+Session summary (the bottom line):
+
+* `Session turns`: total assistant turns.
+* `Session IET`: the full price-weighted cost, **doc included** (not netted — the doc is a real cost).
+* `Session Cost`: Copilot-reported request cost, when it has enough granularity.
+
+For Copilot agent sessions, the `anthropic` model makes the intended comparison explicit: grounding
+wins when it moves expensive output and repeated search into cheaper cached-prefix input without
+hurting correctness.

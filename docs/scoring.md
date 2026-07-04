@@ -84,20 +84,21 @@ the number so the effect is *tracked as a quantity*, not collapsed to a pass/fai
 | `func` | Δ ≥ 0 — no functional-assertion drop |
 | **`IET diff`** | **≤ hard cap** — `IET_grounded − IET_baseline` may not inflate past the budget (**the headline harm number**) |
 | `cost` | ≤ hard cap — grounded cost may not inflate past the budget |
-| `output tok` | shown as a guard row (see below) — output overspend must be visible even when IET nets out |
+| `output tok` | shown as a visible row (`output tok (% of IET)`) — output overspend must be visible; output is priced 5× and is ~24–30% of IET |
 | `web` | grounded **web** calls = 0 (cache peeks allowed) |
 
 **Why IET, not output-tokens-only.** A natural objection: the harm we most fear is output/thinking
-overspend, so why not gate on output tokens alone? Because in our data **output is *not* the dominant
-share of IET** — it is only ~7–21%; non-cached input is ~79–93% (`IET = (input − cacheRead) + output`,
-and nothing guarantees output dominates). The **most likely grounding-induced harm on a strong model is
-input bloat** — a fat `AGENTS.md`, or one that induces large file reads / extra tool results — and it
-lands on *every* request. An output-only gate would be **blind to exactly that failure mode**. IET
-catches input bloat *and* output overspend, while correctly discounting cache reads (cheap, and any
-cache/input churn it hides reliably shows up in the informative signals — `turns`, `archaeology`,
-flailing). The one tradeoff: because IET is input-dominated, a pure "reasons-in-circles" output blow-up
-could be partly masked if input nets down — so we keep **`output tok` as its own visible guard row**, and
-a small efficiency gain bought with a large output-token increase is still a **fail**.
+overspend, so why not gate on output tokens alone? Because output is *not* the whole story of IET —
+under the price-weighted model (`IET = 1.25·(input − cacheRead) + 0.1·cacheRead + 5·output`) output is
+~24–30% of IET; the price-weighted input (fresh suffix + cheap cached prefix) is the rest. The **most
+likely grounding-induced harm on a strong model is input bloat** — a fat `AGENTS.md`, or one that
+induces large file reads / extra tool results — and it lands on *every* request. An output-only gate
+would be **blind to exactly that failure mode**. IET catches input bloat *and* output overspend (which
+it prices at 5×), while correctly discounting cache reads (0.1×, and any cache/input churn it hides
+reliably shows up in the informative signals — `Session turns`, `archaeology`, tool-turn activity).
+The one tradeoff: because IET still carries a large input component, a pure "reasons-in-circles" output
+blow-up could be partly masked if input nets down — so we keep **`output tok (% of IET)` as its own
+visible row**, and a small efficiency gain bought with a large output-token increase is still a **fail**.
 
 > These thresholds are the team's starting line (haiku/opus tiers, n=3). They are tunable in one place
 > — `GATE` in `grounding analyze` — and the analyzer applies them automatically per `--card`.
@@ -146,15 +147,23 @@ grounding analyze --source-diff data/<unit>-6q/<unit>.n3.haiku.json data/<unit>-
 | func passed (assertions) (+) | 17/18 | 18/18 |
 | resourcefulness (archaeology) (-) | 35 | 0 |
 | grounding load (tok) (context) | 0 | 540 |
-| work IET (iet - doc) (-) | 31276 | 17018 |
-| output tok (-) | 5782 | 1716 |
-| cost (-) | 7.75 | 2.28 |
+| read grounding (%) | 0% | 100% |
+| output tok (% of IET) (-) | 5782 (28%) | 1716 (26%) |
+| tool-call turns (% of total) (-) | 18 (95%) | 8 (89%) |
+| tool-turn secs (% of turn time) (-) | 120s (96%) | 44s (91%) |
+| tool-turn IET (% of turn IET) (-) | 96% | 92% |
+| Session turns (-) | 19 | 9 |
+| Session IET (-) | 31816 | 17558 |
+| Session Cost (-) | 7.75 | 2.28 |
 
-> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, resourcefulness 35→0, work-IET -46%, cost -71%.
+> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, resourcefulness 35→0, session IET -45%, cost -71%.
 ```
 
-The card emits a shared **Legend** explaining each row and the BETTER / NEUTRAL / WORSE grade. For the
-operational "which card for which lifecycle operation" guide, see
+The card reads **outcome → detail → session summary** (the bottom three rows are the session totals:
+turns, IET, cost). Sizes are in tokens (`grounding load`, `output tok`), costs in IET/$ — no row mixes
+dimensions. `read grounding (%)` flags a grounded run that never invoked the `skill` tool (effectively
+baseline). See [`iet-model.md`](./iet-model.md#practical-card-interpretation) for the per-row guide.
+For the operational "which card for which lifecycle operation" guide, see
 [`grounding-lifecycle.md`](./grounding-lifecycle.md).
 
 ---
