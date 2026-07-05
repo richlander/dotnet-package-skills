@@ -166,7 +166,8 @@ grounding analyze --skill-diff data/<unit>/<unit>.opus.json data/<unit>/<unit>-s
 | --- | ---: | ---: |
 | tasks correct (+) | 5/6 | 6/6 |
 | func passed (assertions) (+) | 17/18 | 18/18 |
-| resourcefulness (archaeology) (-) | 35 | 0 |
+| nuget-cache reads (archaeology) (-) | 31 | 0 |
+| tool calls: web / bash / other (context) | 4/58/70 | 0/22/64 |
 | grounding load (tok) (context) | 0 | 540 |
 | read grounding (%) | 0% | 100% |
 | output tok (% of IET) (-) | 5782 (28%) | 1716 (26%) |
@@ -177,7 +178,7 @@ grounding analyze --skill-diff data/<unit>/<unit>.opus.json data/<unit>/<unit>-s
 | Session IET (-) | 31816 | 17558 |
 | Session Cost (-) | 7.75 | 2.28 |
 
-> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, resourcefulness 35→0, session IET -45%, cost -71%.
+> **Conclusion:** **BETTER** — tasks correct 6/6 vs 5/6, nuget-cache reads 31→0 (web 4→0), session IET -45%, cost -71%.
 ```
 
 The card reads **outcome → detail → session summary** (the bottom three rows are the session totals:

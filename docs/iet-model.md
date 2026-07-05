@@ -140,7 +140,12 @@ cost metric; sizes stay in tokens, costs in IET/$, so no row mixes dimensions.
 Outcome and validity:
 
 * `tasks correct` / `func passed`: did grounding keep (or improve) correctness — the only ship gate.
-* `resourcefulness (archaeology)`: file-system / web / cache digging the grounding should remove.
+* `nuget-cache reads (archaeology)`: tool calls into `~/.nuget/packages` — the agent reading or
+  decompiling the restored package binary because the grounding did not tell it what it needed. The
+  sharp "grounding was insufficient" signal; grounding should drive it toward `0`.
+* `tool calls: web / bash / other`: the tool-call mix. `web` is external retrieval (another escape
+  hatch grounding should zero out); `bash` is shell work (nuget-cache reads are a subset); `other`
+  is ordinary view/edit/skill work. Shown as counts so the composition is legible.
 * `grounding load (tok)`: the doc's **size**, weighted by whether it was actually read (see below).
 * `read grounding (%)`: did the grounded arm invoke the `skill` tool and load the grounding? Baseline
   is `0%`. A grounded run at `0%` never read the grounding — it is effectively a baseline run and
