@@ -34,9 +34,9 @@ dotnet tool install --global --add-source src/grounding/nupkg dotnet-package-gro
 | Command | Notes |
 | --- | --- |
 | `analyze <results.json...>` | default = raw per-scenario table |
-| `analyze --card / --model-diff / --source-diff / --tools-card / --web-card` | also `-v <view>`; `--no-title` supported |
+| `analyze --card / --doc-card / --model-diff / --source-diff / --skill-diff / --tools-card / --web-card` | also `-v <view>`; `--no-title` supported |
 | `run <unit> --source agents\|readme\|none` | README/AGENTS/nothing toggle; `--dry-run`, `--emit-skill` |
-| `sync-skill [--check]` | regenerate `grounding/<unit>/SKILL.md` from `AGENTS.md` |
+| `check-agents` | validate every `grounding/<unit>/AGENTS.md` is within the line budget |
 | `gen-plugins` | expand `grounding/**/plugin.json.in` |
 | `rescore <model=path>… [--w N]` | IET rubric, Pareto gate |
 | `rescore --all` | batch over `.skill-validator-results/` |

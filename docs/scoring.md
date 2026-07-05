@@ -195,7 +195,6 @@ For the operational "which card for which lifecycle operation" guide, see
 | Artifact | Path |
 | --- | --- |
 | The grounding edit (body ≤ `eng/agents-line-limit.txt`, currently 60) | `grounding/<unit>/AGENTS.md` |
-| Regenerated wrapper, in sync (`grounding sync-skill --check`) | `grounding/<unit>/SKILL.md` |
 | The matched n≥3 mini-tier dataset | `data/<unit>-6q/<unit>.n3.haiku.json` |
 | The matched n≥3 frontier-tier dataset (no-harm check) | `data/<unit>-6q/<unit>.n3.opus.json` |
 | The report | `docs/reports/<unit>.md` |
@@ -212,7 +211,7 @@ cache-state-not-a-variable).
 ### Validation (reproducible)
 
 ```bash
-grounding sync-skill --check
+grounding check-agents
 RUNS=3 eng/run-<unit>-6q.sh                                    # -> data/<unit>-6q/<unit>.haiku.json
 RUNS=3 MODELS=claude-opus-4.8 eng/run-<unit>-6q.sh            # frontier no-harm run
 grounding analyze --card data/<unit>-6q/<unit>.haiku.json
@@ -223,7 +222,7 @@ cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # comm
 
 ## Reviewer checklist
 
-- [ ] `AGENTS.md` within the line limit; `grounding sync-skill --check` passes.
+- [ ] `AGENTS.md` within the line limit (`grounding check-agents` passes).
 - [ ] Datasets committed under `data/<unit>-6q/`; both `--card` dumps in the PR match them.
 - [ ] n ≥ 3; model and judge named, for **both** tiers.
 - [ ] Mini tier graded **BETTER** (more tasks correct, eliminated resourcefulness, or ≥25% cost/IET cut; no task/func/web regression).

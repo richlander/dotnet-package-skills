@@ -268,11 +268,11 @@ upstream PR:
 ## Running the evals
 
 The harness mechanics — building `skill-validator` from a pinned `dotnet/skills` SHA, the
-`grounding/` + `tests/` layout, the `AGENTS.md` → `SKILL.md` generation step, and how to add a
-package — are documented in **[`docs/harness.md`](docs/harness.md)**. Quick start:
+`grounding/` + `tests/` layout, and how to add a package — are documented in
+**[`docs/harness.md`](docs/harness.md)**. Quick start:
 
 ```bash
 # Prereq: a .NET SDK matching dotnet/skills' global.json, git, and `gh auth login`.
-grounding sync-skill                  # regenerate SKILL.md from AGENTS.md
+grounding check-agents                # validate every AGENTS.md is within the line budget
 eng/run-evals.sh System.CommandLine
 ```

@@ -11,7 +11,7 @@ internal sealed class SkillDoc
     public string Body = "";
 
     private const string GeneratedMarker =
-        "<!-- GENERATED from AGENTS.md by `grounding sync-skill`. Do not edit. -->";
+        "<!-- Transient SKILL.md wrapper synthesized from AGENTS.md by the grounding harness at eval time. Do not edit or commit. -->";
 
     public static SkillDoc ParseAgents(string agentsPath, string? metaPath)
     {

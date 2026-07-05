@@ -2,7 +2,7 @@ using Grounding.Run;
 
 namespace Grounding.Codegen;
 
-// Implements the sync-skill and gen-plugins commands.
+// Implements the check-agents and gen-plugins commands.
 internal static class Codegen
 {
     // Validate every grounding/<unit>/AGENTS.md is within the body line budget.
