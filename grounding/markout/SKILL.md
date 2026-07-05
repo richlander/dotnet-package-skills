@@ -105,8 +105,15 @@ Serialize writes through a formatter; pass a different one to change output.
 
 e.g. TSV: `MarkoutSerializer.Serialize(report, Console.Out, new TableFormatter(), ReportContext.Default, new MarkoutWriterOptions { TableMode = MarkoutTableMode.Tsv });`
 
-## Advanced property attributes (links, badges, grouping)
+## Advanced attributes (layout, links, badges, grouping)
 
+- **`[MarkoutSection(Level = 3)]`** sets that section's heading level (default `2` = `##`), e.g.
+  `Level = 3` -> `### Heading`. `Name` / `Level` / `GroupBy` all combine on the one attribute.
+- **`[MarkoutSerializable(FieldLayout = FieldLayout.Bulleted)]`** picks how a type's scalar fields
+  render: `FieldLayout.{Table (default), Inline, Bulleted, Numbered, Plain}` — `Bulleted` -> `- Env: prod`
+  instead of a `| Field | Value |` table. `AutoFields = false` on the same attribute drops the field block.
+- **`[MarkoutBoolFormat("✓", "✗")]`** on a `bool` -> renders true/false as those strings
+  (e.g. `| Passed | ✓ |`), not `True`/`False`.
 - **`[MarkoutLink(TextProperty = nameof(Title))]`** on a URL/string property -> renders it as
   `[Title](url)` (the `TextProperty` supplies the link text; the annotated property is the href).
 - **`[MarkoutValueMap("open=✗", "closed=✓", ...)]`** -> maps a property's raw values to display
