@@ -147,8 +147,7 @@ enrich.SetAction(parse =>
         sdb = Directory.EnumerateFiles(resultsDir, "sessions.db", SearchOption.AllDirectories).FirstOrDefault();
     var sel = (parse.GetValue(enrichIetOpt) ?? "auto").Trim().ToLowerInvariant();
     IetModels.Apply(IetModels.ParseSelection(sel));
-    var model = IetModels.Override ?? IetModels.Anthropic;
-    return Grounding.Analyze.Enrich.Run(ds, sdb, model);
+    return Grounding.Analyze.Enrich.Run(ds, sdb);
 });
 root.Subcommands.Add(enrich);
 

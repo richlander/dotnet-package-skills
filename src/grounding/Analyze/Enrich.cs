@@ -29,7 +29,7 @@ internal static class Enrich
         _ => null,
     };
 
-    public static int Run(string datasetPath, string? sessionsDb, IetScheme model)
+    public static int Run(string datasetPath, string? sessionsDb)
     {
         if (!File.Exists(datasetPath)) { Console.Error.WriteLine($"enrich: dataset not found: {datasetPath}"); return 1; }
         sessionsDb ??= FindSessionsDb(datasetPath);
@@ -38,6 +38,11 @@ internal static class Enrich
             Console.Error.WriteLine("enrich: sessions.db not found. Pass --sessions-db <path> or --results-dir <dir>.");
             return 1;
         }
+
+        // Read the dataset once; its own model picks the tool-turn IET scheme (honouring the
+        // ambient --iet-model override/modifier), so a GPT dataset is priced OpenAI, not Anthropic.
+        var root = JsonNode.Parse(File.ReadAllText(datasetPath))!;
+        var scheme = IetModels.For(root["model"]?.GetValue<string>());
 
         // (scenario, arm) -> accumulated per-run stats.
         var acc = new Dictionary<(string scen, string arm), Acc>();
@@ -59,7 +64,7 @@ internal static class Enrich
                 var m = JsonSerializer.Deserialize(mj, GroundingJsonContext.Default.Metrics);
                 var events = m?.Events;
                 var (web, bash, other, tools, cache, nugetWeb, di, mcp) = Loader.CountToolCalls(events);
-                var (tSecs, aSecs, tIet, aIet, tTurns, aTurns) = Loader.CountToolTurns(events, model);
+                var (tSecs, aSecs, tIet, aIet, tTurns, aTurns) = Loader.CountToolTurns(events, scheme);
 
                 var key = (scen, arm);
                 if (!acc.TryGetValue(key, out var a)) acc[key] = a = new Acc();
@@ -75,7 +80,6 @@ internal static class Enrich
         if (acc.Count == 0) { Console.Error.WriteLine("enrich: no run_results found in sessions.db."); return 1; }
 
         // Inject averaged stats into the dataset JSON (DOM edit preserves all other fields).
-        var root = JsonNode.Parse(File.ReadAllText(datasetPath))!;
         int injected = 0;
         foreach (var verdict in root["verdicts"]?.AsArray() ?? new JsonArray())
         foreach (var sc in verdict?["scenarios"]?.AsArray() ?? new JsonArray())
