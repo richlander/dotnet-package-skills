@@ -83,7 +83,7 @@ new Description("dotnet-inspect", "API surface inspection tool")  // term + expl
 new Breakdown("Jan 2025", [new("Critical", 1), new("High", 3)])  // proportional composition
 new Callout(CalloutSeverity.Warning, "3 vulnerabilities found")  // attention
 new CodeSection("csharp", "public class Foo { }")                // verbatim content
-new TreeNode("root", [new TreeNode("child")])                    // hierarchy
+new TreeNode("app", [new TreeNode("Serilog", [new TreeNode("Serilog.Sinks.Console")])]) // hierarchy (nests via children)
 ```
 
 ## Renderers (swap the formatter, change the output)
@@ -96,7 +96,7 @@ Serialize writes through a formatter; pass a different one to change output.
 | `PlainTextFormatter` | plain text, no markup | minimal output |
 | `UnicodeFormatter` | box-drawing chars | bordered tables |
 | `TableFormatter` | tables / lists / fields | compact summaries, TSV/JSONL rows |
-| `DiagramFormatter` | trees / structural diagrams | dependency graphs |
+| `DiagramFormatter` | box/branch tree diagrams | alt tree style (Markdown already renders `List<TreeNode>` as a tree) |
 
 `TableFormatter` + `MarkoutWriterOptions.TableMode`:
 - `Tsv` — stable snake_case headers; never emits embedded tabs/newlines in cells.
