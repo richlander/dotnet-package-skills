@@ -59,7 +59,7 @@ MarkoutSerializer.Serialize(report, Console.Out, ReportContext.Default);
 
 ## Built-in shape types (use as model properties for rich output)
 
-`Metric` (bar chart), `Breakdown`/`Segment` (stacked bar), `Callout` (alert; `CalloutSeverity.Warning/Caution/Note/Tip/Important`), `TreeNode`
+`Metric` (measurement — `| label | value |` table in Markdown, bar chart in Unicode/ANSI), `Breakdown`/`Segment` (stacked bar), `Callout` (alert; `CalloutSeverity.Warning/Caution/Note/Tip/Important`), `TreeNode`
 (hierarchy), `Description` (term + text), `CodeSection` (code block). e.g. `new Metric("Build", 4.2)`.
 
 ## Shape Library (data relationship -> rendering)
@@ -73,7 +73,7 @@ Each property maps to a data relationship, not a visual element; the renderer de
 | Tabulation | `List<T>` | uniform records | `\| col \| col \|` |
 | Section | `[MarkoutSection]` | logical grouping | `## Heading` |
 | Description | `List<Description>` | terms + explanations | `- **Term:** text` |
-| Measurement | `List<Metric>` | comparative quantities | `Label ████░░ 45` |
+| Measurement | `List<Metric>` | comparative quantities | `\| label \| value \|` table (bars in Unicode/ANSI) |
 | Composition | `List<Breakdown>` | parts of a whole | stacked bar |
 | Hierarchy | `List<TreeNode>` | parent-child | `├── node` |
 | Quotation | `CodeSection` | verbatim content | code block |
