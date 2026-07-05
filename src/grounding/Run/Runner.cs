@@ -196,6 +196,11 @@ internal static class Runner
             }
             var dest = Path.Combine(outDir, tag + ".json");
             File.Copy(rj, dest, overwrite: true);
+            // Inject correct per-run-averaged tool-call stats from sessions.db so runs>1 numbers
+            // are consistent (skill-validator collapses breakdown=run[0] / events=run[last]).
+            var sdb = Path.Combine(Path.GetDirectoryName(rj)!, "sessions.db");
+            if (File.Exists(sdb))
+                Analyze.Enrich.Run(dest, sdb, Analyze.IetModels.For(model));
             Console.WriteLine($"   -> {dest}");
             new Analyze.Cards().Table(new[] { dest });
             return 0;

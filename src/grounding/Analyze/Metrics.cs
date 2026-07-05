@@ -7,8 +7,11 @@ namespace Grounding.Analyze;
 internal sealed class ArmAgg
 {
     public double? Qual;
-    public int Fp, Ft, Succ, Web, Cache, N;
-    public int Bash, Tools, NugetWeb;   // total bash calls; total tool calls; nuget.org web calls
+    public int Fp, Ft, Succ, N;
+    // Tool-call counts, summed across scenarios. Doubles because the enriched path carries
+    // per-run means (fractional). web/bash/other partition the tools; nuget-cache/nuget.org/di/mcp
+    // are diagnostic subsets.
+    public double Web, Cache, Bash, Tools, NugetWeb;
     public double Iet, Cost, Tok, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
     public double ToolTurns, AllTurns, ToolTurnPct;
@@ -19,10 +22,10 @@ internal sealed class ArmAgg
 
     // Tool-call composition. Web is external retrieval; nuget-cache is a subset of bash
     // (reading/decompiling the restored package). Other = everything else (view/edit/skill/...).
-    public int Other => Math.Max(0, Tools - Web - Bash);
+    public double Other => Math.Max(0, Tools - Web - Bash);
     // "Went outside the grounding" archaeology signal: web retrieval + nuget-cache digging.
     // (Both are escape hatches when the grounding was insufficient; grading keys off this.)
-    public int Arch => Web + Cache;
+    public double Arch => Web + Cache;
 }
 
 // One loaded results.json reduced to the plugin/baseline aggregates.

@@ -9,7 +9,8 @@ internal sealed class ArmRow
     public double? Qual;          // null => judge score absent ("-")
     public int Fp, Ft;            // functional assertions passed / total
     public bool WebUsed;          // any reject-tools assertion failed
-    public int Web, Di, Mcp, Cache, Bash, NugetWeb;
+    // Tool-call counts. Doubles because the enriched path (ToolStats) carries per-run MEANS.
+    public double Web, Di, Mcp, Cache, Bash, NugetWeb, Other;
     public double? Tools;
     public int? Turns;
     public long Tok, Iet, Out;
@@ -30,10 +31,26 @@ internal static class Loader
         var ar = m.AssertionResults ?? new();
         var func = ar.Where(a => (a.Assertion?.Type ?? -1) != 11).ToList();
         var rej = ar.Where(a => (a.Assertion?.Type ?? -1) == 11).ToList();
-        var tb = m.ToolCallBreakdown ?? new();
-        int Tb(string k) => tb.TryGetValue(k, out var v) ? v : 0;
-        var (di, mcp, cache, nugetWeb) = CountToolEvents(m);
-        var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns) = CountToolTurns(m, model);
+
+        // Prefer the enriched, per-run-AVERAGED, event-derived stats (grounding enrich) — they are
+        // consistent across all runs. Fall back to single-run events/breakdown for old datasets.
+        double web, bash, other, tools, cache, nugetWeb, di, mcp;
+        double toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns;
+        if (m.ToolStats is { } ts)
+        {
+            web = ts.Web; bash = ts.Bash; other = ts.Other; tools = ts.Tools;
+            cache = ts.NugetCache; nugetWeb = ts.NugetWeb; di = ts.Di; mcp = ts.Mcp;
+            toolTurnSecs = ts.ToolTurnSecs; allTurnSecs = ts.AllTurnSecs;
+            toolTurnIet = ts.ToolTurnIet; allTurnIet = ts.AllTurnIet;
+            toolTurns = ts.ToolTurns; allTurns = ts.AllTurns;
+        }
+        else
+        {
+            var c = CountToolCalls(m.Events);
+            web = c.web; bash = c.bash; other = c.other; tools = c.tools;
+            cache = c.cache; nugetWeb = c.nugetWeb; di = c.di; mcp = c.mcp;
+            (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns) = CountToolTurns(m.Events, model);
+        }
         long input = m.InputTokens, output = m.OutputTokens;
         var iet = (long)System.Math.Round(model.Iet(m));
         return new ArmRow
@@ -42,11 +59,12 @@ internal static class Loader
             Fp = func.Count(a => a.Passed),
             Ft = func.Count,
             WebUsed = rej.Any(a => !a.Passed),
-            Web = Tb("web_fetch") + Tb("web_search"),
-            Tools = m.ToolCallCount,
+            Web = web,
+            Tools = tools,
             Turns = m.TurnCount,
             Di = di, Mcp = mcp, Cache = cache, NugetWeb = nugetWeb,
-            Bash = Tb("bash"),
+            Bash = bash,
+            Other = other,
             Tok = input + output,
             // Price-weighted, input-equivalent cost stick. The default Anthropic model treats
             // the fresh suffix as effective cache-write input and the cached prefix as
@@ -77,28 +95,34 @@ internal static class Loader
         };
     }
 
-    // (dotnet-inspect calls, MCP calls, NuGet-cache pokes, nuget.org web calls) from the event log.
-    private static (int di, int mcp, int cache, int nugetWeb) CountToolEvents(Json.Metrics m)
+    // All tool-call counts from an event log: total tools, web, bash, other (=tools-web-bash),
+    // and the diagnostic subsets (dotnet-inspect, MCP, .nuget-cache pokes, nuget.org web calls).
+    // Web/bash are counted from EVENTS (not toolCallBreakdown) so every count shares one basis.
+    public static (double web, double bash, double other, double tools, double cache, double nugetWeb, double di, double mcp)
+        CountToolCalls(List<Json.EventRecord>? events)
     {
-        int di = 0, mcp = 0, cache = 0, nugetWeb = 0;
-        foreach (var e in m.Events ?? new())
+        int tools = 0, web = 0, bash = 0, di = 0, mcp = 0, cache = 0, nugetWeb = 0;
+        foreach (var e in events ?? new())
         {
             if (e.Type != "tool.execution_start") continue;
             var name = e.Data?.ToolName ?? "";
             var args = e.Data?.Arguments ?? "";
-            if (name == "bash" && (args.Contains("dotnet-inspect") || args.Contains("dotnet inspect")))
-                di++;
-            if (name == "bash" && (args.Contains(".nuget/packages") || args.Contains(".nuget\\packages")
-                                   || args.Contains("nuget/packages")))
-                cache++;
-            // Remote nuget archaeology: a web tool fetching nuget.org (the other channel the
-            // agent uses to recover package info the grounding did not supply).
-            if ((name == "web_fetch" || name == "web_search") && args.Contains("nuget.org"))
-                nugetWeb++;
-            if (name.StartsWith("nuget-") || name.StartsWith("nuget_"))
-                mcp++;
+            tools++;
+            if (name == "web_fetch" || name == "web_search")
+            {
+                web++;
+                if (args.Contains("nuget.org")) nugetWeb++; // remote nuget archaeology
+            }
+            else if (name == "bash")
+            {
+                bash++;
+                if (args.Contains("dotnet-inspect") || args.Contains("dotnet inspect")) di++;
+                if (args.Contains(".nuget/packages") || args.Contains(".nuget\\packages")
+                    || args.Contains("nuget/packages")) cache++; // local nuget archaeology
+            }
+            if (name.StartsWith("nuget-") || name.StartsWith("nuget_")) mcp++;
         }
-        return (di, mcp, cache, nugetWeb);
+        return (web, bash, Math.Max(0, tools - web - bash), tools, cache, nugetWeb, di, mcp);
     }
 
     // Sum wall-clock duration and IET for turns that initiate at least one tool call, plus the
@@ -106,14 +130,14 @@ internal static class Loader
     // from the event stream's turn boundaries. Note: per-turn `input` is the cumulative re-sent
     // context, so per-turn IET is NOT the billed session IET — it is only meaningful as a ratio
     // (tool-turn IET / all-turn IET), both summed the same way here.
-    private static (double toolSecs, double allSecs, double toolIet, double allIet, int toolTurns, int allTurns) CountToolTurns(Json.Metrics m, IetModel model)
+    public static (double toolSecs, double allSecs, double toolIet, double allIet, double toolTurns, double allTurns) CountToolTurns(List<Json.EventRecord>? events, IetModel model)
     {
         bool inTurn = false, hasTool = false;
         long start = 0, input = 0, cacheRead = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
         double toolIet = 0, allIet = 0;
         int toolTurns = 0, allTurns = 0;
 
-        foreach (var e in m.Events ?? new())
+        foreach (var e in events ?? new())
         {
             switch (e.Type)
             {
@@ -173,7 +197,7 @@ internal static class Loader
                     a.Succ++;
                 a.Iet += r.Iet; a.Cost += r.Cost; a.Tok += r.Tok;
                 a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache; a.NugetWeb += r.NugetWeb;
-                a.Bash += r.Bash; a.Tools += (int)Math.Round(r.Tools ?? 0);
+                a.Bash += r.Bash; a.Tools += r.Tools ?? 0;
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
                 a.ToolTurnIet += r.ToolTurnIet; a.ToolTurnIetPct += r.ToolTurnIetPct;
                 a.ToolTurns += r.ToolTurns; a.AllTurns += r.AllTurns; a.ToolTurnPct += r.ToolTurnPct;

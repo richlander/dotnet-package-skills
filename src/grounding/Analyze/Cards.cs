@@ -23,8 +23,8 @@ internal sealed partial class Cards
 
     private static string RawSuccess(ArmAgg a) => $"{a.Succ}/{a.N}";
     private static string RawFunc(ArmAgg a) => $"{a.Fp}/{a.Ft}";
-    private static string RawCache(ArmAgg a) => $"{a.Cache} / {a.NugetWeb}";
-    private static string RawToolSplit(ArmAgg a) => $"{a.Web}/{a.Bash}/{a.Other}";
+    private static string RawCache(ArmAgg a) => $"{F0(a.Cache)} / {F0(a.NugetWeb)}";
+    private static string RawToolSplit(ArmAgg a) => $"{F0(a.Web)}/{F0(a.Bash)}/{F0(a.Other)}";
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
@@ -35,9 +35,9 @@ internal sealed partial class Cards
 
     private static string DiffSuccess(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Succ - o.Succ)} ({n.Succ}/{n.N})";
     private static string DiffFunc(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Fp - o.Fp)} ({n.Fp}/{n.Ft})";
-    private static string DiffCache(ArmAgg n, ArmAgg o) => $"{o.Cache}/{o.NugetWeb}\u2192{n.Cache}/{n.NugetWeb}";
+    private static string DiffCache(ArmAgg n, ArmAgg o) => $"{F0(o.Cache)}/{F0(o.NugetWeb)}\u2192{F0(n.Cache)}/{F0(n.NugetWeb)}";
     private static string DiffToolSplit(ArmAgg n, ArmAgg o) =>
-        $"{o.Web}/{o.Bash}/{o.Other}\u2192{n.Web}/{n.Bash}/{n.Other}";
+        $"{F0(o.Web)}/{F0(o.Bash)}/{F0(o.Other)}\u2192{F0(n.Web)}/{F0(n.Bash)}/{F0(n.Other)}";
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
@@ -90,9 +90,9 @@ internal sealed partial class Cards
         var iet = Pct(g.Iet, b.Iet);   // session IET (full token-weighted cost, doc included)
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
-        int bArch = b.Arch, gArch = g.Arch;
+        double bArch = b.Arch, gArch = g.Arch;
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}";
+                 + $"resourcefulness {F0(bArch)}\u2192{F0(gArch)}, IET {SignedPct(iet)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)
@@ -108,7 +108,7 @@ internal sealed partial class Cards
             return $"**WORSE** — {string.Join(", ", worse)} ({tail})";
 
         // BETTER: solved more, eliminated archaeology, or materially cheaper (IET).
-        if (dsucc > 0 || -iet >= IetWinFrac * 100 || (bArch > 0 && gArch == 0))
+        if (dsucc > 0 || -iet >= IetWinFrac * 100 || (bArch >= 0.5 && gArch < 0.5))
             return $"**BETTER** — {tail}";
 
         return $"**NEUTRAL** — no material change ({tail})";
@@ -286,7 +286,7 @@ internal sealed partial class Cards
     private static string TableRow(string name, string arm, ArmRow r)
     {
         var qual = r.Qual is { } q ? q.ToString("0.#", Inv) : "-";
-        var web = $"{r.Web}{(r.WebUsed ? "Y" : ".")}";
+        var web = $"{F0(r.Web)}{(r.WebUsed ? "Y" : ".")}";
         var sb = new StringBuilder();
         sb.Append(Pad(name, 28)).Append(" | ");
         sb.Append(Pad(arm, 8)).Append(" | ");
@@ -298,10 +298,10 @@ internal sealed partial class Cards
         sb.Append(PadL(r.Secs.ToString(Inv), 4)).Append(" \u2016 ");
         sb.Append(PadL(web, 3)).Append(" | ");
         sb.Append(PadL(Str(r.Tools), 5)).Append(" | ");
-        sb.Append(PadL(Str(r.Turns), 4)).Append(" | ");        sb.Append(PadL(r.Di.ToString(Inv), 2)).Append(" | ");
-        sb.Append(PadL(r.Mcp.ToString(Inv), 3)).Append(" | ");
-        sb.Append(PadL(r.Cache.ToString(Inv), 5)).Append(" | ");
-        sb.Append(PadL(r.Bash.ToString(Inv), 4));
+        sb.Append(PadL(Str(r.Turns), 4)).Append(" | ");        sb.Append(PadL(F0(r.Di), 2)).Append(" | ");
+        sb.Append(PadL(F0(r.Mcp), 3)).Append(" | ");
+        sb.Append(PadL(F0(r.Cache), 5)).Append(" | ");
+        sb.Append(PadL(F0(r.Bash), 4));
         return sb.ToString();
     }
 

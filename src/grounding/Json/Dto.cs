@@ -76,6 +76,31 @@ public sealed class Metrics
     [JsonPropertyName("toolCallBreakdown")] public Dictionary<string, int>? ToolCallBreakdown { get; set; }
     [JsonPropertyName("assertionResults")] public List<AssertionResult>? AssertionResults { get; set; }
     [JsonPropertyName("events")] public List<EventRecord>? Events { get; set; }
+    // Authoritative per-run-AVERAGED tool-call/tool-turn stats, injected by `grounding enrich`
+    // (read from sessions.db across ALL runs). Present => the analyzer uses these instead of the
+    // single-run `events`/`toolCallBreakdown`, which skill-validator collapses inconsistently for
+    // runs>1 (breakdown=run[0], events=run[last]). Absent (old datasets) => fall back to events.
+    [JsonPropertyName("toolStats")] public ToolStats? ToolStats { get; set; }
+}
+
+// Per-run means across all runs of a (scenario, arm). Counts are event-derived and consistent.
+public sealed class ToolStats
+{
+    [JsonPropertyName("runs")] public int Runs { get; set; }
+    [JsonPropertyName("web")] public double Web { get; set; }
+    [JsonPropertyName("bash")] public double Bash { get; set; }
+    [JsonPropertyName("other")] public double Other { get; set; }
+    [JsonPropertyName("tools")] public double Tools { get; set; }
+    [JsonPropertyName("nugetCache")] public double NugetCache { get; set; }
+    [JsonPropertyName("nugetWeb")] public double NugetWeb { get; set; }
+    [JsonPropertyName("di")] public double Di { get; set; }
+    [JsonPropertyName("mcp")] public double Mcp { get; set; }
+    [JsonPropertyName("toolTurnSecs")] public double ToolTurnSecs { get; set; }
+    [JsonPropertyName("allTurnSecs")] public double AllTurnSecs { get; set; }
+    [JsonPropertyName("toolTurnIet")] public double ToolTurnIet { get; set; }
+    [JsonPropertyName("allTurnIet")] public double AllTurnIet { get; set; }
+    [JsonPropertyName("toolTurns")] public double ToolTurns { get; set; }
+    [JsonPropertyName("allTurns")] public double AllTurns { get; set; }
 }
 
 public sealed class AssertionResult
@@ -108,4 +133,6 @@ public sealed class EventData
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(ResultsFile))]
+[JsonSerializable(typeof(Metrics))]
+[JsonSerializable(typeof(ToolStats))]
 public sealed partial class GroundingJsonContext : JsonSerializerContext;

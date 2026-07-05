@@ -121,6 +121,31 @@ var checkAgents = new Command("check-agents", "Validate every grounding/<unit>/A
 checkAgents.SetAction(_ => Grounding.Codegen.Codegen.CheckAgents());
 root.Subcommands.Add(checkAgents);
 
+// ---- enrich -------------------------------------------------------------
+// Inject per-run-averaged, event-derived tool-call stats (from sessions.db) into a dataset so
+// runs>1 tool-call/nuget numbers are correct and consistent. Runs automatically after `run`.
+var enrichDataset = new Argument<string>("dataset") { Description = "Dataset results.json to enrich in place." };
+var enrichSessionsOpt = new Option<string?>("--sessions-db") { Description = "Path to sessions.db (default: sibling of the dataset, or under --results-dir)." };
+var enrichResultsDirOpt = new Option<string?>("--results-dir") { Description = "Results dir holding <timestamp>/sessions.db." };
+var enrichIetOpt = new Option<string>("--iet-model") { Description = $"IET model for tool-turn IET: {IetModels.Names}.", DefaultValueFactory = _ => "auto" };
+var enrich = new Command("enrich", "Backfill correct per-run tool-call stats into a dataset from sessions.db.")
+{
+    enrichDataset, enrichSessionsOpt, enrichResultsDirOpt, enrichIetOpt,
+};
+enrich.SetAction(parse =>
+{
+    var ds = parse.GetValue(enrichDataset)!;
+    var sdb = parse.GetValue(enrichSessionsOpt);
+    var resultsDir = parse.GetValue(enrichResultsDirOpt);
+    if (sdb is null && resultsDir is not null)
+        sdb = Directory.EnumerateFiles(resultsDir, "sessions.db", SearchOption.AllDirectories).FirstOrDefault();
+    var sel = (parse.GetValue(enrichIetOpt) ?? "auto").Trim().ToLowerInvariant();
+    var model = sel is "" or "auto" ? IetModels.Anthropic : IetModels.Parse(sel);
+    return Grounding.Analyze.Enrich.Run(ds, sdb, model);
+});
+root.Subcommands.Add(enrich);
+
+
 // ---- gen-plugins --------------------------------------------------------
 var genPlugins = new Command("gen-plugins", "Expand grounding/**/plugin.json.in into plugin.json.");
 genPlugins.SetAction(_ => Grounding.Codegen.Codegen.GenPlugins());
