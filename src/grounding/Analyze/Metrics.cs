@@ -8,7 +8,7 @@ internal sealed class ArmAgg
 {
     public double? Qual;
     public int Fp, Ft, Succ, Web, Cache, N;
-    public int Bash, Tools;       // total bash calls; total tool calls (both summed across scenarios)
+    public int Bash, Tools, NugetWeb;   // total bash calls; total tool calls; nuget.org web calls
     public double Iet, Cost, Tok, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
     public double ToolTurns, AllTurns, ToolTurnPct;

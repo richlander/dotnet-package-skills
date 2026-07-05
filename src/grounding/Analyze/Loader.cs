@@ -9,7 +9,7 @@ internal sealed class ArmRow
     public double? Qual;          // null => judge score absent ("-")
     public int Fp, Ft;            // functional assertions passed / total
     public bool WebUsed;          // any reject-tools assertion failed
-    public int Web, Di, Mcp, Cache, Bash;
+    public int Web, Di, Mcp, Cache, Bash, NugetWeb;
     public double? Tools;
     public int? Turns;
     public long Tok, Iet, Out;
@@ -32,7 +32,7 @@ internal static class Loader
         var rej = ar.Where(a => (a.Assertion?.Type ?? -1) == 11).ToList();
         var tb = m.ToolCallBreakdown ?? new();
         int Tb(string k) => tb.TryGetValue(k, out var v) ? v : 0;
-        var (di, mcp, cache) = CountToolEvents(m);
+        var (di, mcp, cache, nugetWeb) = CountToolEvents(m);
         var (toolTurnSecs, allTurnSecs, toolTurnIet, allTurnIet, toolTurns, allTurns) = CountToolTurns(m, model);
         long input = m.InputTokens, output = m.OutputTokens;
         var iet = (long)System.Math.Round(model.Iet(m));
@@ -45,7 +45,7 @@ internal static class Loader
             Web = Tb("web_fetch") + Tb("web_search"),
             Tools = m.ToolCallCount,
             Turns = m.TurnCount,
-            Di = di, Mcp = mcp, Cache = cache,
+            Di = di, Mcp = mcp, Cache = cache, NugetWeb = nugetWeb,
             Bash = Tb("bash"),
             Tok = input + output,
             // Price-weighted, input-equivalent cost stick. The default Anthropic model treats
@@ -77,10 +77,10 @@ internal static class Loader
         };
     }
 
-    // (dotnet-inspect calls, MCP calls, NuGet-cache pokes) from the event log.
-    private static (int di, int mcp, int cache) CountToolEvents(Json.Metrics m)
+    // (dotnet-inspect calls, MCP calls, NuGet-cache pokes, nuget.org web calls) from the event log.
+    private static (int di, int mcp, int cache, int nugetWeb) CountToolEvents(Json.Metrics m)
     {
-        int di = 0, mcp = 0, cache = 0;
+        int di = 0, mcp = 0, cache = 0, nugetWeb = 0;
         foreach (var e in m.Events ?? new())
         {
             if (e.Type != "tool.execution_start") continue;
@@ -91,10 +91,14 @@ internal static class Loader
             if (name == "bash" && (args.Contains(".nuget/packages") || args.Contains(".nuget\\packages")
                                    || args.Contains("nuget/packages")))
                 cache++;
+            // Remote nuget archaeology: a web tool fetching nuget.org (the other channel the
+            // agent uses to recover package info the grounding did not supply).
+            if ((name == "web_fetch" || name == "web_search") && args.Contains("nuget.org"))
+                nugetWeb++;
             if (name.StartsWith("nuget-") || name.StartsWith("nuget_"))
                 mcp++;
         }
-        return (di, mcp, cache);
+        return (di, mcp, cache, nugetWeb);
     }
 
     // Sum wall-clock duration and IET for turns that initiate at least one tool call, plus the
@@ -168,7 +172,7 @@ internal static class Loader
                 if (r.Ft > 0 && r.Fp == r.Ft)
                     a.Succ++;
                 a.Iet += r.Iet; a.Cost += r.Cost; a.Tok += r.Tok;
-                a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache;
+                a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache; a.NugetWeb += r.NugetWeb;
                 a.Bash += r.Bash; a.Tools += (int)Math.Round(r.Tools ?? 0);
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
                 a.ToolTurnIet += r.ToolTurnIet; a.ToolTurnIetPct += r.ToolTurnIetPct;
