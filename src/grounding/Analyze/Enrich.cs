@@ -29,7 +29,7 @@ internal static class Enrich
         _ => null,
     };
 
-    public static int Run(string datasetPath, string? sessionsDb, IetModel model)
+    public static int Run(string datasetPath, string? sessionsDb, IetScheme model)
     {
         if (!File.Exists(datasetPath)) { Console.Error.WriteLine($"enrich: dataset not found: {datasetPath}"); return 1; }
         sessionsDb ??= FindSessionsDb(datasetPath);

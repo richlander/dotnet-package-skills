@@ -41,8 +41,9 @@ analyze.SetAction(parse =>
     var files = FileArgs.Expand(parse.GetValue(filesArg) ?? Array.Empty<string>());
     if (files.Count == 0) { Console.Error.WriteLine("analyze: no input files."); return 1; }
     var ietSel = (parse.GetValue(ietModelOpt) ?? "auto").Trim().ToLowerInvariant();
-    // "auto" (default): choose the cost model per run from its model. Anything else forces it.
-    IetModels.Override = ietSel is "" or "auto" ? null : IetModels.Parse(ietSel);
+    // "auto" (default): choose the scheme per run from its model. "anthropic"/"openai" force a
+    // scheme; "no-cache" is a modifier (per-model scheme, input repriced at base rate).
+    IetModels.Apply(IetModels.ParseSelection(ietSel));
     var cards = new Cards { NoTitle = parse.GetValue(noTitleOpt) };
     var view = legacy.FirstOrDefault(kv => parse.GetValue(kv.Value)).Key ?? parse.GetValue(viewOpt);
     switch (view)
@@ -140,7 +141,8 @@ enrich.SetAction(parse =>
     if (sdb is null && resultsDir is not null)
         sdb = Directory.EnumerateFiles(resultsDir, "sessions.db", SearchOption.AllDirectories).FirstOrDefault();
     var sel = (parse.GetValue(enrichIetOpt) ?? "auto").Trim().ToLowerInvariant();
-    var model = sel is "" or "auto" ? IetModels.Anthropic : IetModels.Parse(sel);
+    IetModels.Apply(IetModels.ParseSelection(sel));
+    var model = IetModels.Override ?? IetModels.Anthropic;
     return Grounding.Analyze.Enrich.Run(ds, sdb, model);
 });
 root.Subcommands.Add(enrich);

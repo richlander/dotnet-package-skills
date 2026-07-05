@@ -25,7 +25,7 @@ internal sealed class ArmRow
 
 internal static class Loader
 {
-    public static ArmRow? Row(Arm? arm, IetModel model)
+    public static ArmRow? Row(Arm? arm, IetScheme model)
     {
         if (arm?.Metrics is not { } m) return null;
         var ar = m.AssertionResults ?? new();
@@ -71,7 +71,7 @@ internal static class Loader
             // cache-read input. See README.md "How we measure cost: IET".
             Iet = iet,
             Out = output,
-            OutIetPct = iet > 0 ? model.OutputWeight * output / iet * 100.0 : 0.0,
+            OutIetPct = iet > 0 ? model.WOutput * output / iet * 100.0 : 0.0,
             ToolTurnSecs = toolTurnSecs,
             // Share of model turn-time spent in tool-calling turns. Denominator is the all-turn
             // duration sum (same basis as the numerator) — NOT WallTimeMs, which is measured on a
@@ -130,11 +130,14 @@ internal static class Loader
     // from the event stream's turn boundaries. Note: per-turn `input` is the cumulative re-sent
     // context, so per-turn IET is NOT the billed session IET — it is only meaningful as a ratio
     // (tool-turn IET / all-turn IET), both summed the same way here.
-    public static (double toolSecs, double allSecs, double toolIet, double allIet, double toolTurns, double allTurns) CountToolTurns(List<Json.EventRecord>? events, IetModel model)
+    public static (double toolSecs, double allSecs, double toolIet, double allIet, double toolTurns, double allTurns) CountToolTurns(List<Json.EventRecord>? events, IetScheme model)
     {
         bool inTurn = false, hasTool = false;
         long start = 0, input = 0, cacheRead = 0, output = 0, toolDurationMs = 0, allDurationMs = 0;
-        double toolIet = 0, allIet = 0;
+        // Accumulate raw token BUCKETS (scheme-neutral), then price once at the end. Pricing is
+        // linear, so this equals summing per-turn IET — but keeping buckets means these sums stay
+        // re-priceable (e.g. under the no-cache modifier) instead of baking in a weighting.
+        IetValue? toolVal = null, allVal = null;
         int toolTurns = 0, allTurns = 0;
 
         foreach (var e in events ?? new())
@@ -158,14 +161,14 @@ internal static class Loader
                     hasTool = true;
                     break;
                 case "assistant.turn_end" when inTurn:
-                    var turnIet = model.Iet(input, cacheRead, output);
+                    var turnVal = model.Value(input, cacheRead, output, null);
                     var turnMs = e.Timestamp >= start ? e.Timestamp - start : 0;
-                    allIet += turnIet;
+                    allVal = allVal is { } av ? av + turnVal : turnVal;
                     allDurationMs += turnMs;
                     allTurns++;
                     if (hasTool)
                     {
-                        toolIet += turnIet;
+                        toolVal = toolVal is { } tv ? tv + turnVal : turnVal;
                         toolDurationMs += turnMs;
                         toolTurns++;
                     }
@@ -174,10 +177,12 @@ internal static class Loader
             }
         }
 
+        double toolIet = toolVal is { } t ? model.Price(t, IetModels.NoCache) : 0;
+        double allIet = allVal is { } a ? model.Price(a, IetModels.NoCache) : 0;
         return (toolDurationMs / 1000.0, allDurationMs / 1000.0, toolIet, allIet, toolTurns, allTurns);
     }
 
-    public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios, IetModel model)
+    public static Dictionary<string, ArmAgg> Aggregate(List<Scenario> scenarios, IetScheme model)
     {
         var acc = Metrics.Arms.ToDictionary(a => a.Key, _ => new ArmAgg());
         var quals = Metrics.Arms.ToDictionary(a => a.Key, _ => new List<double>());
