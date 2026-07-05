@@ -269,7 +269,7 @@ internal sealed partial class Cards
             _o.WriteLine("\n_Same model, decomposed to typed JSONL rows:_\n");
             _o.WriteLine("```jsonl");
             MarkoutSerializer.Serialize(card, _o, new TableFormatter(), QualityCardContext.Default,
-                new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl });
+                new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl, JsonTypedValues = true, OmitEmptyJsonFields = true });
             _o.WriteLine("```");
         }
     }
