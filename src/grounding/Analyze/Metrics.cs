@@ -8,6 +8,7 @@ internal sealed class ArmAgg
 {
     public double? Qual;
     public int Fp, Ft, Succ, Web, Cache, N;
+    public int Bash, Tools;       // total bash calls; total tool calls (both summed across scenarios)
     public double Iet, Cost, Tok, Out;
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
     public double ToolTurns, AllTurns, ToolTurnPct;
@@ -16,6 +17,11 @@ internal sealed class ArmAgg
     public bool Grounded;         // this arm was handed grounding (non-baseline)
     public int DocTok;   // grounding doc tokens loaded into THIS arm (0 for baseline)
 
+    // Tool-call composition. Web is external retrieval; nuget-cache is a subset of bash
+    // (reading/decompiling the restored package). Other = everything else (view/edit/skill/...).
+    public int Other => Math.Max(0, Tools - Web - Bash);
+    // "Went outside the grounding" archaeology signal: web retrieval + nuget-cache digging.
+    // (Both are escape hatches when the grounding was insufficient; grading keys off this.)
     public int Arch => Web + Cache;
 }
 

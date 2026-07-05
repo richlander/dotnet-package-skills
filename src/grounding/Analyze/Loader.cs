@@ -169,6 +169,7 @@ internal static class Loader
                     a.Succ++;
                 a.Iet += r.Iet; a.Cost += r.Cost; a.Tok += r.Tok;
                 a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache;
+                a.Bash += r.Bash; a.Tools += (int)Math.Round(r.Tools ?? 0);
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
                 a.ToolTurnIet += r.ToolTurnIet; a.ToolTurnIetPct += r.ToolTurnIetPct;
                 a.ToolTurns += r.ToolTurns; a.AllTurns += r.AllTurns; a.ToolTurnPct += r.ToolTurnPct;

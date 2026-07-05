@@ -23,7 +23,8 @@ internal sealed partial class Cards
 
     private static string RawSuccess(ArmAgg a) => $"{a.Succ}/{a.N}";
     private static string RawFunc(ArmAgg a) => $"{a.Fp}/{a.Ft}";
-    private static string RawArch(ArmAgg a) => a.Arch.ToString(Inv);
+    private static string RawCache(ArmAgg a) => a.Cache.ToString(Inv);
+    private static string RawToolSplit(ArmAgg a) => $"{a.Web}/{a.Bash}/{a.Other}";
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
@@ -35,7 +36,9 @@ internal sealed partial class Cards
 
     private static string DiffSuccess(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Succ - o.Succ)} ({n.Succ}/{n.N})";
     private static string DiffFunc(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Fp - o.Fp)} ({n.Fp}/{n.Ft})";
-    private static string DiffArch(ArmAgg n, ArmAgg o) => $"{o.Arch}\u2192{n.Arch}";
+    private static string DiffCache(ArmAgg n, ArmAgg o) => $"{o.Cache}\u2192{n.Cache}";
+    private static string DiffToolSplit(ArmAgg n, ArmAgg o) =>
+        $"{o.Web}/{o.Bash}/{o.Other}\u2192{n.Web}/{n.Bash}/{n.Other}";
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
@@ -61,7 +64,8 @@ internal sealed partial class Cards
     {
         ("tasks correct (+)",                  RawSuccess, DiffSuccess),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
-        ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
+        ("nuget-cache reads (archaeology) (-)", RawCache,  DiffCache),
+        ("tool calls: web / bash / other (context)", RawToolSplit, DiffToolSplit),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
         ("read grounding (%)",                 RawReadGrounding, DiffReadGrounding),
         ("output tok (% of IET) (-)",          RawOut,     DiffOut),
