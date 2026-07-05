@@ -32,7 +32,7 @@ what the grounding makes it do. -->
 ## Validation
 
 ```bash
-grounding sync-skill --check
+grounding check-agents
 RUNS=3 eng/run-<unit>-6q.sh                                   # -> data/<unit>-6q/<unit>.haiku.json (mini WIN)
 RUNS=3 MODELS=claude-opus-4.8 eng/run-<unit>-6q.sh           # frontier NO-HARM run
 grounding analyze --card data/<unit>-6q/<unit>.haiku.json
@@ -46,7 +46,7 @@ cp data/<unit>-6q/<unit>.haiku.json data/<unit>-6q/<unit>.n3.haiku.json   # comm
 
 ## Checklist
 
-- [ ] `AGENTS.md` within line limit; `grounding sync-skill --check` passes
+- [ ] `AGENTS.md` within line limit (`grounding check-agents` passes)
 - [ ] Datasets committed under `data/<unit>-6q/`; both `--card` dumps match them
 - [ ] n ≥ 3; model + judge named, for **both** tiers
 - [ ] **mini WIN** gate passes (real cost/IET or quality win; no func/quality/web regression)

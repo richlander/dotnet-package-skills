@@ -32,7 +32,6 @@ internal sealed partial class Cards
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
     private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
     private static string RawToolCallTurns(ArmAgg a) => $"{F0(a.ToolTurns)} ({F0(a.ToolTurnPct)}%)";
-    private static string RawCost(ArmAgg a) => F2(a.Cost);
 
     private static string DiffSuccess(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Succ - o.Succ)} ({n.Succ}/{n.N})";
     private static string DiffFunc(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Fp - o.Fp)} ({n.Fp}/{n.Ft})";
@@ -50,7 +49,6 @@ internal sealed partial class Cards
         $"{F0(o.ToolTurnIetPct)}\u2192{F0(n.ToolTurnIetPct)}%";
     private static string DiffToolCallTurns(ArmAgg n, ArmAgg o) =>
         $"{F0(o.ToolTurns)}\u2192{F0(n.ToolTurns)} ({F0(o.ToolTurnPct)}\u2192{F0(n.ToolTurnPct)}%)";
-    private static string DiffCost(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Cost, o.Cost));
 
     // The grounding doc's size (tokens loaded into the arm; baseline = 0), shown as size
     // context only. The doc's cost is a real cost and is NOT netted out — it is reported in
@@ -72,10 +70,12 @@ internal sealed partial class Cards
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
         ("tool-turn IET (% of turn IET) (-)",  RawToolTurnIet,  DiffToolTurnIet),
-        // Session summary (bottom line): total turns, price-weighted cost, dollars.
+        // Session summary (bottom line). `Session turns` doubles as the billable-request
+        // count: the harness's premium-request "cost" is exactly 1 per turn (verified
+        // 216/216), so a separate cost row would just restate turns — dropped. `Session IET`
+        // is the real token-weighted cost.
         ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
         ("Session IET (-)",                    RawIet,     DiffIet),
-        ("Session Cost (-)",                   RawCost,    DiffCost),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
@@ -85,28 +85,28 @@ internal sealed partial class Cards
     // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet, b.Iet);   // session IET (full cost, doc included — not netted)
-        var cost = Pct(g.Cost, b.Cost);
+        var iet = Pct(g.Iet, b.Iet);   // session IET (full token-weighted cost, doc included)
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
         int bArch = b.Arch, gArch = g.Arch;
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}, cost {SignedPct(cost)}";
+                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)
             return $"**FAIL** — fewer tasks correct ({tail})";
 
-        // WORSE: real cost/IET/output inflation (a harm signal), not a stray web call.
+        // WORSE: real IET/output inflation (a harm signal), not a stray web call. (Premium-request
+        // "cost" is 1:1 with turns, and IET is the token-weighted cost gate, so cost is not a
+        // separate axis.)
         var worse = new List<string>();
         if (iet > IetHarmCapFrac * 100) worse.Add($"IET +{F0(iet)}%");
-        if (cost > CostHarmCapFrac * 100) worse.Add($"cost +{F0(cost)}%");
         if (@out > OutInflateFrac * 100) worse.Add($"output +{F0(@out)}%");
         if (worse.Count > 0)
             return $"**WORSE** — {string.Join(", ", worse)} ({tail})";
 
-        // BETTER: solved more, eliminated archaeology, or materially cheaper.
-        if (dsucc > 0 || -iet >= IetWinFrac * 100 || -cost >= CostWinFrac * 100 || (bArch > 0 && gArch == 0))
+        // BETTER: solved more, eliminated archaeology, or materially cheaper (IET).
+        if (dsucc > 0 || -iet >= IetWinFrac * 100 || (bArch > 0 && gArch == 0))
             return $"**BETTER** — {tail}";
 
         return $"**NEUTRAL** — no material change ({tail})";

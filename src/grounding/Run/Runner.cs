@@ -62,13 +62,15 @@ internal static class Runner
                 skillText = doc.Render(doc.Body);
                 break;
             case "skill":
-                // The authored Complete Textbook. It is already a full SKILL.md (frontmatter +
-                // body), so feed it verbatim rather than re-wrapping the AGENTS.md frontmatter.
-                var authoredSkill = Path.Combine(unitDir, "SKILL.md");
+                // The authored Complete Textbook is a REAL Claude skill, not grounding: it lives
+                // in a conventional skills/<unit>/SKILL.md (with a plugin.json), per Anthropic
+                // guidance — NOT under grounding/. Feed it verbatim (it is already a full SKILL.md).
+                var authoredSkill = Path.Combine(root, "skills", o.Unit, "SKILL.md");
                 if (!File.Exists(authoredSkill))
                 {
                     Console.Error.WriteLine(
-                        $"grounding: --source skill needs grounding/{o.Unit}/SKILL.md (run 'grounding sync-skill').");
+                        $"grounding: --source skill needs skills/{o.Unit}/SKILL.md (an authored Textbook skill). "
+                        + "SKILL.md is optional and maintainer-authored; add one under skills/ to eval the Textbook arm.");
                     return 1;
                 }
                 skillText = File.ReadAllText(authoredSkill);

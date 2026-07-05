@@ -113,17 +113,13 @@ run.SetAction(parse =>
 });
 root.Subcommands.Add(run);
 
-// ---- sync-skill ---------------------------------------------------------
-var checkOpt = new Option<bool>("--check")
-{
-    Description = "Fail if any SKILL.md is stale instead of writing (for CI).",
-};
-var syncSkill = new Command("sync-skill", "Regenerate grounding/<unit>/SKILL.md from AGENTS.md.")
-{
-    checkOpt,
-};
-syncSkill.SetAction(parse => Grounding.Codegen.Codegen.SyncSkill(parse.GetValue(checkOpt)));
-root.Subcommands.Add(syncSkill);
+// ---- check-agents -------------------------------------------------------
+// SKILL.md is NOT generated — it is an optional, maintainer-authored Textbook the eval
+// consumes only when present (grounding run --source skill). This command just enforces
+// the AGENTS.md body line budget.
+var checkAgents = new Command("check-agents", "Validate every grounding/<unit>/AGENTS.md is within the line budget.");
+checkAgents.SetAction(_ => Grounding.Codegen.Codegen.CheckAgents());
+root.Subcommands.Add(checkAgents);
 
 // ---- gen-plugins --------------------------------------------------------
 var genPlugins = new Command("gen-plugins", "Expand grounding/**/plugin.json.in into plugin.json.");
