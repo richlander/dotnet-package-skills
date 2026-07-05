@@ -86,10 +86,21 @@ public sealed class QualityCard
         new Segment("cache", Math.Round(a.Cache)),
         new Segment("nuget.org", Math.Round(a.NugetWeb)));
 
-    // A value shown with a precomputed percentage. `Whole` is chosen so value/whole*100 == pct
-    // (and is never emitted — Share decomposes to value+pct). A zero pct renders "value (0%)".
-    private static Share SharePct(double value, double pct) =>
-        new(Math.Round(value), pct == 0 ? (value == 0 ? 1 : 0) : Math.Round(value) * 100.0 / pct);
+    // A value shown with a precomputed percentage, carried via a `Whole` chosen so
+    // shown/whole*100 == pct (the whole is never emitted — Share decomposes to value+pct).
+    //
+    // Share derives its percent from the SHOWN value, so a shown value of 0 can only render 0%
+    // (the stored pct is unrepresentable there) — give it a non-zero whole so it prints "0 (0%)"
+    // rather than the em-dash placeholder a zero whole would produce. This degenerate case
+    // (a per-scenario mean that rounds to 0 while its pct stays positive) does not occur in
+    // current datasets, but the guard keeps the cell honest if it ever does.
+    private static Share SharePct(double value, double pct)
+    {
+        var shown = Math.Round(value);
+        if (shown == 0)
+            return new Share(0, 1);            // 0 (0%)
+        return new Share(shown, pct == 0 ? 0 : shown * 100.0 / pct);
+    }
 }
 
 [MarkoutContext(typeof(QualityCard))]
