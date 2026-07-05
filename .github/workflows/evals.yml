@@ -48,7 +48,7 @@ jobs:
           echo "COPILOT_GITHUB_TOKEN is not configured; skipping live package-grounding evals."
 
       - name: Verify generated SKILL.md is in sync
-        run: ./eng/grounding sync-skill --check
+        run: ./eng/grounding check-agents
 
       - name: Run package-grounding evals
         if: env.COPILOT_GITHUB_TOKEN != ''

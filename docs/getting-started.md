@@ -56,10 +56,10 @@ grounding --help
    [`authoring-principles.md`](./authoring-principles.md)). Keep it under the line budget
    (`eng/agents-line-limit.txt`).
 
-2. **Sync the skill wrapper** (regenerates the harness's `SKILL.md` from `AGENTS.md`):
+2. **Check the budget** (validate `AGENTS.md` is within the line limit):
 
    ```bash
-   grounding sync-skill
+   grounding check-agents
    ```
 
 3. **Run the ladder** (arms are named by *content*, all force-fed — see methodology §1):

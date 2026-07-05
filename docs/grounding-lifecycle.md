@@ -35,8 +35,9 @@ already knows this package — **do not author grounding**. Grounding is justifi
 1. **Write `grounding/<unit>/AGENTS.md`.** Body ≤ `eng/agents-line-limit.txt` lines. Describe only the
    trap and the correct path; skip anything the model already knows. See
    [`authoring-principles.md`](./authoring-principles.md).
-2. **Sync the wrapper:** `grounding sync-skill` regenerates `SKILL.md` (harness toggle only — never
-   hand-edit it). `grounding sync-skill --check` must pass.
+2. **Check the budget:** `grounding check-agents` validates every `AGENTS.md` is within the line
+   limit. (SKILL.md is optional and maintainer-authored under `skills/<unit>/` — it is *not* generated;
+   the harness synthesizes a transient wrapper at eval time and cleans it up.)
 3. **Evaluate both tiers, n ≥ 3:**
    - **mini** (e.g. `claude-haiku-4.5`) — the tier that *needs* grounding.
    - **frontier** (e.g. `claude-opus-4.8`) — the tier that doesn't.
@@ -104,7 +105,7 @@ deliverable — the tier grounding exists to help; the frontier card is the no-h
 
 Same artifact list and reviewer checklist as [scoring.md](./scoring.md):
 
-- `grounding/<unit>/AGENTS.md` (within the line limit) + regenerated `SKILL.md` (`grounding sync-skill --check`).
+- `grounding/<unit>/AGENTS.md` within the line limit (`grounding check-agents`).
 - Matched n ≥ 3 datasets for **both** tiers under `data/<unit>-6q/`.
 - The four cards pasted into *Metrics*, matching the committed datasets.
 - An **Analysis** of what grounding changes (typically eliminating the *resourcefulness* the agent spends

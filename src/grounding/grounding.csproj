@@ -27,6 +27,19 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+    <PackageReference Include="Markout" Version="0.16.1" />
+  </ItemGroup>
+
+  <!-- Targeted NuGet-audit suppression (keeps auditing every other package). NU1903:
+       SQLitePCLRaw.lib.e_sqlite3 (GHSA-2m69-gcr7-jv3q) is pulled transitively by
+       Microsoft.Data.Sqlite. The advisory covers the whole 2.1.x line and both M.D.Sqlite 9.x
+       and 10.x still resolve it; the only patched native (lib.e_sqlite3 3.50.3) is unreferenced
+       and ABI-incompatible, so there is no clean supported fix today. `enrich` opens only local,
+       self-produced sessions.db files read-only (no attacker-controlled input), so the practical
+       risk is negligible. Accepted for now; revisit when Microsoft.Data.Sqlite bumps SQLitePCLRaw. -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
   </ItemGroup>
 
 </Project>

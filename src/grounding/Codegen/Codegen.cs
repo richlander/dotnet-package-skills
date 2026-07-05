@@ -2,11 +2,13 @@ using Grounding.Run;
 
 namespace Grounding.Codegen;
 
-// Implements the sync-skill and gen-plugins commands.
+// Implements the check-agents and gen-plugins commands.
 internal static class Codegen
 {
-    // Regenerate (or --check) every grounding/<unit>/SKILL.md from its AGENTS.md.
-    public static int SyncSkill(bool check)
+    // Validate every grounding/<unit>/AGENTS.md is within the body line budget.
+    // SKILL.md is NOT generated: it is an optional, maintainer-authored Textbook that the
+    // eval consumes only when present (grounding run --source skill). We never write it.
+    public static int CheckAgents()
     {
         var root = RepoRoot.Find();
         if (root is null) { Console.Error.WriteLine("grounding: cannot locate repo root."); return 1; }
@@ -20,7 +22,6 @@ internal static class Codegen
         {
             var dir = Path.GetDirectoryName(agents)!;
             var metaPath = Path.Combine(dir, "meta.yaml");
-            var skillPath = Path.Combine(dir, "SKILL.md");
             if (!File.Exists(metaPath))
             {
                 Console.WriteLine($"WARN: {Rel(root, dir)} has AGENTS.md but no meta.yaml; skipping");
@@ -28,30 +29,14 @@ internal static class Codegen
             }
 
             var doc = SkillDoc.ParseAgents(agents, metaPath);
-
             if (doc.BodyLineCount > limit)
             {
                 Console.WriteLine($"TOO LONG: {Rel(root, agents)} body has {doc.BodyLineCount} lines "
                     + $"(limit {limit}). Trim it or raise eng/agents-line-limit.txt.");
                 status = 1;
             }
-
-            var rendered = doc.Render(doc.Body);
-            if (check)
-            {
-                var existing = File.Exists(skillPath) ? File.ReadAllText(skillPath) : null;
-                if (existing != rendered)
-                {
-                    Console.WriteLine($"STALE: {Rel(root, skillPath)} (run grounding sync-skill)");
-                    status = 1;
-                }
-            }
-            else
-            {
-                File.WriteAllText(skillPath, rendered);
-                Console.WriteLine($"wrote {Rel(root, skillPath)}");
-            }
         }
+        if (status == 0) Console.WriteLine("AGENTS.md line budget OK.");
         return status;
     }
 

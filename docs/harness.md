@@ -139,6 +139,47 @@ ships, and because the docs are packed in the nupkg, a build-based scenario can 
 that understatement. (`.tools/baseline-cache-test.sh` is an earlier HOME-isolated variant kept only
 for reference — it is blocked by the auth issue above.)
 
+## Run, session, and dataset artifacts (per-run vs aggregate)
+
+The eval produces data at three levels. Knowing which artifact is authoritative for which metric is
+essential — conflating them caused a real bug (tool-call counts read as single-run samples in a
+runs > 1 study).
+
+| Level | Unit | Where | Nature |
+|---|---|---|---|
+| **Session** | one (scenario, arm, **run**) execution | `sessions/<id>/session-state/events.jsonl`; a row each in the `sessions` (id → scenario/role/run mapping) and `run_results` (per-run `metrics_json`) tables | **Per-run source of truth — complete** (full events, *with* tool arguments) |
+| **`sessions.db`** | all sessions of one eval | `<results-dir>/<timestamp>/sessions.db` | Complete, per-run; **ephemeral / regenerable** |
+| **Dataset** | one eval | `results.json` (copied to the data cache) | **Aggregate summary** — the N runs collapsed per (scenario, arm) |
+
+`results.json` is an *aggregate*. skill-validator collapses the runs per (scenario, arm): **token and
+turn** fields are properly **averaged** (faithful), but for **runs > 1** the embedded **`events` is the
+last run only** and **`toolCallBreakdown` is the first run only** — lossy, single-run remnants from the
+collapse. The session data itself is never incomplete; the *aggregate* is.
+
+**Rules:**
+
+- **Never derive per-run / event-based metrics** (tool-call counts, nuget archaeology, tool-turn
+  activity) from `results.json`'s embedded `events` when `runs > 1`. It is not the per-run truth.
+- **`sessions.db` is the per-run source of truth.** `grounding run` post-processes it to compute
+  per-run-**averaged**, event-derived stats and bakes them into the dataset as `metrics.toolStats`
+  (`grounding enrich <dataset> --results-dir <dir>` backfills existing datasets). The analyzer prefers
+  `toolStats`; the single-run embedded `events` is only a fallback for old, un-enriched datasets.
+- **The dataset is the durable, self-sufficient analysis artifact** (no `sessions.db` needed at analyze
+  time). **`sessions.db` is the regenerable source**, discarded with the results dir.
+
+**Why read `sessions.db` and not the raw `events.jsonl` files?** The events are *not* only in the db —
+every run's full log is also in its own `events.jsonl` (with arguments). What the db uniquely provides is
+the **mapping**: each session directory is named by an opaque hash id, and nothing in the log or its path
+says *which scenario / arm / run* it is. That attribution — `session-id → (scenario, role, run_index)` —
+lives only in the `sessions` table. So we open the db for the **mapping**, not because the events live
+only there (`run_results.metrics_json` also holds each run's events pre-parsed, which is convenient).
+
+**Why bake stats into the dataset instead of reading the db at analyze time?** Because `grounding run`
+copies `results.json` *out* to a separate cache location, decoupled from the (ephemeral) results dir — so
+at analyze time the db may be gone. Enriching at run time, when the db is present, keeps the dataset
+correct and self-contained. (The alternative — have skill-validator keep *all* runs' events in
+`results.json` — removes the db dependency but bloats the file ~3× and needs a harness-fork change.)
+
 ## How it relates to dotnet/skills
 
 We follow the same pattern `dotnet/skills` uses for its own evals: **build** the
@@ -151,24 +192,28 @@ nightly to a GitHub Release. So we pin a `dotnet/skills` commit in
 [`.github/workflows/update-harness.yml`](../.github/workflows/update-harness.yml), which opens a
 PR pointing at the latest `dotnet/skills` main commit.
 
-## Source of truth: `AGENTS.md` → `SKILL.md`
+## `AGENTS.md` (grounding) vs `SKILL.md` (optional Textbook)
 
-`AGENTS.md` is the human-authored artifact under test (the file that ships in the package root).
-`SKILL.md` is **generated** from `AGENTS.md` + `meta.yaml` by
-`grounding sync-skill` purely so the harness has a *togglable* skill to
-add/remove between arms. It is an implementation detail of the harness, **not** a marketplace
-skill and **not** something the package ships. Never hand-edit `SKILL.md`. Edit `AGENTS.md`, then
-run `grounding sync-skill`.
+`AGENTS.md` is the human-authored grounding under test — the **Missing Manual**, the file that ships in
+the package root and lives under `grounding/<slug>/`. `SKILL.md` is a different thing on two axes:
 
-> **Two things named `SKILL.md`.** The file in `grounding/<slug>/SKILL.md` is this **generated
-> wrapper** (never hand-edit it). A *package's* shipped **`SKILL.md` is the Complete Textbook** — a
-> hand-authored, narrative full guide and the **rung-2 content arm** — an entirely different artifact
-> that merely shares the filename. To test the Textbook the harness force-feeds *its* content through
-> the same wrapper (`grounding run --source` selects which document fills each content arm).
+- **It is optional and maintainer-authored** — the **Complete Textbook** (rung-2 content arm). We do
+  **not** generate it. Not every package earns one.
+- **It is not grounding**, so it does **not** live under `grounding/`. It is a real Claude skill: it
+  belongs in a conventional `skills/<name>/SKILL.md` with a `.claude-plugin/plugin.json`, per Anthropic
+  guidance (see `richlander/dotnet-skills` / `richlander/markout` for the layout).
 
-Grounding `AGENTS.md` files must stay **concise**: `grounding sync-skill` fails if any exceeds the
-budget in `eng/agents-line-limit.txt` (currently **60** lines). Keep content tight and prefer a
-short "see also" link over inlining depth. Raise the limit deliberately, not casually.
+`grounding check-agents` only enforces the `AGENTS.md` body-line budget in
+[`eng/agents-line-limit.txt`](../eng/agents-line-limit.txt) (currently **120**); it does **not** write or
+check any `SKILL.md`. Keep `AGENTS.md` tight — prefer a short "see also" link over inlining depth, and
+raise the limit deliberately, not casually.
+
+> **Two things named `SKILL.md`.** To deliver a content arm, the harness synthesizes a **transient**
+> skill wrapper (skill-validator requires a `SKILL.md` beside a `plugin.json`); `grounding run --source
+> {agents|readme|skill|none}` selects which document fills it, and it is cleaned up after the run. Don't
+> confuse that throwaway delivery wrapper with a **package's shipped Textbook `SKILL.md`** — same
+> filename, entirely different artifact. `--source skill` reads the authored Textbook from
+> `skills/<unit>/SKILL.md`.
 
 ## Layout
 
@@ -178,16 +223,17 @@ package. The real package id is recorded in `meta.yaml` (`package:`).
 
 ```
 grounding/<slug>/
-  AGENTS.md     # SOURCE OF TRUTH — ships in the package root
-  meta.yaml     # name (== <slug>), package, description for the generated SKILL.md
-  SKILL.md      # GENERATED (grounding sync-skill) — do not edit
+  AGENTS.md     # SOURCE OF TRUTH — the Missing Manual; ships in the package root
+  meta.yaml     # name (== <slug>), package, description
 tests/<slug>/
   eval.yaml     # scenarios: prompt + setup.copy_test_files + assertions
   <fixtures>    # sample project(s) copied into the agent workdir; gated by `dotnet test`
+skills/<slug>/  # OPTIONAL, maintainer-authored — the Complete Textbook (a real Claude skill)
+  SKILL.md      # + a .claude-plugin/plugin.json alongside skills/ (not generated)
 eng/
   skill-validator.sha    # pinned dotnet/skills commit we build the validator from
-  agents-line-limit.txt  # max lines allowed in any AGENTS.md (start: 60)
-  grounding              # launcher for the C# grounding CLI (sync-skill, gen-plugins, analyze, ...)
+  agents-line-limit.txt  # max lines allowed in any AGENTS.md (currently 120)
+  grounding              # launcher for the C# grounding CLI (check-agents, gen-plugins, analyze, ...)
   install-grounding.sh   # publish the Native AOT binary onto PATH
   run-evals.sh           # builds skill-validator from the pinned SHA, then runs evaluate
 ```
@@ -201,7 +247,7 @@ The grounding folder name must match the tests folder name and the skill `name` 
 ```bash
 # Prereq: a .NET SDK matching dotnet/skills' global.json, git, and
 # `gh auth login` (skill-validator's Copilot SDK uses gh creds).
-grounding sync-skill                  # regenerate SKILL.md from AGENTS.md
+grounding check-agents                # validate AGENTS.md line budget
 eng/run-evals.sh System.CommandLine
 ```
 
@@ -223,7 +269,7 @@ content arms.)
 2. `grounding/<slug>/meta.yaml` — `name` (== `<slug>`), `package`, `description`.
 3. `tests/<slug>/eval.yaml` — one or more scenarios.
 4. `tests/<slug>/<fixture project(s)>` — the task, with a `dotnet test` correctness gate.
-5. `grounding sync-skill` then `eng/run-evals.sh <slug>`.
+5. `grounding check-agents` then `eng/run-evals.sh <slug>`.
 
 ## Channel-matrix runs
 

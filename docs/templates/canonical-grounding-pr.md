@@ -41,7 +41,8 @@ _baseline -> `AGENTS.md` (~`<tok>` tok). Columns are models. Means across scenar
 | --- | ---: | ---: |
 | tasks correct (+) | 11/12 -> 12/12 | 12/12 -> 12/12 |
 | func passed (assertions) (+) | 35/36 -> 36/36 | 36/36 -> 36/36 |
-| resourcefulness (archaeology) (-) | 42 -> 0 | 19 -> 0 |
+| nuget-cache reads (archaeology) (-) | 38 -> 0 | 17 -> 0 |
+| tool calls: web / bash / other (context) | 4/61/74 -> 0/24/66 | 2/48/70 -> 0/21/64 |
 | grounding load (tok) (context) | 0 -> `<tok>` | 0 -> `<tok>` |
 | read grounding (%) | 0% -> 100% | 0% -> 100% |
 | output tok (% of IET) (-) | 4602 (27%) -> 1661 (25%) | ... |
@@ -60,7 +61,7 @@ lower archaeology = AGENTS more self-sufficient). At MM-12._
 | --- | ---: | ---: |
 | tasks correct (+) | +0 (12/12) | +0 (12/12) |
 | func passed (assertions) (+) | +0 (36/36) | +0 (36/36) |
-| resourcefulness (archaeology) (-) | 2 -> 1 | 4 -> 0 |
+| nuget-cache reads (archaeology) (-) | 2 -> 1 | 4 -> 0 |
 | Session IET (-) | +2% | +7% |
 | Session Cost (-) | +7% | -23% |
 | **verdict** | **NEUTRAL** | **BETTER** |

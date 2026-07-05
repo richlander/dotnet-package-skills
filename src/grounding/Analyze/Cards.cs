@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Grounding.Json;
+using Markout;
 using static Grounding.Analyze.Metrics;
 
 namespace Grounding.Analyze;
@@ -23,7 +24,8 @@ internal sealed partial class Cards
 
     private static string RawSuccess(ArmAgg a) => $"{a.Succ}/{a.N}";
     private static string RawFunc(ArmAgg a) => $"{a.Fp}/{a.Ft}";
-    private static string RawArch(ArmAgg a) => a.Arch.ToString(Inv);
+    private static string RawCache(ArmAgg a) => $"{F0(a.Cache)} / {F0(a.NugetWeb)}";
+    private static string RawToolSplit(ArmAgg a) => $"{F0(a.Web)}/{F0(a.Bash)}/{F0(a.Other)}";
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
@@ -31,11 +33,12 @@ internal sealed partial class Cards
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
     private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
     private static string RawToolCallTurns(ArmAgg a) => $"{F0(a.ToolTurns)} ({F0(a.ToolTurnPct)}%)";
-    private static string RawCost(ArmAgg a) => F2(a.Cost);
 
     private static string DiffSuccess(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Succ - o.Succ)} ({n.Succ}/{n.N})";
     private static string DiffFunc(ArmAgg n, ArmAgg o) => $"{SignedInt(n.Fp - o.Fp)} ({n.Fp}/{n.Ft})";
-    private static string DiffArch(ArmAgg n, ArmAgg o) => $"{o.Arch}\u2192{n.Arch}";
+    private static string DiffCache(ArmAgg n, ArmAgg o) => $"{F0(o.Cache)}/{F0(o.NugetWeb)}\u2192{F0(n.Cache)}/{F0(n.NugetWeb)}";
+    private static string DiffToolSplit(ArmAgg n, ArmAgg o) =>
+        $"{F0(o.Web)}/{F0(o.Bash)}/{F0(o.Other)}\u2192{F0(n.Web)}/{F0(n.Bash)}/{F0(n.Other)}";
     private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
@@ -47,7 +50,6 @@ internal sealed partial class Cards
         $"{F0(o.ToolTurnIetPct)}\u2192{F0(n.ToolTurnIetPct)}%";
     private static string DiffToolCallTurns(ArmAgg n, ArmAgg o) =>
         $"{F0(o.ToolTurns)}\u2192{F0(n.ToolTurns)} ({F0(o.ToolTurnPct)}\u2192{F0(n.ToolTurnPct)}%)";
-    private static string DiffCost(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Cost, o.Cost));
 
     // The grounding doc's size (tokens loaded into the arm; baseline = 0), shown as size
     // context only. The doc's cost is a real cost and is NOT netted out — it is reported in
@@ -61,17 +63,22 @@ internal sealed partial class Cards
     {
         ("tasks correct (+)",                  RawSuccess, DiffSuccess),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
-        ("resourcefulness (archaeology) (-)",  RawArch,    DiffArch),
+        // Narrative: (1) all tool calls, (2) the subset (largely bash) that dug the nuget cache,
+        // (3) the grounding meant to mitigate that, (4) the evidence.
+        ("tool calls: web / bash / other (context)", RawToolSplit, DiffToolSplit),
+        ("nuget archaeology: cache / nuget.org (-)", RawCache,  DiffCache),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
         ("read grounding (%)",                 RawReadGrounding, DiffReadGrounding),
         ("output tok (% of IET) (-)",          RawOut,     DiffOut),
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
         ("tool-turn IET (% of turn IET) (-)",  RawToolTurnIet,  DiffToolTurnIet),
-        // Session summary (bottom line): total turns, price-weighted cost, dollars.
+        // Session summary (bottom line). `Session turns` doubles as the billable-request
+        // count: the harness's premium-request "cost" is exactly 1 per turn (verified
+        // 216/216), so a separate cost row would just restate turns — dropped. `Session IET`
+        // is the real token-weighted cost.
         ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
         ("Session IET (-)",                    RawIet,     DiffIet),
-        ("Session Cost (-)",                   RawCost,    DiffCost),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
@@ -81,28 +88,28 @@ internal sealed partial class Cards
     // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet, b.Iet);   // session IET (full cost, doc included — not netted)
-        var cost = Pct(g.Cost, b.Cost);
+        var iet = Pct(g.Iet, b.Iet);   // session IET (full token-weighted cost, doc included)
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
-        int bArch = b.Arch, gArch = g.Arch;
+        double bArch = b.Arch, gArch = g.Arch;
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {bArch}\u2192{gArch}, IET {SignedPct(iet)}, cost {SignedPct(cost)}";
+                 + $"resourcefulness {F0(bArch)}\u2192{F0(gArch)}, IET {SignedPct(iet)}";
 
         // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
         if (dsucc < 0)
             return $"**FAIL** — fewer tasks correct ({tail})";
 
-        // WORSE: real cost/IET/output inflation (a harm signal), not a stray web call.
+        // WORSE: real IET/output inflation (a harm signal), not a stray web call. (Premium-request
+        // "cost" is 1:1 with turns, and IET is the token-weighted cost gate, so cost is not a
+        // separate axis.)
         var worse = new List<string>();
         if (iet > IetHarmCapFrac * 100) worse.Add($"IET +{F0(iet)}%");
-        if (cost > CostHarmCapFrac * 100) worse.Add($"cost +{F0(cost)}%");
         if (@out > OutInflateFrac * 100) worse.Add($"output +{F0(@out)}%");
         if (worse.Count > 0)
             return $"**WORSE** — {string.Join(", ", worse)} ({tail})";
 
-        // BETTER: solved more, eliminated archaeology, or materially cheaper.
-        if (dsucc > 0 || -iet >= IetWinFrac * 100 || -cost >= CostWinFrac * 100 || (bArch > 0 && gArch == 0))
+        // BETTER: solved more, eliminated archaeology, or materially cheaper (IET).
+        if (dsucc > 0 || -iet >= IetWinFrac * 100 || (bArch >= 0.5 && gArch < 0.5))
             return $"**BETTER** — {tail}";
 
         return $"**NEUTRAL** — no material change ({tail})";
@@ -238,6 +245,35 @@ internal sealed partial class Cards
         _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Agents!.Agg[Arm], m.Skill!.Agg[Arm])}**")) + " |");
     }
 
+    // ---- declarative card (Markout composite cells) ----------------------
+
+    // The quality card rendered from a single declarative model (QualityCard) of Markout
+    // composite shapes. One declaration → the dense Markdown card AND, with --jsonl, the
+    // decomposed typed rows. Single model (baseline → grounded); the multi-model wide table
+    // is a separate layout (see Card).
+    public void DocCard(IReadOnlyList<string> files, bool jsonl)
+    {
+        var a = Loader.LoadArm(files[0]);
+        var b = a.Agg["baseline"];
+        var g = a.Agg[Arm];
+        var card = QualityCard.Build(b, g, a.Iet, GradeLabel(b, g));
+        var gtok = Loader.GroundingTokens(a.SkillPath, a.SkillName);
+        var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
+        if (!NoTitle) _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
+        _o.WriteLine($"_Baseline (no grounding) → `AGENTS.md`{tokNote}. Judge `{a.Judge}`. "
+            + $"IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
+        _o.Write(MarkoutSerializer.Serialize(card, QualityCardContext.Default));
+        _o.WriteLine($"\n> **Conclusion:** {Grade(b, g)}.");
+        if (jsonl)
+        {
+            _o.WriteLine("\n_Same model, decomposed to typed JSONL rows:_\n");
+            _o.WriteLine("```jsonl");
+            MarkoutSerializer.Serialize(card, _o, new TableFormatter(), QualityCardContext.Default,
+                new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl, JsonTypedValues = true, OmitEmptyJsonFields = true });
+            _o.WriteLine("```");
+        }
+    }
+
     // ---- raw per-scenario table (Python main) ----------------------------
 
     private const string Hdr =
@@ -280,7 +316,7 @@ internal sealed partial class Cards
     private static string TableRow(string name, string arm, ArmRow r)
     {
         var qual = r.Qual is { } q ? q.ToString("0.#", Inv) : "-";
-        var web = $"{r.Web}{(r.WebUsed ? "Y" : ".")}";
+        var web = $"{F0(r.Web)}{(r.WebUsed ? "Y" : ".")}";
         var sb = new StringBuilder();
         sb.Append(Pad(name, 28)).Append(" | ");
         sb.Append(Pad(arm, 8)).Append(" | ");
@@ -292,10 +328,10 @@ internal sealed partial class Cards
         sb.Append(PadL(r.Secs.ToString(Inv), 4)).Append(" \u2016 ");
         sb.Append(PadL(web, 3)).Append(" | ");
         sb.Append(PadL(Str(r.Tools), 5)).Append(" | ");
-        sb.Append(PadL(Str(r.Turns), 4)).Append(" | ");        sb.Append(PadL(r.Di.ToString(Inv), 2)).Append(" | ");
-        sb.Append(PadL(r.Mcp.ToString(Inv), 3)).Append(" | ");
-        sb.Append(PadL(r.Cache.ToString(Inv), 5)).Append(" | ");
-        sb.Append(PadL(r.Bash.ToString(Inv), 4));
+        sb.Append(PadL(Str(r.Turns), 4)).Append(" | ");        sb.Append(PadL(F0(r.Di), 2)).Append(" | ");
+        sb.Append(PadL(F0(r.Mcp), 3)).Append(" | ");
+        sb.Append(PadL(F0(r.Cache), 5)).Append(" | ");
+        sb.Append(PadL(F0(r.Bash), 4));
         return sb.ToString();
     }
 

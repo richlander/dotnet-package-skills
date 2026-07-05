@@ -13,13 +13,17 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | model-diff | source-diff | skill-diff | tools-card | web-card",
+    Description = "table | card | doc-card | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
 var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
+};
+var jsonlOpt = new Option<bool>("--jsonl")
+{
+    Description = "For doc-card: also emit the decomposed typed JSONL rows.",
 };
 var ietModelOpt = new Option<string>("--iet-model")
 {
@@ -33,7 +37,7 @@ var legacy = new[] { "card", "model-diff", "source-diff", "skill-diff", "tools-c
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
 {
-    filesArg, viewOpt, noTitleOpt, ietModelOpt,
+    filesArg, viewOpt, noTitleOpt, ietModelOpt, jsonlOpt,
 };
 foreach (var o in legacy.Values) analyze.Options.Add(o);
 analyze.SetAction(parse =>
@@ -41,13 +45,15 @@ analyze.SetAction(parse =>
     var files = FileArgs.Expand(parse.GetValue(filesArg) ?? Array.Empty<string>());
     if (files.Count == 0) { Console.Error.WriteLine("analyze: no input files."); return 1; }
     var ietSel = (parse.GetValue(ietModelOpt) ?? "auto").Trim().ToLowerInvariant();
-    // "auto" (default): choose the cost model per run from its model. Anything else forces it.
-    IetModels.Override = ietSel is "" or "auto" ? null : IetModels.Parse(ietSel);
+    // "auto" (default): choose the scheme per run from its model. "anthropic"/"openai" force a
+    // scheme; "no-cache" is a modifier (per-model scheme, input repriced at base rate).
+    IetModels.Apply(IetModels.ParseSelection(ietSel));
     var cards = new Cards { NoTitle = parse.GetValue(noTitleOpt) };
     var view = legacy.FirstOrDefault(kv => parse.GetValue(kv.Value)).Key ?? parse.GetValue(viewOpt);
     switch (view)
     {
         case "card": cards.Card(files); break;
+        case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
         case "model-diff": cards.ModelDiff(files); break;
         case "source-diff": cards.SourceDiff(files); break;
         case "skill-diff": cards.SkillDiff(files); break;
@@ -113,17 +119,38 @@ run.SetAction(parse =>
 });
 root.Subcommands.Add(run);
 
-// ---- sync-skill ---------------------------------------------------------
-var checkOpt = new Option<bool>("--check")
+// ---- check-agents -------------------------------------------------------
+// SKILL.md is NOT generated — it is an optional, maintainer-authored Textbook the eval
+// consumes only when present (grounding run --source skill). This command just enforces
+// the AGENTS.md body line budget.
+var checkAgents = new Command("check-agents", "Validate every grounding/<unit>/AGENTS.md is within the line budget.");
+checkAgents.SetAction(_ => Grounding.Codegen.Codegen.CheckAgents());
+root.Subcommands.Add(checkAgents);
+
+// ---- enrich -------------------------------------------------------------
+// Inject per-run-averaged, event-derived tool-call stats (from sessions.db) into a dataset so
+// runs>1 tool-call/nuget numbers are correct and consistent. Runs automatically after `run`.
+var enrichDataset = new Argument<string>("dataset") { Description = "Dataset results.json to enrich in place." };
+var enrichSessionsOpt = new Option<string?>("--sessions-db") { Description = "Path to sessions.db (default: sibling of the dataset, or under --results-dir)." };
+var enrichResultsDirOpt = new Option<string?>("--results-dir") { Description = "Results dir holding <timestamp>/sessions.db." };
+var enrichIetOpt = new Option<string>("--iet-model") { Description = $"IET model for tool-turn IET: {IetModels.Names}.", DefaultValueFactory = _ => "auto" };
+var enrich = new Command("enrich", "Backfill correct per-run tool-call stats into a dataset from sessions.db.")
 {
-    Description = "Fail if any SKILL.md is stale instead of writing (for CI).",
+    enrichDataset, enrichSessionsOpt, enrichResultsDirOpt, enrichIetOpt,
 };
-var syncSkill = new Command("sync-skill", "Regenerate grounding/<unit>/SKILL.md from AGENTS.md.")
+enrich.SetAction(parse =>
 {
-    checkOpt,
-};
-syncSkill.SetAction(parse => Grounding.Codegen.Codegen.SyncSkill(parse.GetValue(checkOpt)));
-root.Subcommands.Add(syncSkill);
+    var ds = parse.GetValue(enrichDataset)!;
+    var sdb = parse.GetValue(enrichSessionsOpt);
+    var resultsDir = parse.GetValue(enrichResultsDirOpt);
+    if (sdb is null && resultsDir is not null)
+        sdb = Directory.EnumerateFiles(resultsDir, "sessions.db", SearchOption.AllDirectories).FirstOrDefault();
+    var sel = (parse.GetValue(enrichIetOpt) ?? "auto").Trim().ToLowerInvariant();
+    IetModels.Apply(IetModels.ParseSelection(sel));
+    return Grounding.Analyze.Enrich.Run(ds, sdb);
+});
+root.Subcommands.Add(enrich);
+
 
 // ---- gen-plugins --------------------------------------------------------
 var genPlugins = new Command("gen-plugins", "Expand grounding/**/plugin.json.in into plugin.json.");

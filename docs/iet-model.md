@@ -88,8 +88,28 @@ view), pass an explicit model — it overrides the per-run selection:
 grounding analyze --iet-model auto ...        # default: per-run, by model
 grounding analyze --iet-model anthropic ...   # force Anthropic for all columns
 grounding analyze --iet-model openai ...       # force OpenAI for all columns
-grounding analyze --iet-model no-cache ...     # force the no-cache shape for all columns
+grounding analyze --iet-model no-cache ...     # no-cache *modifier* (keeps the per-model scheme)
 ```
+
+## `no-cache` is a modifier, not a third model
+
+`no-cache` is **orthogonal** to scheme selection. It does not replace `anthropic`/`openai` with a
+separate pricer — it reprices the input side of whichever scheme is in play so that **every** input
+token (fresh, cache-write, and cache-read alike) is charged at the base `1.00` rate. The output
+weight is unchanged: it stays the scheme's own (`5×` under `anthropic`, `6×` under `openai`).
+
+This matches the physical picture: cache-write and cache-read are the *same* tokens at different
+points in their lifecycle (a token is "written" the turn it first appears, then "read" every
+subsequent turn it stays in the prompt). Caching makes the re-sends cheap; `no-cache` says every
+send pays full freight. So `no-cache` is a pure input-side reweighting — it never touches output.
+
+```text
+anthropic, no-cache:  1.00*(cacheWrite + cacheRead) + 5.00*output   =  1.00*input + 5.00*output
+openai,    no-cache:  1.00*(fresh + cacheRead)      + 6.00*output   =  1.00*input + 6.00*output
+```
+
+Because it keeps the per-model scheme, a no-cache Claude run still prices output at `5×` and a
+no-cache GPT run at `6×` — the modifier only lifts the input discount, it does not swap output rates.
 
 ## The `anthropic` model: conversational cache
 
@@ -108,11 +128,9 @@ Under this model, no prompt input is charged at the `1.00` base-input rate in no
 |---|---|---|
 | `anthropic` | `1.25*(input-cacheRead) + 0.10*cacheRead + 5.00*output` | Claude/Copilot conversational cache. Auto-selected for Claude families. |
 | `openai` | `1.00*(input-cacheRead) + 0.10*cacheRead + 6.00*output` | OpenAI cached-input models with no cache-write premium. Auto-selected for GPT/o-series. |
-| `no-cache` | `1.00*input + 6.00*output` | Models or request modes without prompt-cache pricing. Explicit only. |
+| `no-cache` | *modifier* → `1.00*input + <scheme>*output` | Input repriced to base rate; output stays the scheme's own (`5×` Anthropic, `6×` OpenAI). See above. |
 
 The `openai` model still decomposes gross input into cached and fresh classes. The difference is that fresh input stays at `1.00` because OpenAI prompt caching has no explicit cache-write surcharge in the public docs.
-
-The `no-cache` model ignores `cacheReadTokens` and treats every input token as base input. Use it for model modes without cached-input support, such as a no-cache API mode or a model tier where cached input is not available.
 
 ## Tool-turn IET
 
@@ -140,7 +158,12 @@ cost metric; sizes stay in tokens, costs in IET/$, so no row mixes dimensions.
 Outcome and validity:
 
 * `tasks correct` / `func passed`: did grounding keep (or improve) correctness — the only ship gate.
-* `resourcefulness (archaeology)`: file-system / web / cache digging the grounding should remove.
+* `nuget-cache reads (archaeology)`: tool calls into `~/.nuget/packages` — the agent reading or
+  decompiling the restored package binary because the grounding did not tell it what it needed. The
+  sharp "grounding was insufficient" signal; grounding should drive it toward `0`.
+* `tool calls: web / bash / other`: the tool-call mix. `web` is external retrieval (another escape
+  hatch grounding should zero out); `bash` is shell work (nuget-cache reads are a subset); `other`
+  is ordinary view/edit/skill work. Shown as counts so the composition is legible.
 * `grounding load (tok)`: the doc's **size**, weighted by whether it was actually read (see below).
 * `read grounding (%)`: did the grounded arm invoke the `skill` tool and load the grounding? Baseline
   is `0%`. A grounded run at `0%` never read the grounding — it is effectively a baseline run and
