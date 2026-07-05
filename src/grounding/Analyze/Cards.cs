@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Grounding.Json;
+using Markout;
 using static Grounding.Analyze.Metrics;
 
 namespace Grounding.Analyze;
@@ -242,6 +243,35 @@ internal sealed partial class Cards
         foreach (var (label, _, diff) in Spec)
             _o.WriteLine($"| {label} | " + string.Join(" | ", models.Select(m => diff(m.Skill!.Agg[Arm], m.Agents!.Agg[Arm]))) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Agents!.Agg[Arm], m.Skill!.Agg[Arm])}**")) + " |");
+    }
+
+    // ---- declarative card (Markout composite cells) ----------------------
+
+    // The quality card rendered from a single declarative model (QualityCard) of Markout
+    // composite shapes. One declaration → the dense Markdown card AND, with --jsonl, the
+    // decomposed typed rows. Single model (baseline → grounded); the multi-model wide table
+    // is a separate layout (see Card).
+    public void DocCard(IReadOnlyList<string> files, bool jsonl)
+    {
+        var a = Loader.LoadArm(files[0]);
+        var b = a.Agg["baseline"];
+        var g = a.Agg[Arm];
+        var card = QualityCard.Build(b, g, a.Iet, GradeLabel(b, g));
+        var gtok = Loader.GroundingTokens(a.SkillPath, a.SkillName);
+        var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
+        if (!NoTitle) _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
+        _o.WriteLine($"_Baseline (no grounding) → `AGENTS.md`{tokNote}. Judge `{a.Judge}`. "
+            + $"IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
+        _o.Write(MarkoutSerializer.Serialize(card, QualityCardContext.Default));
+        _o.WriteLine($"\n> **Conclusion:** {Grade(b, g)}.");
+        if (jsonl)
+        {
+            _o.WriteLine("\n_Same model, decomposed to typed JSONL rows:_\n");
+            _o.WriteLine("```jsonl");
+            MarkoutSerializer.Serialize(card, _o, new TableFormatter(), QualityCardContext.Default,
+                new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl });
+            _o.WriteLine("```");
+        }
     }
 
     // ---- raw per-scenario table (Python main) ----------------------------

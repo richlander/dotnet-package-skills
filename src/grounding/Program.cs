@@ -13,13 +13,17 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | model-diff | source-diff | skill-diff | tools-card | web-card",
+    Description = "table | card | doc-card | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
 var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
+};
+var jsonlOpt = new Option<bool>("--jsonl")
+{
+    Description = "For doc-card: also emit the decomposed typed JSONL rows.",
 };
 var ietModelOpt = new Option<string>("--iet-model")
 {
@@ -33,7 +37,7 @@ var legacy = new[] { "card", "model-diff", "source-diff", "skill-diff", "tools-c
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
 {
-    filesArg, viewOpt, noTitleOpt, ietModelOpt,
+    filesArg, viewOpt, noTitleOpt, ietModelOpt, jsonlOpt,
 };
 foreach (var o in legacy.Values) analyze.Options.Add(o);
 analyze.SetAction(parse =>
@@ -49,6 +53,7 @@ analyze.SetAction(parse =>
     switch (view)
     {
         case "card": cards.Card(files); break;
+        case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
         case "model-diff": cards.ModelDiff(files); break;
         case "source-diff": cards.SourceDiff(files); break;
         case "skill-diff": cards.SkillDiff(files); break;
