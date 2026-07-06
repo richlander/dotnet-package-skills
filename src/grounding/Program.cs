@@ -65,6 +65,40 @@ analyze.SetAction(parse =>
 });
 root.Subcommands.Add(analyze);
 
+// ---- ledger -------------------------------------------------------------
+// The content ledger — attribute each AGENTS.md block to the ladder rung(s) where baseline shows
+// a deficit (fail / archaeology / IET premium). Emits justification, orphans, and coverage gaps.
+// A filter over existing per-scenario data (no re-run), like LIET.
+var ledgerFilesArg = new Argument<string[]>("files")
+{
+    Description = "One or more results.json paths (globs allowed).",
+    Arity = ArgumentArity.OneOrMore,
+};
+var ledgerDocOpt = new Option<string?>("--doc") { Description = "AGENTS.md to attribute (default: resolved from the dataset's grounding dir)." };
+var ledgerPremiumOpt = new Option<double>("--iet-premium")
+{
+    Description = "Baseline IET premium over grounded (fraction) that counts as a deficit even when baseline passed clean. Default 0.20.",
+    DefaultValueFactory = _ => 0.20,
+};
+var ledgerMinOverlapOpt = new Option<int>("--min-overlap")
+{
+    Description = "Distinctive terms a block must share with a rung's dig-subjects to be attributed (guards against coincidental single-term matches). Default 2.",
+    DefaultValueFactory = _ => 2,
+};
+var ledgerIetOpt = new Option<string>("--iet-model") { Description = $"IET model: {IetModels.Names}.", DefaultValueFactory = _ => "auto" };
+var ledger = new Command("ledger", "Attribute AGENTS.md content blocks to the ladder rungs where baseline has a deficit.")
+{
+    ledgerFilesArg, ledgerDocOpt, ledgerPremiumOpt, ledgerMinOverlapOpt, ledgerIetOpt,
+};
+ledger.SetAction(parse =>
+{
+    var files = FileArgs.Expand(parse.GetValue(ledgerFilesArg) ?? Array.Empty<string>());
+    if (files.Count == 0) { Console.Error.WriteLine("ledger: no input files."); return 1; }
+    IetModels.Apply(IetModels.ParseSelection((parse.GetValue(ledgerIetOpt) ?? "auto").Trim().ToLowerInvariant()));
+    return new Ledger().Run(files, parse.GetValue(ledgerDocOpt), parse.GetValue(ledgerPremiumOpt), parse.GetValue(ledgerMinOverlapOpt));
+});
+root.Subcommands.Add(ledger);
+
 // ---- run ----------------------------------------------------------------
 var unitArg = new Argument<string>("unit") { Description = "Grounding unit (grounding/<unit>)." };
 var sourceOpt = new Option<string>("--source", "-s")
