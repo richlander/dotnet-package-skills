@@ -271,6 +271,13 @@ internal sealed partial class Cards
                 _o.WriteLine("doc-card multi-model needs one dataset per distinct model (duplicate models supplied).");
                 return;
             }
+            // The card is one grounding unit compared across models; the header/token note come from
+            // arms[0], so mixing units would mislabel the card and combine unrelated metrics.
+            if (arms.Select(x => x.SkillName).Distinct(StringComparer.Ordinal).Count() > 1)
+            {
+                _o.WriteLine("doc-card multi-model needs all datasets from the same grounding unit (mixed units supplied).");
+                return;
+            }
             DocCardMultiModel(arms, jsonl);
             return;
         }
