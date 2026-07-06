@@ -109,3 +109,29 @@ Push's *structural* properties — presence (it always fires), timing (turn zero
 front of the prompt) — are true **by construction** and need no experiment. The only *empirical*
 question is the **magnitude** of the trajectory win, and that is what this methodology measures
 without fooling itself.
+
+## Worked example — `markout`, runs=3, shared pinned baseline
+
+Mini-6 scenario set, `runs=3`, one baseline pinned per model and reused across both delivery arms
+(`--baseline-out` on the pull run, `--baseline-from` on the push run). Baseline is byte-identical
+across arms (same turns, archaeology, IET), so the grounded arms are directly comparable.
+
+| | pull activation | shared baseline | pull-grounded | push-grounded |
+|---|---:|---:|---:|---:|
+| **haiku** | 100% | 13 turns / 70902 IET | 9 turns / 55516 (−22%) | **5 turns / 33516 (−53%)** |
+| **opus** | 100% | 12 turns / 97535 IET | 7 turns / 51788 (−47%) | **5 turns / 44596 (−54%)** |
+
+**Reading it honestly:**
+- **This is a *high*-activation regime, by measurement.** Both models activated the pull skill 100%
+  of the time on mini-6 — so per the identity, pull is *not* failing to deliver here, and the
+  presence-driven push advantage `(1 − activation)` is ~0. This set cannot demonstrate that case;
+  the low-activation regime (the harder CT tier, where a mini model skips the skill) is the separate
+  experiment for it.
+- **Push is nonetheless cheaper than pull at equal (100%) activation** — for both models, against the
+  *same* baseline. That isolates a **timing/position** effect distinct from presence: even when pull
+  eventually loads the skill, it loads it *mid-session* after the agent has explored, while push has
+  it at t=0. This is defensible here only because the baseline is shared and the trajectory counts are
+  consistently sourced (an earlier `runs=1`, unshared-baseline pass showed a spurious edge from a lucky
+  low push-baseline — the exact trap the shared baseline exists to remove).
+- **Scope of the claim:** one package, one 6-scenario set, `n=3`. Enough to *observe* the timing
+  effect cleanly; not enough to *size* it. Widen the set and raise `n` before quoting a magnitude.
