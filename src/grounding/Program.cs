@@ -99,6 +99,33 @@ ledger.SetAction(parse =>
 });
 root.Subcommands.Add(ledger);
 
+// ---- rescore-assertions -------------------------------------------------
+// Re-evaluate the current eval.yaml's judgeable assertions (file_contains, reject_tools) over the
+// kept trajectory, with no agent re-run — the judgment-side half of cheap re-runs. Reproduces
+// recorded results when assertions are unchanged; surfaces the honest verdict when they are tightened.
+var rescoreAsrtFilesArg = new Argument<string[]>("datasets")
+{
+    Description = "One or more dataset results.json paths (globs allowed).",
+    Arity = ArgumentArity.OneOrMore,
+};
+var rescoreUnitOpt = new Option<string?>("--unit") { Description = "Grounding unit (default: the dataset's skillName)." };
+var rescoreTestsDirOpt = new Option<string?>("--tests-dir") { Description = "Tests dir holding <unit>/eval.yaml + fixtures (default: auto)." };
+var rescoreRootOpt = new Option<string?>("--root") { Description = "Repo root holding the eval.yaml + fixtures (default: infra repo root)." };
+var rescoreWriteOpt = new Option<bool>("--write") { Description = "Write updated assertionResults back into the dataset(s). Default: report only." };
+var rescoreAllOpt = new Option<bool>("--all") { Description = "Re-score ALL judgeable assertions (audit reconstruction faithfulness), not just the ones whose definition changed. Never written." };
+var rescoreAsrt = new Command("rescore-assertions", "Re-score file_contains/reject_tools assertions over kept sessions without re-running the agent.")
+{
+    rescoreAsrtFilesArg, rescoreUnitOpt, rescoreTestsDirOpt, rescoreRootOpt, rescoreWriteOpt, rescoreAllOpt,
+};
+rescoreAsrt.SetAction(parse =>
+{
+    var files = FileArgs.Expand(parse.GetValue(rescoreAsrtFilesArg) ?? Array.Empty<string>());
+    if (files.Count == 0) { Console.Error.WriteLine("rescore-assertions: no input files."); return 1; }
+    return new RescoreAssertions().Run(files, parse.GetValue(rescoreUnitOpt), parse.GetValue(rescoreTestsDirOpt),
+        parse.GetValue(rescoreRootOpt), parse.GetValue(rescoreWriteOpt), parse.GetValue(rescoreAllOpt));
+});
+root.Subcommands.Add(rescoreAsrt);
+
 // ---- run ----------------------------------------------------------------
 var unitArg = new Argument<string>("unit") { Description = "Grounding unit (grounding/<unit>)." };
 var sourceOpt = new Option<string>("--source", "-s")
