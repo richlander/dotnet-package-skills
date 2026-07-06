@@ -112,6 +112,20 @@ public sealed class AssertionResult
 public sealed class Assertion
 {
     [JsonPropertyName("type")] public int Type { get; set; }
+    // The assertion's semantic target, used to match it to AGENTS.md content:
+    //   type 2  (file_contains)  -> value = the required API identifier (e.g. "Metric").
+    //   type 11 (reject_tools)   -> value = the tool name rejected (archaeology guard).
+    //   type 9  (run_command)    -> commandArgs.expectedStdOutputMatches = the required output.
+    [JsonPropertyName("value")] public string? Value { get; set; }
+    [JsonPropertyName("path")] public string? Path { get; set; }
+    [JsonPropertyName("commandArgs")] public CommandArgs? CommandArgs { get; set; }
+}
+
+public sealed class CommandArgs
+{
+    [JsonPropertyName("commandToRun")] public string? CommandToRun { get; set; }
+    [JsonPropertyName("commandArguments")] public string? CommandArguments { get; set; }
+    [JsonPropertyName("expectedStdOutputMatches")] public string? ExpectedStdOutputMatches { get; set; }
 }
 
 public sealed class EventRecord

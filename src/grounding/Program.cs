@@ -65,6 +65,67 @@ analyze.SetAction(parse =>
 });
 root.Subcommands.Add(analyze);
 
+// ---- ledger -------------------------------------------------------------
+// The content ledger — attribute each AGENTS.md block to the ladder rung(s) where baseline shows
+// a deficit (fail / archaeology / IET premium). Emits justification, orphans, and coverage gaps.
+// A filter over existing per-scenario data (no re-run), like LIET.
+var ledgerFilesArg = new Argument<string[]>("files")
+{
+    Description = "One or more results.json paths (globs allowed).",
+    Arity = ArgumentArity.OneOrMore,
+};
+var ledgerDocOpt = new Option<string?>("--doc") { Description = "AGENTS.md to attribute (default: resolved from the dataset's grounding dir)." };
+var ledgerPremiumOpt = new Option<double>("--iet-premium")
+{
+    Description = "Baseline IET premium over grounded (fraction) that counts as a deficit even when baseline passed clean. Default 0.20.",
+    DefaultValueFactory = _ => 0.20,
+};
+var ledgerMinOverlapOpt = new Option<int>("--min-overlap")
+{
+    Description = "Distinctive terms a block must share with a rung's dig-subjects to be attributed (guards against coincidental matches; assertion API-ids are curated, so 1 is the default). Default 1.",
+    DefaultValueFactory = _ => 1,
+};
+var ledgerIetOpt = new Option<string>("--iet-model") { Description = $"IET model: {IetModels.Names}.", DefaultValueFactory = _ => "auto" };
+var ledger = new Command("ledger", "Attribute AGENTS.md content blocks to the ladder rungs where baseline has a deficit.")
+{
+    ledgerFilesArg, ledgerDocOpt, ledgerPremiumOpt, ledgerMinOverlapOpt, ledgerIetOpt,
+};
+ledger.SetAction(parse =>
+{
+    var files = FileArgs.Expand(parse.GetValue(ledgerFilesArg) ?? Array.Empty<string>());
+    if (files.Count == 0) { Console.Error.WriteLine("ledger: no input files."); return 1; }
+    IetModels.Apply(IetModels.ParseSelection((parse.GetValue(ledgerIetOpt) ?? "auto").Trim().ToLowerInvariant()));
+    return new Ledger().Run(files, parse.GetValue(ledgerDocOpt), parse.GetValue(ledgerPremiumOpt), parse.GetValue(ledgerMinOverlapOpt));
+});
+root.Subcommands.Add(ledger);
+
+// ---- rescore-assertions -------------------------------------------------
+// Re-evaluate the current eval.yaml's judgeable assertions (file_contains, reject_tools) over the
+// kept trajectory, with no agent re-run — the judgment-side half of cheap re-runs. Reproduces
+// recorded results when assertions are unchanged; surfaces the honest verdict when they are tightened.
+var rescoreAsrtFilesArg = new Argument<string[]>("datasets")
+{
+    Description = "One or more dataset results.json paths (globs allowed).",
+    Arity = ArgumentArity.OneOrMore,
+};
+var rescoreUnitOpt = new Option<string?>("--unit") { Description = "Grounding unit (default: the dataset's skillName)." };
+var rescoreTestsDirOpt = new Option<string?>("--tests-dir") { Description = "Tests dir holding <unit>/eval.yaml + fixtures (default: auto)." };
+var rescoreRootOpt = new Option<string?>("--root") { Description = "Repo root holding the eval.yaml + fixtures (default: infra repo root)." };
+var rescoreWriteOpt = new Option<bool>("--write") { Description = "Write updated assertionResults back into the dataset(s). Default: report only." };
+var rescoreAllOpt = new Option<bool>("--all") { Description = "Re-score ALL judgeable assertions (audit reconstruction faithfulness), not just the ones whose definition changed. Never written." };
+var rescoreAsrt = new Command("rescore-assertions", "Re-score file_contains/reject_tools assertions over kept sessions without re-running the agent.")
+{
+    rescoreAsrtFilesArg, rescoreUnitOpt, rescoreTestsDirOpt, rescoreRootOpt, rescoreWriteOpt, rescoreAllOpt,
+};
+rescoreAsrt.SetAction(parse =>
+{
+    var files = FileArgs.Expand(parse.GetValue(rescoreAsrtFilesArg) ?? Array.Empty<string>());
+    if (files.Count == 0) { Console.Error.WriteLine("rescore-assertions: no input files."); return 1; }
+    return new RescoreAssertions().Run(files, parse.GetValue(rescoreUnitOpt), parse.GetValue(rescoreTestsDirOpt),
+        parse.GetValue(rescoreRootOpt), parse.GetValue(rescoreWriteOpt), parse.GetValue(rescoreAllOpt));
+});
+root.Subcommands.Add(rescoreAsrt);
+
 // ---- run ----------------------------------------------------------------
 var unitArg = new Argument<string>("unit") { Description = "Grounding unit (grounding/<unit>)." };
 var sourceOpt = new Option<string>("--source", "-s")
@@ -94,11 +155,14 @@ var readmeFileOpt = new Option<string?>("--readme-file") { Description = "README
 var dryRunOpt = new Option<bool>("--dry-run") { Description = "Print the plan without invoking skill-validator." };
 var emitSkillOpt = new Option<string?>("--emit-skill") { Description = "Write the generated SKILL.md to a path and exit." };
 var rootOpt = new Option<string?>("--root") { Description = "Grounding root holding grounding/<unit> — a target package repo (default: the infra repo). Also GROUNDING_ROOT. Eval reads AGENTS.md in place; no packing." };
+var baselineOutOpt = new Option<string?>("--baseline-out") { Description = "Shared-baseline flow: run and persist the ungrounded baseline to this path (a {model} token is substituted per model). Reuse it with --baseline-from so push/pull compare against one pinned baseline." };
+var baselineFromOpt = new Option<string?>("--baseline-from") { Description = "Shared-baseline flow: reuse a baseline persisted by --baseline-out (skips the baseline arm). Must match model/judge/prompts. {model} substituted per model." };
+var freshOpt = new Option<bool>("--fresh") { Description = "Regenerate even when a dataset with matching provenance (same corpus + doc content) already exists. Default reuses it (cheap re-runs)." };
 
 var run = new Command("run", "Run a grounding unit through skill-validator with a chosen source.")
 {
     unitArg, sourceOpt, deliveryOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
-    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt,
+    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt, baselineOutOpt, baselineFromOpt, freshOpt,
 };
 run.SetAction(parse =>
 {
@@ -121,10 +185,33 @@ run.SetAction(parse =>
         DryRun = parse.GetValue(dryRunOpt),
         EmitSkill = parse.GetValue(emitSkillOpt),
         Root = parse.GetValue(rootOpt),
+        BaselineOut = parse.GetValue(baselineOutOpt),
+        BaselineFrom = parse.GetValue(baselineFromOpt),
+        Fresh = parse.GetValue(freshOpt),
     };
     return Runner.Run(opts);
 });
 root.Subcommands.Add(run);
+
+// ---- provenance ---------------------------------------------------------
+// Inspect the pin key stamped into datasets. With one dataset: show it. With two+: report whether
+// each later dataset is REUSABLE as the first (same corpus + doc identity) — the cheap-re-run check.
+var provFilesArg = new Argument<string[]>("datasets")
+{
+    Description = "One or more dataset results.json paths.",
+    Arity = ArgumentArity.OneOrMore,
+};
+var provenance = new Command("provenance", "Show dataset provenance (pin key); with 2+, check reuse compatibility.")
+{
+    provFilesArg,
+};
+provenance.SetAction(parse =>
+{
+    var files = FileArgs.Expand(parse.GetValue(provFilesArg) ?? Array.Empty<string>());
+    if (files.Count == 0) { Console.Error.WriteLine("provenance: no input files."); return 1; }
+    return Grounding.Run.Provenance.Report(files);
+});
+root.Subcommands.Add(provenance);
 
 // ---- check-agents -------------------------------------------------------
 // SKILL.md is NOT generated — it is an optional, maintainer-authored Textbook the eval

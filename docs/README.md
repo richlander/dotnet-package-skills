@@ -14,6 +14,10 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
 - **[grounding-eval-methodology.md](./grounding-eval-methodology.md)** — the *approach*: content arms
   (baseline / Missing Manual / Brochure / Complete Textbook), the three nested tiers
   (Core-6 / MM-12 / CT-24), the cost-tiered ladder, and the confounds.
+- **[delivery-methodology.md](./delivery-methodology.md)** — the *delivery axis* (orthogonal to
+  content): **push** (always-on `.agent.md` at t=0) vs **pull** (model-invoked `SKILL.md`). The
+  push-advantage identity `≈ effect × (1 − pull activation)`, the shared-pinned-baseline procedure,
+  and the anti-overclaim guardrails.
 - **[scoring.md](./scoring.md)** — *grading and shipping*: the **BETTER / NEUTRAL / WORSE** grade model,
   the tier-aware ship gate, the cards, the PR contents + checklist, and the judge-floor finding.
 - **[eval-protocol.md](./eval-protocol.md)** — *measurement discipline*: the pre-registered rules that
