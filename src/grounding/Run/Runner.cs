@@ -222,6 +222,13 @@ internal static class Runner
             var sdb = Path.Combine(Path.GetDirectoryName(rj)!, "sessions.db");
             if (File.Exists(sdb))
                 Analyze.Enrich.Run(dest, sdb);
+            // Shared-baseline consistency: persist the enriched baseline arms (--baseline-out) or
+            // overwrite this run's reused baseline with the persisted ones (--baseline-from), so the
+            // baseline's trajectory counts are identical across delivery arms, not recomputed from a
+            // partial reused session set.
+            var msb = ShortModel(model);
+            if (o.BaselineOut is { } bo2) SharedBaseline.Save(dest, bo2.Replace("{model}", msb));
+            if (o.BaselineFrom is { } bf2) SharedBaseline.Apply(dest, bf2.Replace("{model}", msb));
             Console.WriteLine($"   -> {dest}");
             new Analyze.Cards().Table(new[] { dest });
             return 0;
