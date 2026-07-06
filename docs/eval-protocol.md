@@ -86,6 +86,20 @@ Fix the arm (1), the runs and variance handling (2/3), the success threshold (3)
 assertion review (4) **before** rendering numbers. Choosing them after seeing results is
 p-hacking — it manufactures whichever conclusion you were hoping for.
 
+### 9. Log turns-per-rung — the doc tax is turn-coupled, so a settings artifact can pass as a content result
+Per-turn IET carries a **doc tax**: the grounding block is re-read at the cache rate every turn, so
+its cost ≈ `0.1 × doc_tokens × turns`. That scales with **turn count**, and turn count is set by the
+**harness turn budget** and the **model's reasoning effort** — not by the content alone.
+- **Mistake it prevents:** a per-rung IET crossover, harm-region width, or push-vs-pull edge that
+  actually moved with the *turn budget* or *thinking level* being read as a content/delivery result.
+  And the deeper coupling: grounding *removes* exploration turns, so a doc that works **shrinks its
+  own tax** — the tax is endogenous to the doc's effectiveness, not a flat offset. The harm region is
+  therefore precisely the rungs where the doc adds *reading* turns without removing *exploration*
+  turns; you cannot see that without the turn counts.
+- **How:** record **turns per rung** alongside IET; hold **turn budget and reasoning effort fixed**
+  across every compared arm; and before calling any IET crossing a content (or delivery) finding,
+  check it against the turn counts — a shift that tracks turns is a settings artifact.
+
 ---
 
 ## Pre-run checklist
@@ -96,12 +110,15 @@ p-hacking — it manufactures whichever conclusion you were hoping for.
 - [ ] Success threshold stated.
 - [ ] Assertions reviewed for brittleness (pass the reference **and** a valid variant).
 - [ ] One clean condition per dataset — no splice.
+- [ ] Turn budget + reasoning effort fixed across the arms being compared.
 
 ## Reporting checklist
 
 - [ ] Numbers are from `skilledIsolated`.
 - [ ] High-variance scenarios flagged; per-scenario verdicts only where variance permits.
 - [ ] Stable metrics (cost/archaeology) lead; functional pass qualified by `n`.
+- [ ] Turns-per-rung reported with IET; any IET crossing checked against turn counts (not a
+      turn-budget/thinking-level artifact).
 - [ ] "Impossible" results (a doc making the model *worse* at an unrelated task) are treated
       as a noise/contamination/assertion flag, not a finding.
 - [ ] Datasets + harness commit + package versions pinned for reproduction.

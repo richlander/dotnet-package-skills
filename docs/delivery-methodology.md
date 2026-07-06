@@ -51,6 +51,7 @@ Consequences for the experiment:
 | **Low statistical power** | one run is dominated by session noise | **`runs ≥ 3`**; report variance (skill-validator's CV / high-variance flag) |
 | **Judge noise** | the pairwise judge wobbles near the floor and mis-scores truncated transcripts (we saw a −66% "judge" score on a run that solved 6/6 tasks) | **The functional gate governs** — `tasks correct` and `func passed (assertions)` decide; the judge score is advisory |
 | **Content drift** | comparing different docs | same `AGENTS.md`, same scenario set; delivery is the only variable |
+| **Turn-budget artifact** | the doc tax is `≈ 0.1 × doc_tokens × turns`, so a per-rung/session IET edge can move with the harness turn budget or the model's reasoning effort rather than the content | **fix turn budget + reasoning effort** across the compared arms; **log turns-per-rung** and check any IET crossing against it (see [eval-protocol.md](./eval-protocol.md) rule 9) |
 | **Regime blindness** | comparing where pull didn't fail | measure pull activation first; select the regime deliberately (see the identity above) |
 
 ## Metrics to report
@@ -93,6 +94,27 @@ The control is what proves push does not *harm* the easy case.
   fraction pull missed. This is the advocacy case — and it is only credible with the shared baseline
   and `runs ≥ 3` in place.
 - **The verdict is the functional gate**, goal-aware; the judge score is a signal, not a gate.
+
+## Composition with the content axis (LIET)
+
+This doc is the **delivery** axis. It is orthogonal to the **content** axis — the Levelized-IET
+(LIET) curve, which plots per-rung IET vs difficulty for baseline / `AGENTS.md` / `SKILL.md` and is
+computed **push-only** (delivery held constant at always-delivered, so the activation lottery can't
+smear the content curve). The two compose only at the **ship call**:
+
+- **LIET (content)** answers *which document reaches each difficulty rung cheapest when always
+  delivered* — a pure content-reach hurdle (its "ship `SKILL.md` instead" envelope is a **content**
+  comparison, not a delivery one).
+- **This doc (delivery)** supplies the missing economics: `SKILL.md`'s doc tax is pull-amortized
+  (paid only in the `activation` fraction of sessions), `AGENTS.md`'s is always-on (paid every
+  session). The ship decision discounts LIET's content hurdle by these — **not** through the LIET
+  envelope. Keep them separate; each number then means one thing.
+
+One coupling worth stating because it affects both axes: the doc tax is **turn-coupled and
+endogenous**. It is `≈ 0.1 × doc_tokens × turns`, and grounding *removes* turns — so a document that
+works **shrinks its own tax**. It is not a flat offset; the "harm region" is precisely the rungs
+where a doc adds *reading* turns without removing *exploration* turns. This is why turns-per-rung
+must be logged (confound table above): the tax is a function of the very effect being measured.
 
 ## Honesty guardrails (the anti-overclaim checklist)
 
