@@ -94,11 +94,13 @@ var readmeFileOpt = new Option<string?>("--readme-file") { Description = "README
 var dryRunOpt = new Option<bool>("--dry-run") { Description = "Print the plan without invoking skill-validator." };
 var emitSkillOpt = new Option<string?>("--emit-skill") { Description = "Write the generated SKILL.md to a path and exit." };
 var rootOpt = new Option<string?>("--root") { Description = "Grounding root holding grounding/<unit> — a target package repo (default: the infra repo). Also GROUNDING_ROOT. Eval reads AGENTS.md in place; no packing." };
+var baselineOutOpt = new Option<string?>("--baseline-out") { Description = "Shared-baseline flow: run and persist the ungrounded baseline to this path (a {model} token is substituted per model). Reuse it with --baseline-from so push/pull compare against one pinned baseline." };
+var baselineFromOpt = new Option<string?>("--baseline-from") { Description = "Shared-baseline flow: reuse a baseline persisted by --baseline-out (skips the baseline arm). Must match model/judge/prompts. {model} substituted per model." };
 
 var run = new Command("run", "Run a grounding unit through skill-validator with a chosen source.")
 {
     unitArg, sourceOpt, deliveryOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
-    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt,
+    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt, baselineOutOpt, baselineFromOpt,
 };
 run.SetAction(parse =>
 {
@@ -121,6 +123,8 @@ run.SetAction(parse =>
         DryRun = parse.GetValue(dryRunOpt),
         EmitSkill = parse.GetValue(emitSkillOpt),
         Root = parse.GetValue(rootOpt),
+        BaselineOut = parse.GetValue(baselineOutOpt),
+        BaselineFrom = parse.GetValue(baselineFromOpt),
     };
     return Runner.Run(opts);
 });

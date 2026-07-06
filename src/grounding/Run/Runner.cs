@@ -17,6 +17,11 @@ internal sealed class RunOptions
     public bool DryRun;
     public string? EmitSkill;             // write generated SKILL.md here and exit
     public string? Root;                  // grounding root (a target repo); default = infra root
+    // Shared-baseline flow (push-vs-pull methodology): pin ONE ungrounded baseline and reuse it
+    // across delivery/source arms so the comparison isn't confounded by per-run baseline variance.
+    // A `{model}` token is substituted with the short model name (for multi-model invocations).
+    public string? BaselineOut;           // --baseline-out: run + persist the baseline here
+    public string? BaselineFrom;          // --baseline-from: reuse a persisted baseline (skip the baseline arm)
 }
 
 internal static class Runner
@@ -189,6 +194,14 @@ internal static class Runner
             psi.ArgumentList.Add("--runs"); psi.ArgumentList.Add(o.Runs.ToString());
             psi.ArgumentList.Add("--keep-sessions");
             psi.ArgumentList.Add("--results-dir"); psi.ArgumentList.Add(resultsDir);
+            // Shared-baseline flow: persist (--baseline-out) or reuse (--baseline-from) one pinned
+            // baseline so push and pull grounded arms compare against the SAME reference. The
+            // `{model}` token keeps per-model baselines distinct in multi-model invocations.
+            var ms = ShortModel(model);
+            if (o.BaselineOut is { } bo)
+            { psi.ArgumentList.Add("--baseline-out"); psi.ArgumentList.Add(bo.Replace("{model}", ms)); }
+            if (o.BaselineFrom is { } bf)
+            { psi.ArgumentList.Add("--baseline-from"); psi.ArgumentList.Add(bf.Replace("{model}", ms)); }
             psi.ArgumentList.Add(groundingArg);
 
             using var p = Process.Start(psi)!;
@@ -225,8 +238,12 @@ internal static class Runner
     private static string BuildCommand(string bin, RunOptions o, string model, string resultsDir, string groundingArg)
     {
         var judge = o.NoJudge ? "--no-judge" : $"--judge-model {o.JudgeModel}";
+        var ms = ShortModel(model);
+        var baseline = o.BaselineOut is { } bo ? $"--baseline-out {bo.Replace("{model}", ms)} "
+                     : o.BaselineFrom is { } bf ? $"--baseline-from {bf.Replace("{model}", ms)} "
+                     : "";
         return $"{bin} evaluate --tests-dir {o.TestsDir} --model {model} {judge} " +
-               $"--runs {o.Runs} --keep-sessions --results-dir {resultsDir} {groundingArg}";
+               $"--runs {o.Runs} --keep-sessions --results-dir {resultsDir} {baseline}{groundingArg}";
     }
 
     private static string? FindSkillValidator(string root)

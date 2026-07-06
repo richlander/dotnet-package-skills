@@ -25,6 +25,7 @@ internal static class Enrich
     private static string? ArmKey(string? role) => role switch
     {
         "baseline" => "baseline",
+        "baseline-reused" => "baseline",
         "with-skill-isolated" => "skilledIsolated",
         "with-skill-plugin" => "skilledPlugin",
         "with-agent-isolated" => "skilledIsolated",
