@@ -257,6 +257,11 @@ internal sealed partial class Cards
         // keeps the dense single-model card below.
         var arms = files.Select(Loader.LoadArm).Where(x => !x.IsReadme && !x.IsSkill)
             .OrderBy(x => x.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal).ToList();
+        if (arms.Count == 0)
+        {
+            _o.WriteLine("doc-card needs at least one AGENTS.md dataset (non-'readme'/'skill' path).");
+            return;
+        }
         if (arms.Count > 1)
         {
             // The pivot keys columns by model, so duplicate models would collide into one column and
@@ -270,9 +275,8 @@ internal sealed partial class Cards
             return;
         }
 
-        // Use the filtered AGENTS arm when there is exactly one (input may also include a README/SKILL
-        // dataset that sorts ahead of it); only fall back to files[0] when nothing survived filtering.
-        var a = arms.Count == 1 ? arms[0] : Loader.LoadArm(files[0]);
+        // Exactly one AGENTS arm (input may also include a README/SKILL dataset that sorts ahead of it).
+        var a = arms[0];
         var b = a.Agg["baseline"];
         var g = a.Agg[Arm];
         var card = QualityCard.Build(b, g, a.Iet, GradeLabel(b, g));
