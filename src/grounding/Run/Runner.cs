@@ -6,6 +6,7 @@ internal sealed class RunOptions
 {
     public required string Unit;
     public required string Source;        // agents | readme | none
+    public string Delivery = "pull";      // pull = model-invoked skill (SKILL.md); push = always-on agent (.agent.md)
     public required List<string> Models;
     public int Runs = 1;
     public string JudgeModel = "claude-haiku-4.5";
@@ -126,18 +127,21 @@ internal static class Runner
             foreach (var model in o.Models)
             {
                 var ms = ShortModel(model);
+                // Delivery encodes into the tag so push/pull datasets sit side by side.
+                var dv = o.Delivery == "push" ? "-push" : "";
                 var tag = o.Source switch
                 {
-                    "skill" => $"{o.Unit}-skill.{ms}",
-                    "readme" => $"{o.Unit}-readme.{ms}",
-                    "none" => $"{o.Unit}-none.{ms}",
-                    _ => $"{o.Unit}.{ms}",
+                    "skill" => $"{o.Unit}-skill{dv}.{ms}",
+                    "readme" => $"{o.Unit}-readme{dv}.{ms}",
+                    "none" => $"{o.Unit}-none{dv}.{ms}",
+                    _ => $"{o.Unit}{dv}.{ms}",
                 };
                 var resultsDir = DataCache.ResultsDir(o.Unit, tag);
                 var cmd = BuildCommand(bin ?? "<skill-validator>", o, model, resultsDir, groundingArg);
 
-                Console.WriteLine($"#### {o.Unit}  source={o.Source}  model={ms}  runs={o.Runs} ####");
-                Console.WriteLine($"    SKILL.md <- {o.Source}   dataset -> {Path.Combine(outDir, tag + ".json")}");
+                Console.WriteLine($"#### {o.Unit}  source={o.Source}  delivery={o.Delivery}  model={ms}  runs={o.Runs} ####");
+                var artifact = o.Delivery == "push" ? $"{o.Unit}.agent.md" : "SKILL.md";
+                Console.WriteLine($"    {artifact} <- {o.Source}   dataset -> {Path.Combine(outDir, tag + ".json")}");
                 Console.WriteLine("    " + cmd);
 
                 if (o.DryRun)
@@ -161,16 +165,20 @@ internal static class Runner
         return rc;
     }
 
-    // Reversibly swap SKILL.md to the chosen source, invoke skill-validator,
-    // copy results.json into the dataset, then always restore the original SKILL.md.
+    // Reversibly swap the grounding artifact to the chosen source, invoke skill-validator,
+    // copy results.json into the dataset, then always restore/clean up. Delivery picks the
+    // artifact: pull -> SKILL.md (model-invoked skill); push -> <unit>.agent.md (always-on
+    // agent, selected as primary persona at t=0). skill-validator auto-discovers which.
     private static int RunOne(string root, string skillPath, string skillText, string bin,
         RunOptions o, string model, string resultsDir, string groundingArg, string outDir, string tag)
     {
-        var backup = File.Exists(skillPath) ? File.ReadAllText(skillPath) : null;
+        var unitDir = Path.GetDirectoryName(skillPath)!;
+        var target = o.Delivery == "push" ? Path.Combine(unitDir, $"{o.Unit}.agent.md") : skillPath;
+        var backup = File.Exists(target) ? File.ReadAllText(target) : null;
         try
         {
             if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, true);
-            File.WriteAllText(skillPath, skillText);
+            File.WriteAllText(target, skillText);
 
             var psi = new ProcessStartInfo(bin) { WorkingDirectory = root, UseShellExecute = false };
             psi.ArgumentList.Add("evaluate");
@@ -207,10 +215,10 @@ internal static class Runner
         }
         finally
         {
-            // Restore a pre-existing SKILL.md; if we created a transient one (target-repo
-            // bundle ships no SKILL.md), remove it so we never leave an artifact in the tree.
-            if (backup is not null) File.WriteAllText(skillPath, backup);
-            else if (File.Exists(skillPath)) File.Delete(skillPath);
+            // Restore a pre-existing artifact; if we created a transient one (target-repo
+            // bundle ships no SKILL.md/.agent.md), remove it so we never leave an artifact.
+            if (backup is not null) File.WriteAllText(target, backup);
+            else if (File.Exists(target)) File.Delete(target);
         }
     }
 

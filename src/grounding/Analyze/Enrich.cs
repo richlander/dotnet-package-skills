@@ -20,12 +20,15 @@ internal static class Enrich
         public double ToolTurnSecs, AllTurnSecs, ToolTurnIet, AllTurnIet, ToolTurns, AllTurns;
     }
 
-    // role (sessions.db) -> arm key (dataset json).
+    // role (sessions.db) -> arm key (dataset json). Skill-eval and agent-eval (push) use the
+    // same three-way arm shape; both isolated roles map to the one graded "skilledIsolated" arm.
     private static string? ArmKey(string? role) => role switch
     {
         "baseline" => "baseline",
         "with-skill-isolated" => "skilledIsolated",
         "with-skill-plugin" => "skilledPlugin",
+        "with-agent-isolated" => "skilledIsolated",
+        "with-agent-plugin" => "skilledPlugin",
         _ => null,
     };
 
