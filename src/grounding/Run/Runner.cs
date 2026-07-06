@@ -166,15 +166,21 @@ internal static class Runner
 
                 // Pin-reuse: if a dataset for this arm already exists with matching provenance
                 // (same corpus + same doc content), reuse it instead of regenerating — this is what
-                // makes re-running an unchanged arm free. `--fresh` forces regeneration.
+                // makes re-running an unchanged arm free. `--fresh` forces regeneration. On a
+                // mismatch we regenerate and say WHICH rule changed (symmetry with baseline validation).
                 var destPath = Path.Combine(outDir, tag + ".json");
-                if (!o.Fresh && Provenance.FromDataset(destPath) is { } cached && cached.ReusableAs(prov))
+                var cached = o.Fresh ? null : Provenance.FromDataset(destPath);
+                if (cached is not null && cached.ReusableAs(prov))
                 {
                     Console.WriteLine($"    ↺ REUSED (provenance match: {prov.Source} doc {prov.DocContentHash ?? "—"}, "
                         + $"nuget {prov.NugetVersion ?? "?"}, fixtures {prov.FixtureHash ?? "?"}) — skipped generation.");
                     new Analyze.Cards().Table(new[] { destPath });
                     continue;
                 }
+                if (cached is not null)
+                    Console.WriteLine($"    ⟳ regenerating {tag}: {string.Join("; ", cached.ViolationsAgainst(prov))}.");
+                else if (o.Fresh && File.Exists(destPath))
+                    Console.WriteLine($"    ⟳ regenerating {tag}: --fresh.");
 
                 if (bin is null)
                 {
@@ -211,7 +217,7 @@ internal static class Runner
 
             var psi = new ProcessStartInfo(bin) { WorkingDirectory = root, UseShellExecute = false };
             psi.ArgumentList.Add("evaluate");
-            psi.ArgumentList.Add("--tests-dir"); psi.ArgumentList.Add(o.TestsDir);
+            psi.ArgumentList.Add("--tests-dir"); psi.ArgumentList.Add(o.TestsDir!);
             psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
             if (o.NoJudge) psi.ArgumentList.Add("--no-judge");
             else { psi.ArgumentList.Add("--judge-model"); psi.ArgumentList.Add(o.JudgeModel); }
