@@ -228,6 +228,23 @@ internal static class Runner
             { psi.ArgumentList.Add("--baseline-from"); psi.ArgumentList.Add(bf.Replace("{model}", ms)); }
             psi.ArgumentList.Add(groundingArg);
 
+            // Refuse a --baseline-from pin whose corpus (nuget + fixtures) does not match this run —
+            // a baseline from a different world would make the comparison meaningless. Fail fast and
+            // name the violated rule(s). A pre-provenance pin can't be checked, so it only warns.
+            if (o.BaselineFrom is { } bfPin)
+            {
+                var pin = bfPin.Replace("{model}", ms);
+                var violations = SharedBaseline.Validate(pin, prov);
+                var hard = violations.Where(v => !v.StartsWith("unverified")).ToList();
+                if (hard.Count > 0)
+                {
+                    Console.Error.WriteLine($"   !! invalid --baseline-from {Path.GetFileName(pin)}: refusing to reuse a baseline from a different corpus. Violated:");
+                    foreach (var v in hard) Console.Error.WriteLine($"        - {v}");
+                    return 1;
+                }
+                foreach (var v in violations) Console.Error.WriteLine($"   !! {v}; reusing anyway.");
+            }
+
             using var p = Process.Start(psi)!;
             p.WaitForExit();
 
@@ -251,7 +268,7 @@ internal static class Runner
             // baseline's trajectory counts are identical across delivery arms, not recomputed from a
             // partial reused session set.
             var msb = ShortModel(model);
-            if (o.BaselineOut is { } bo2) SharedBaseline.Save(dest, bo2.Replace("{model}", msb));
+            if (o.BaselineOut is { } bo2) SharedBaseline.Save(dest, bo2.Replace("{model}", msb), prov);
             if (o.BaselineFrom is { } bf2) SharedBaseline.Apply(dest, bf2.Replace("{model}", msb));
             // Stamp provenance last so the dataset carries its pin key (corpus + doc identity) for
             // future reuse decisions.

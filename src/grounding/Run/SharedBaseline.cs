@@ -14,9 +14,11 @@ namespace Grounding.Run;
 internal static class SharedBaseline
 {
     private static string Sidecar(string baselinePath) => baselinePath + ".arms.json";
+    private static string ProvFile(string baselinePath) => baselinePath + ".prov.json";
 
-    // Persist each scenario's enriched `baseline` node, keyed by scenario name.
-    public static void Save(string datasetPath, string baselinePath)
+    // Persist each scenario's enriched `baseline` node, keyed by scenario name, plus the corpus
+    // provenance so a later --baseline-from can verify it is being reused against a matching corpus.
+    public static void Save(string datasetPath, string baselinePath, Provenance prov)
     {
         var root = JsonNode.Parse(File.ReadAllText(datasetPath));
         var arms = new JsonObject();
@@ -28,6 +30,21 @@ internal static class SharedBaseline
             arms[name] = baseline.DeepClone();
         }
         File.WriteAllText(Sidecar(baselinePath), arms.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        File.WriteAllText(ProvFile(baselinePath), prov.ToJson().ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+    }
+
+    // Verify a --baseline-from pin is valid for the CURRENT run before reusing it: the corpus (nuget
+    // version + fixture set) must match, or the baseline is measuring a different world. Returns the
+    // violated rules (empty = OK). A pre-provenance pin (no companion file) can't be checked — returns
+    // a single "unverified" note so the caller can warn rather than silently trust it.
+    public static IReadOnlyList<string> Validate(string baselinePath, Provenance current)
+    {
+        var pf = ProvFile(baselinePath);
+        if (!File.Exists(pf)) return new[] { "unverified: baseline has no provenance companion (pre-provenance pin)" };
+        var pinned = Provenance.FromJson(JsonNode.Parse(File.ReadAllText(pf)));
+        return pinned is null
+            ? new[] { "unverified: baseline provenance unreadable" }
+            : pinned.ViolationsAgainst(current, corpusOnly: true);
     }
 
     // Overwrite this dataset's `baseline` nodes with the persisted (shared) ones, by scenario name.
@@ -50,7 +67,10 @@ internal static class SharedBaseline
             applied++;
         }
         File.WriteAllText(datasetPath, root!.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
-        Console.WriteLine($"   shared baseline applied to {applied} scenario(s) from {side}.");
+        if (applied == 0)
+            Console.Error.WriteLine($"   !! shared baseline applied to 0 scenarios from {side} — scenario names do not match this run (wrong tier/unit?).");
+        else
+            Console.WriteLine($"   shared baseline applied to {applied} scenario(s) from {side}.");
     }
 
     private static IEnumerable<JsonNode?> Scenarios(JsonNode? root)

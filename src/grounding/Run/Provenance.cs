@@ -53,6 +53,25 @@ internal sealed partial class Provenance
         && Source == now.Source
         && (Source == "none" || DocContentHash == now.DocContentHash);
 
+    // Human-readable list of the pin RULES this (a stored pin) violates against the current context —
+    // used to explain WHY a reuse/baseline is invalid instead of silently applying a mismatched one.
+    public List<string> ViolationsAgainst(Provenance now, bool corpusOnly = false)
+    {
+        var v = new List<string>();
+        if (NugetVersion != now.NugetVersion)
+            v.Add($"nuget version (pinned {NugetVersion ?? "—"} vs current {now.NugetVersion ?? "—"})");
+        if (FixtureHash != now.FixtureHash)
+            v.Add($"fixture set (pinned {FixtureHash ?? "—"} vs current {now.FixtureHash ?? "—"})");
+        if (!corpusOnly)
+        {
+            if (Source != now.Source)
+                v.Add($"grounding source (pinned {Source} vs current {now.Source})");
+            else if (Source != "none" && DocContentHash != now.DocContentHash)
+                v.Add($"doc content ({DocPath ?? "doc"} pinned {DocContentHash ?? "—"} vs current {now.DocContentHash ?? "—"})");
+        }
+        return v;
+    }
+
     public JsonObject ToJson() => new()
     {
         ["nugetVersion"] = NugetVersion,
@@ -66,21 +85,23 @@ internal sealed partial class Provenance
     public static Provenance? FromDataset(string datasetPath)
     {
         if (!File.Exists(datasetPath)) return null;
-        try
-        {
-            var p = JsonNode.Parse(File.ReadAllText(datasetPath))?["provenance"];
-            if (p is null) return null;
-            return new Provenance
-            {
-                NugetVersion = p["nugetVersion"]?.GetValue<string>(),
-                FixtureHash = p["fixtureHash"]?.GetValue<string>(),
-                Source = p["source"]?.GetValue<string>() ?? "none",
-                DocPath = p["docPath"]?.GetValue<string>(),
-                DocCommit = p["docCommit"]?.GetValue<string>(),
-                DocContentHash = p["docContentHash"]?.GetValue<string>(),
-            };
-        }
+        try { return FromJson(JsonNode.Parse(File.ReadAllText(datasetPath))?["provenance"]); }
         catch { return null; }
+    }
+
+    // Parse a provenance object (as written by ToJson) from a JSON node.
+    public static Provenance? FromJson(JsonNode? p)
+    {
+        if (p is null) return null;
+        return new Provenance
+        {
+            NugetVersion = p["nugetVersion"]?.GetValue<string>(),
+            FixtureHash = p["fixtureHash"]?.GetValue<string>(),
+            Source = p["source"]?.GetValue<string>() ?? "none",
+            DocPath = p["docPath"]?.GetValue<string>(),
+            DocCommit = p["docCommit"]?.GetValue<string>(),
+            DocContentHash = p["docContentHash"]?.GetValue<string>(),
+        };
     }
 
     // Stamp the provenance object into a produced dataset (top-level "provenance").
