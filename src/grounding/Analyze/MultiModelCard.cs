@@ -21,39 +21,43 @@ public sealed class MultiModelCard
     // models are pre-ordered (mini-tier first, then model name); Grade is FAIL | WORSE | NEUTRAL | BETTER.
     internal static MultiModelCard Build(IReadOnlyList<(string Model, ArmAgg B, ArmAgg G, string Grade)> models)
     {
-        MultiSourceRow Row(string label, Func<ArmAgg, ArmAgg, IMarkoutCell> cell, MarkoutCellFormat fmt = default) =>
-            new(label, models.Select(m => new Source(m.Model, cell(m.B, m.G), fmt)).ToArray());
+        // Each row carries a Goal so 0.21 derives a per-cell (good)/(bad)/(neutral) status from the
+        // baseline→grounded direction (Higher = more is better, Lower = less is better, Context =
+        // informational, no status). The Goal folds into the cell format via `with`, preserving any
+        // Delta/Unit. The (+)/(-)/context hint stays in the label (matches dotnet-inspect's cards).
+        MultiSourceRow Row(string label, Func<ArmAgg, ArmAgg, IMarkoutCell> cell, Goal goal, MarkoutCellFormat fmt = default) =>
+            new(label, models.Select(m => new Source(m.Model, cell(m.B, m.G), fmt with { Goal = goal })).ToArray());
 
         return new MultiModelCard
         {
             Rows =
             [
                 Row("tasks correct (+)",
-                    (b, g) => new Change<Fraction>(new Fraction(b.Succ, b.N), new Fraction(g.Succ, g.N))),
+                    (b, g) => new Change<Fraction>(new Fraction(b.Succ, b.N), new Fraction(g.Succ, g.N)), Goal.Higher),
                 Row("func passed (assertions) (+)",
-                    (b, g) => new Change<Fraction>(new Fraction(b.Fp, b.Ft), new Fraction(g.Fp, g.Ft))),
+                    (b, g) => new Change<Fraction>(new Fraction(b.Fp, b.Ft), new Fraction(g.Fp, g.Ft)), Goal.Higher),
                 Row("tool calls: web / bash / other (context)",
-                    (b, g) => new Change<Segments>(QualityCard.Split(b), QualityCard.Split(g))),
+                    (b, g) => new Change<Segments>(QualityCard.Split(b), QualityCard.Split(g)), Goal.Context),
                 Row("nuget archaeology: cache / nuget.org (-)",
-                    (b, g) => new Change<Segments>(QualityCard.Nuget(b), QualityCard.Nuget(g))),
+                    (b, g) => new Change<Segments>(QualityCard.Nuget(b), QualityCard.Nuget(g)), Goal.Lower),
                 Row("grounding load (tok) (context)",
-                    (b, g) => new Change<int>(b.DocTok, g.DocTok)),
+                    (b, g) => new Change<int>(b.DocTok, g.DocTok), Goal.Context),
                 Row("read grounding (%)",
-                    (b, g) => new Change<Percent>(new Percent(b.Activated, 1), new Percent(g.Activated, 1))),
+                    (b, g) => new Change<Percent>(new Percent(b.Activated, 1), new Percent(g.Activated, 1)), Goal.Context),
                 Row("output tok (% of IET) (-)",
-                    (b, g) => new Change<Share>(QualityCard.SharePctPublic(b.Out, b.OutIetPct), QualityCard.SharePctPublic(g.Out, g.OutIetPct))),
+                    (b, g) => new Change<Share>(QualityCard.SharePctPublic(b.Out, b.OutIetPct), QualityCard.SharePctPublic(g.Out, g.OutIetPct)), Goal.Lower),
                 Row("tool-call turns (% of total) (-)",
-                    (b, g) => new Change<Share>(QualityCard.SharePctPublic(b.ToolTurns, b.ToolTurnPct), QualityCard.SharePctPublic(g.ToolTurns, g.ToolTurnPct))),
+                    (b, g) => new Change<Share>(QualityCard.SharePctPublic(b.ToolTurns, b.ToolTurnPct), QualityCard.SharePctPublic(g.ToolTurns, g.ToolTurnPct)), Goal.Lower),
                 Row("tool-turn secs (% of turn time) (-)",
                     (b, g) => new Change<Share>(QualityCard.SharePctPublic(b.ToolTurnSecs, b.ToolTurnSecsPct), QualityCard.SharePctPublic(g.ToolTurnSecs, g.ToolTurnSecsPct)),
-                    new MarkoutCellFormat(Delta.None, "s")),
+                    Goal.Lower, new MarkoutCellFormat(Delta.None, "s")),
                 Row("tool-turn IET (% of turn IET) (-)",
-                    (b, g) => new Change<Percent>(new Percent(b.ToolTurnIetPct, 100), new Percent(g.ToolTurnIetPct, 100))),
+                    (b, g) => new Change<Percent>(new Percent(b.ToolTurnIetPct, 100), new Percent(g.ToolTurnIetPct, 100)), Goal.Lower),
                 Row("Session turns (-)",
-                    (b, g) => new Change<long>((long)Math.Round(b.AllTurns), (long)Math.Round(g.AllTurns))),
+                    (b, g) => new Change<long>((long)Math.Round(b.AllTurns), (long)Math.Round(g.AllTurns)), Goal.Lower),
                 Row("Session IET (-)",
                     (b, g) => new Change<long>((long)Math.Round(b.Iet), (long)Math.Round(g.Iet)),
-                    new MarkoutCellFormat(Delta.Percent)),
+                    Goal.Lower, new MarkoutCellFormat(Delta.Percent)),
                 new("verdict", models.Select(m => new Source(m.Model, new Verdict(GateStatusOf(m.Grade), m.Grade))).ToArray()),
             ],
         };

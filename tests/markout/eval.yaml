@@ -717,7 +717,7 @@ scenarios:
     reject_tools: [web_search, web_fetch]
     assertions:
       - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
-      - { type: file_contains, path: "Program.cs", value: "ShowWhen" }
+      - { type: file_contains, path: "Program.cs", value: "ShowWhenProperty" }
       - type: run_command_and_assert
         command_to_run: "dotnet"
         command_arguments: "run --no-build"
@@ -819,7 +819,7 @@ scenarios:
     reject_tools: [web_search, web_fetch]
     assertions:
       - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
-      - { type: file_contains, path: "Program.cs", value: "Unwrap" }
+      - { type: file_contains, path: "Program.cs", value: "MarkoutUnwrap" }
       - type: run_command_and_assert
         command_to_run: "dotnet"
         command_arguments: "run --no-build"
