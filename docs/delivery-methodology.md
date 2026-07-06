@@ -111,10 +111,35 @@ smear the content curve). The two compose only at the **ship call**:
   envelope. Keep them separate; each number then means one thing.
 
 One coupling worth stating because it affects both axes: the doc tax is **turn-coupled and
-endogenous**. It is `≈ 0.1 × doc_tokens × turns`, and grounding *removes* turns — so a document that
-works **shrinks its own tax**. It is not a flat offset; the "harm region" is precisely the rungs
-where a doc adds *reading* turns without removing *exploration* turns. This is why turns-per-rung
-must be logged (confound table above): the tax is a function of the very effect being measured.
+endogenous**. Under push the doc is ambient — a cache-read on *every* turn — so its cost is
+`≈ 0.1 × doc_tokens × turns`, and grounding *removes* turns (fewer exploration turns), so a document
+that works **shrinks its own tax**. It is not a flat offset. Definition, stated so it's checkable in
+the logged data rather than inferred from a shape:
+
+> **The harm region is exactly the rungs where the doc adds tax without removing exploration turns**
+> — i.e. rungs where baseline already had ~0 archaeology (nothing to remove) so the always-on doc
+> tax is pure overhead.
+
+Diagnosing it therefore requires **turns split by kind** — exploration/archaeology vs irreducible —
+per rung, not a single turn count ([eval-protocol.md](./eval-protocol.md) rule 9). We already count
+archaeology per scenario, so this is a reporting change.
+
+## Reading the CT / low-activation run (a trap to avoid)
+
+The two model-relative reads must come off **different arms**, or the activation lottery leaks back
+into the content story the push-only rule just removed:
+
+- **Presence premise** (does pull *fail to deliver* for the weaker model?) → read `read grounding %`
+  on the **pull** arms. If haiku's pull activation on the hard tier is low, pull is failing and push's
+  guaranteed delivery should win big.
+- **Decay-migration** (does grounding's gap open at *earlier* rungs for the weaker model — the
+  popularity/recency decay made visible?) → read **push arms only**, per rung, haiku-push vs
+  opus-push. This is a *content*-axis result and is only clean where activation is pinned at 100%.
+
+The trap: a **low-activation pull run convolves activation and content in one number**
+(`push_advantage ≈ content_effect × (1 − pull_activation)`), so an "earlier gap" seen on pull data
+could just be haiku under-invoking the skill — a delivery effect masquerading as content. The
+low-activation run may *suggest* decay-migration; only the push arms *confirm* it.
 
 ## Honesty guardrails (the anti-overclaim checklist)
 

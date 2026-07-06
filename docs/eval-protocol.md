@@ -96,9 +96,13 @@ its cost ≈ `0.1 × doc_tokens × turns`. That scales with **turn count**, and 
   own tax** — the tax is endogenous to the doc's effectiveness, not a flat offset. The harm region is
   therefore precisely the rungs where the doc adds *reading* turns without removing *exploration*
   turns; you cannot see that without the turn counts.
-- **How:** record **turns per rung** alongside IET; hold **turn budget and reasoning effort fixed**
-  across every compared arm; and before calling any IET crossing a content (or delivery) finding,
-  check it against the turn counts — a shift that tracks turns is a settings artifact.
+- **How:** record **turns per rung, split by kind** — *exploration* turns (web / nuget-cache /
+  dotnet-inspect: our archaeology metric) vs *irreducible* turns (output/reasoning) — alongside IET;
+  hold **turn budget and reasoning effort fixed** across every compared arm; and before calling any
+  IET crossing a content (or delivery) finding, check it against the split. A total turn count shows
+  the tax *move* but can't *attribute* it; only the split makes "adds reading-tax without removing
+  exploration turns" a measurement rather than a sentence. (We already count exploration per scenario
+  in `toolStats` — surfacing it per rung is a reporting change, not new instrumentation.)
 
 ---
 
