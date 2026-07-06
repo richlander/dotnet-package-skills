@@ -5,6 +5,27 @@ delivering it **pull** (a model-invoked skill the agent must discover). This is 
 we follow and ask others to follow; it is written to be *defensible*, because the conclusions are
 advocacy.
 
+## Where this sits: two levers, two outcomes
+
+Grounding is judged on two **outcomes** — does it let the agent answer **more** questions
+(*capability / reach*) and answer them **more cheaply** (*efficiency / cost*) — moved by two
+**levers**: the **content** (what the document says) and the **delivery** (how that content reaches
+the agent). Delivery is **not a third outcome**; it *modulates* both — better delivery raises reach
+and lowers cost at fixed content (the position effect below). In practice the two outcomes move
+*together* (grounding that eliminates archaeology both cheapens and unlocks in one stroke), so they
+are separable to reason about but correlated in the data. This doc is the **delivery** lever; the
+content lever's reach/cost-vs-difficulty curve is the LIET axis (see [Composition](#composition-with-the-content-axis-liet)).
+
+**Delivery is a spectrum of layers, not a binary.** Push (always-on at t=0) and pull (model-invoked)
+are the endpoints, and **MCP is a pull-class channel** — a model-invoked tool, so it carries the same
+**activation lottery** and **mid-session position penalty** as skill-pull, plus a query-formulation
+step. MCP is the *easy* channel to ship (a standard protocol a package author can just serve) but not
+the most effective. The mechanisms **compose**: the highest-value design is usually a **hybrid** — a
+lean, always-on **push pointer** at t=0 ("authoritative grounding for X / Y / Z exists — reach for it
+before using them") that closes pull/MCP's *discovery* gap, with the *bulk* pulled on demand (MCP) to
+defer token cost to the sessions that need it. So "which delivery" is really "which layer each
+mechanism is best at" — and it is an experiment, not an opinion.
+
 ## The two delivery modes
 
 | | Pull | Push |
@@ -42,6 +63,50 @@ Consequences for the experiment:
    first; a harder/broader set, or a smaller model, where the agent skips the skill).
 3. **Never infer push > pull from a regime where pull already activated ~100%** — there is no room
    for it to, and claiming otherwise is indefensible.
+
+## The four instruments — decompose pull into activation and position
+
+The single "pull" arm blends two questions the identity keeps apart. Measuring **four** instruments
+separates them — and all four are a **filter on existing data** (shared baseline + push arm + pull
+arm + per-scenario activation flags), **no new run**:
+
+1. **Baseline** — the model betting on itself; the **difficulty ruler**. Every other number is a
+   delta from it.
+2. **Push** — content present at ~100%: the pure **content effect** at each difficulty, with
+   activation held constant.
+3. **Does pull activate** — a pure **delivery probability** (a rate, not a cost curve): did the model
+   decide to reach for the doc. A property of the trigger, the harness, and the model's disposition —
+   not of whether the content is good.
+4. **Pull given activation** — content effect **conditioned on** delivery having happened; directly
+   comparable to push, because now both had the content present.
+
+The factorization `push_advantage ≈ content_effect × (1 − pull_activation)` reads off these: (2) is
+`content_effect`, (3) is `pull_activation`, and **(4) vs (2) is the decisive test**:
+
+- **(2) ≈ (4)** → pull's only disadvantage is the activation lottery. The decision collapses to
+  "what is the activation rate, and can you raise it" — a **delivery** fix (better trigger, a push
+  pointer), *not* a content fix.
+- **(2) ≠ (4)** → the delivery mechanism affects the content's value **even after both delivered** —
+  a **position effect** (push lands the doc up front; pull/MCP inject it mid-session, into the tail,
+  after the model has already reasoned). That is an argument for push *independent of activation*,
+  and routes to a positional fix. The two-arm "pull vs push" comparison blends these into one loss
+  and cannot tell you which lever to pull.
+
+**The position effect is falsifiable — measure it, don't assert it.** The (2) − (4) gap should equal
+the **pre-activation cost**: in a pull-given-activation session the doc lands only when invoked, so
+every turn before that ran effectively un-grounded (baseline), and push is precisely what avoids
+those turns. The harness records *when* the skill fired, so sum the turns/IET spent before it; if the
+gap ≈ that pre-activation cost, the position mechanism is **confirmed**. If the gap is *larger*, the
+model reasons worse over a tail-injected doc than a front-loaded one even once both are present — a
+stronger, separate argument for push.
+
+**Selection-bias trap — compare (2) vs (4) at matched rungs, per run.** (4) is conditioned on the
+model *choosing* to activate, and it chooses when it senses it is out of its depth — the harder rungs
+— so (4)'s correct-set skews hard, and comparing it to push's full curve is apples-to-oranges. At low
+`n` the conditioning is per-**(rung, run)** (a rung can activate on some runs and not others).
+Compare (4) to (2) **only on rungs that activated on all `n` runs** (or weight by per-run activation);
+never as aggregate averages — otherwise the activation lottery leaks back in through the composition
+of the correct-set, the exact contamination the split exists to kill.
 
 ## Confounds and the controls that remove them
 
