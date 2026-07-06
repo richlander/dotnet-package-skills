@@ -189,6 +189,82 @@ Diagnosing it therefore requires **turns split by kind** — exploration/archaeo
 per rung, not a single turn count ([eval-protocol.md](./eval-protocol.md) rule 9). We already count
 archaeology per scenario, so this is a reporting change.
 
+## The content ledger — attributing content to assertions (LIET's dual)
+
+LIET measures the per-rung benefit *magnitude*; the **content ledger** attributes that benefit to
+specific `AGENTS.md` blocks. It is a filter over the *same* per-scenario data (no re-run):
+`grounding ledger <datasets>`.
+
+The unit is the **functional assertion**, and the evidence is the per-question **baseline↔grounded
+diff** (assertions align by index across arms). Assertions are the right unit because they are
+*curated and declared* — unlike what the agent happened to dig for, which is noise:
+
+- `file_contains` (type 2) → the required **API id** (`Metric`, `MarkoutSerializer.Serialize`). The
+  gold signal: it tests "did the code use API X", and X maps to the block documenting X.
+- `run_command` (type 9) → the **correctness oracle** (build + expected-output regex); sets task pass.
+- `reject_tools` (type 11) → the **archaeology guard**; a fail→pass flip = grounding removed the dig.
+
+**Four rung cases** (the three real outcomes + a harm flag), from the diff plus the resource divide:
+
+| case | assertion diff | resource divide | meaning |
+|---|---|---|---|
+| **correctness** | flip fail→pass | — | grounding enabled the task |
+| **efficiency** | none | big IET/archaeology | same correctness, cheaper |
+| **redundant** | none | small | grounding didn't matter for this model |
+| **regressed** | pass→fail | — | grounding harmed (or n=1 noise) |
+
+The assertion-diff is the **correctness** instrument; the IET/archaeology divide is the **efficiency**
+instrument — the diff is *blind* to efficiency wins (they have no flip), so the two channels are read
+together.
+
+**Per assertion, a 2×2** of {covered by a block?} × {diff outcome} gives the actionable reads:
+
+- covered + flip → **load-bearing** (content earned the win).
+- covered + still-fails → **present but ineffective** (salience/quality, not coverage).
+- uncovered + still-fails → **missing content** (author it).
+- uncovered + flip → **uncredited** (win came from reasoning, not the doc — don't credit it).
+- covered + both-pass → **redundant for this model** (may still serve a weaker one — read per-model).
+
+A block that covers *no* assertion is an **orphan** — nothing tests it, so cut it or grow a rung.
+Generalization falls out of the tiers: a block whose flips land on **held-out CT** rungs (not just its
+authoring MM rungs) is generalizing; flips only on authoring rungs are a mild overfit signal.
+
+### One system: assertions grade *and* attribute
+
+Because attribution rides on the assertions, **closing a ledger gap = adding a functional assertion**,
+and that same assertion **hardens the eval gate**. One artifact, two payoffs, no separate instrument,
+and the ledger stays a filter (no re-run). The discipline: add an assertion only when it encodes a
+*genuine* task requirement — not to boost resolution — or you contaminate the correctness gate to
+serve attribution.
+
+The corollary is a **diagnostic**. An apparent "content-quality problem" partitions into four causes —
+a real **content gap**, a **missing/imprecise assertion**, a **matcher** miss, or **n=1 noise**. An
+imprecise or stale assertion produces a *phantom* content problem (the doc looks bad when the
+measurement is bad). The ledger's own categories are the triage.
+
+### Worked example — emergent content on `markout` CT8 / CT12
+
+The ledger flagged two CT-tier gaps: `CT8` *missing content* (`ShowWhenProperty` undocumented,
+grounded failing) and `CT12` *uncredited flip* (`MarkoutUnwrap` undocumented). The loop: author the
+**minimal** content for both → re-run *only* those two rungs (haiku, `n=3`) → re-ledger.
+
+| | CT8 | CT12 | still-failing | missing | uncredited | load-bearing flips |
+|---|---|---|---:|---|---|---:|
+| **before** | regressed (grounded fails) | uncredited | 1 | CT8:ShowWhen | CT12:Unwrap | 1 |
+| **after** | **correctness (grounded passes)** | **efficiency (credited)** | **0** | none | none | **2** |
+
+Content added *because measured* — and the **line budget forced compression** (the additions busted
+the limit, so both attributes were folded onto one bullet: emergent ≠ accumulation). The same run also
+surfaced a real ledger bug — the assertion value is a lenient substring (`ShowWhen`) while the doc
+writes the full identifier (`ShowWhenProperty`), so matching is by **identifier family**, not exact
+token.
+
+**Caveats.** Attribution is a correlational lexical (identifier-family) join at section granularity.
+The assertion diff is **`run[last]`** in the dataset, so flip/regressed *counts* are `n=1` noisy — but
+structural findings (`missing`, `orphan`) are robust across runs. Correctness that lives in the fixture
+*output regex* rather than an API `file_contains` (a strong model producing the right output without a
+distinctive API call) is **unattributable** until an assertion pins the API — the loop's own next move.
+
 ## Reading the CT / low-activation run (a trap to avoid)
 
 The two model-relative reads must come off **different arms**, or the activation lottery leaks back
