@@ -154,12 +154,15 @@ internal sealed partial class Provenance
 
     // Content hash of a fixture set: sha256 over each file's repo-relative path + bytes, in sorted
     // order, so it is stable across machines and invalidates on any fixture edit/add/remove.
+    // VCS/OS metadata (any path segment starting with '.', e.g. .gitignore, .DS_Store, .git/) is
+    // excluded — it is never fixture content and would otherwise cause spurious invalidations.
     private static string? HashDir(string dir)
     {
         if (!Directory.Exists(dir)) return null;
         using var sha = SHA256.Create();
         foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
                      .Select(p => (rel: Rel(dir, p), path: p))
+                     .Where(x => !x.rel.Split('/').Any(seg => seg.StartsWith('.')))
                      .OrderBy(x => x.rel, StringComparer.Ordinal))
         {
             var relBytes = Encoding.UTF8.GetBytes(f.rel + "\0");
