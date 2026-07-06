@@ -101,7 +101,9 @@ internal sealed partial class RescoreAssertions
                     {
                         ra["type"] = spec.Type;
                         if (spec.Value is not null) ra["value"] = spec.Value; else ra.Remove("value");
-                        if (spec.Type == 2) { if (spec.Path is not null) ra["path"] = spec.Path; }
+                        // Always synchronize path to the spec identity (not just for type 2), so a
+                        // type/path transition (e.g. file_contains -> reject_tools) stays idempotent.
+                        if (spec.Path is not null) ra["path"] = spec.Path; else ra.Remove("path");
                         results[i]!["passed"] = rescored;
                         changedWritten++;
                     }
