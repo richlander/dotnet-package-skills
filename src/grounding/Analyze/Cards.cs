@@ -253,6 +253,16 @@ internal sealed partial class Cards
     // is a separate layout (see Card).
     public void DocCard(IReadOnlyList<string> files, bool jsonl)
     {
+        // Multiple models → the multi-model pivot (rows = metrics, columns = models). A single model
+        // keeps the dense single-model card below.
+        var arms = files.Select(Loader.LoadArm).Where(x => !x.IsReadme && !x.IsSkill)
+            .OrderBy(x => x.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal).ToList();
+        if (arms.Count > 1)
+        {
+            DocCardMultiModel(arms, jsonl);
+            return;
+        }
+
         var a = Loader.LoadArm(files[0]);
         var b = a.Agg["baseline"];
         var g = a.Agg[Arm];
@@ -269,6 +279,33 @@ internal sealed partial class Cards
             _o.WriteLine("\n_Same model, decomposed to typed JSONL rows:_\n");
             _o.WriteLine("```jsonl");
             MarkoutSerializer.Serialize(card, _o, new TableFormatter(), QualityCardContext.Default,
+                new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl, JsonTypedValues = true, OmitEmptyJsonFields = true });
+            _o.WriteLine("```");
+        }
+    }
+
+    // The multi-model quality card via Markout 0.17.0 multi-source rows: models pivot into columns
+    // (mini-tier first), each cell a baseline → grounded Change<Shape>, verdict as GateStatus. One
+    // declarative model renders the dense Markdown card and, with --jsonl, the decomposed typed rows.
+    private void DocCardMultiModel(IReadOnlyList<LoadedArm> arms, bool jsonl)
+    {
+        var models = arms
+            .Select(a => (a.Model, B: a.Agg["baseline"], G: a.Agg[Arm], Grade: GradeLabel(a.Agg["baseline"], a.Agg[Arm])))
+            .ToList();
+        var card = MultiModelCard.Build(models);
+
+        var sn = arms[0].SkillName;
+        var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
+        var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
+        if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. "
+            + $"Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
+        _o.Write(MarkoutSerializer.Serialize(card, MultiModelCardContext.Default));
+        if (jsonl)
+        {
+            _o.WriteLine("\n_Same card, decomposed to typed JSONL rows (one per metric; roles are models):_\n");
+            _o.WriteLine("```jsonl");
+            MarkoutSerializer.Serialize(card, _o, new TableFormatter(), MultiModelCardContext.Default,
                 new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl, JsonTypedValues = true, OmitEmptyJsonFields = true });
             _o.WriteLine("```");
         }
