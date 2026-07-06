@@ -1,69 +1,70 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Grounding.Json;
 
 namespace Grounding.Analyze;
 
-// The content ledger — LIET's structural dual. LIET measures the per-rung benefit magnitude;
-// the ledger ATTRIBUTES that benefit to specific AGENTS.md content blocks. It is a filter over
-// the per-scenario data already collected (baseline pass/archaeology/IET + what baseline dug for,
-// grounded pass/archaeology/read-grounding) — no re-run, exactly like LIET.
+// The content ledger — attribute AGENTS.md blocks to the FUNCTIONAL ASSERTIONS they cover, using
+// the per-assertion baseline↔grounded diff as evidence. A filter over existing data (no re-run).
 //
-// A block is JUSTIFIED when it maps to >=1 rung where baseline shows a DEFICIT (fail OR
-// archaeology>0 OR IET premium) and the block documents the subject baseline went digging for.
-// Two health reads fall out: ORPHANS (blocks that map to no deficit-rung) and COVERAGE GAPS
-// (deficit-rungs with no attributed block). Attribution here is correlational (subject overlap,
-// section granularity, run[last] subjects); leave-one-block-out ablation is the gold standard,
-// reserved for contested/ singly-attributed blocks.
+// Assertions are the precise, declared unit (not noisy dig-subjects). Per question each assertion
+// aligns by index across arms, so we read the diff directly:
+//   type 2  file_contains  -> value is the required API id (Metric, MarkoutSerializer.Serialize) —
+//                             the GOLD attribution signal: it tests "did the code use API X", and X
+//                             maps to the block documenting X.
+//   type 9  run_command    -> the correctness oracle (build + expected-output regex); sets task pass.
+//   type 11 reject_tools   -> archaeology guard; a fail→pass flip = grounding removed the web/dig.
+//
+// Per assertion × {covered by a block?} × {diff}: covered+flip = load-bearing; covered+still-fail =
+// present-but-ineffective (salience); uncovered+still-fail = missing content; covered+both-pass =
+// redundant for this model; uncovered+flip = win not from the doc. Block with no covered assertion =
+// ORPHAN (nothing tests it → cut or grow a rung). Attribution is a curated-to-curated lexical join.
 internal sealed partial class Ledger
 {
     private readonly TextWriter _o;
     public Ledger(TextWriter? o = null) => _o = o ?? Console.Out;
 
-    [GeneratedRegex(@"^https?://([^/]+)(/[^?#]*)?")]
-    private static partial Regex Url();
-
-    // Identifier-ish tokens: PascalCase/attribute names, min length 4 to cut noise.
     [GeneratedRegex(@"[A-Za-z][A-Za-z0-9]{3,}")]
     private static partial Regex Word();
+    [GeneratedRegex(@"^\s*([A-Za-z]+)\d")]
+    private static partial Regex TierRx();
 
-    // Terms too generic to carry attribution signal (markdown/plumbing/temp-path noise).
     private static readonly HashSet<string> Stop = new(StringComparer.OrdinalIgnoreCase)
     {
-        "http","https","www","com","org","net","github","github","nuget","dotnet","microsoft",
-        "packages","package","index","json","blob","main","master","wiki","tree","docs","doc",
-        "html","http","https","raw","refs","heads","releases","download","api","apis",
-        "var","folders","tmp","temp","private","users","home","null","true","false","void",
-        "this","that","with","from","into","using","use","used","uses","each","both","also",
-        "value","values","type","types","name","names","class","public","string","list","new",
-        "csharp","code","file","files","path","paths","test","tests","build","dll","exe","sln",
-        "csproj","program","console","system","text","output","input","render","rendered",
-        "grep","strings","find","cat","head","tail","curl","wget","bash","command","args",
-        "markdown","table","tables","field","fields","property","properties","attribute","attributes",
-        "example","examples","default","optional","required","return","returns","method","methods",
+        "http","https","www","github","nuget","dotnet","microsoft","packages","package","json",
+        "value","values","type","types","name","names","class","public","string","list","true","false",
+        "code","file","files","path","test","build","program","console","system","text","using","with",
+        "markdown","table","tables","field","fields","property","properties","example","default","render",
     };
 
     private sealed class Block
     {
         public string Title = "";
         public HashSet<string> Terms = new(StringComparer.OrdinalIgnoreCase);
-        // deficit-rungs this block is attributed to, keyed by rung short-name -> tier
-        public readonly Dictionary<string, string> Rungs = new();
-        public readonly HashSet<string> Via = new(StringComparer.OrdinalIgnoreCase); // distinctive terms that drove attribution
-        public double DArch, DIet; // summed deltas over attributed rungs
+        public int Flips, BothPass, StillFail;              // covered assertions by outcome
+        public int FlipHeld, FlipAuth;                       // flips on CT(held-out) vs MM(authoring)
+        public readonly HashSet<string> Via = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> Rungs = new();       // scenarios touched
     }
 
-    private sealed class Rung
+    private sealed class Asrt
     {
-        public string Short = "";
-        public string Tier = "";
-        public bool BasePass, GrndPass, Activated;
-        public double BaseArch, GrndArch, BaseIet, GrndIet;
-        public HashSet<string> Subjects = new(StringComparer.OrdinalIgnoreCase);
-        public bool Deficit;
-        public string DeficitKind = "";
-        public readonly List<string> Attributed = new(); // block titles
+        public string Kind = "";                             // api | output | build | reject
+        public HashSet<string> Targets = new(StringComparer.OrdinalIgnoreCase);
+        public bool BasePass, GrndPass;
+        public bool Flip => !BasePass && GrndPass;
+        public bool StillFail => !GrndPass;
+        public bool BothPass => BasePass && GrndPass;
+        public string? RejectTool;
+    }
+
+    private sealed class Scen
+    {
+        public string Short = "", Tier = "";
+        public List<Asrt> Asserts = new();
+        public bool BaseTaskPass, GrndTaskPass;
+        public double BaseIet, GrndIet, BaseArch, GrndArch;
+        public string Case = "";                             // redundant | efficiency | correctness | regressed
     }
 
     public int Run(IReadOnlyList<string> files, string? docOverride, double ietPremium, int minOverlap)
@@ -78,12 +79,9 @@ internal sealed partial class Ledger
             if (docPath is null) { _o.WriteLine($"ledger: could not resolve AGENTS.md for {Path.GetFileName(f)}."); continue; }
             var blocks = Segment(File.ReadAllText(docPath));
             var distinctive = Distinctive(blocks);
-            var rungs = new List<Rung>();
-            foreach (var s in v.Scenarios ?? new())
-                if (BuildRung(s, iet, ietPremium) is { } r) rungs.Add(r);
-
-            Attribute(blocks, rungs, distinctive, minOverlap);
-            Emit(Path.GetFileName(docPath), model, blocks, rungs);
+            var scens = (v.Scenarios ?? new()).Select(s => BuildScen(s, iet, ietPremium)).Where(s => s is not null).Select(s => s!).ToList();
+            Attribute(blocks, scens, distinctive, minOverlap);
+            Emit(Path.GetFileName(docPath), model, blocks, scens);
         }
         return 0;
     }
@@ -106,8 +104,6 @@ internal sealed partial class Ledger
         return null;
     }
 
-    // Split the AGENTS.md body into blocks at `## ` headings; strip YAML frontmatter. Each block's
-    // index-terms are the identifier tokens it documents (backtick code + PascalCase/attribute names).
     private static List<Block> Segment(string text)
     {
         var body = text;
@@ -121,227 +117,174 @@ internal sealed partial class Ledger
         blocks.Add(cur);
         foreach (var line in body.Split('\n'))
         {
-            if (line.StartsWith("## "))
-            {
-                cur = new Block { Title = line[3..].Trim() };
-                blocks.Add(cur);
-            }
-            foreach (var t in Identifiers(line))
-                if (!Stop.Contains(t)) cur.Terms.Add(t);
+            if (line.StartsWith("## ")) { cur = new Block { Title = line[3..].Trim() }; blocks.Add(cur); }
+            foreach (var t in Identifiers(line)) if (!Stop.Contains(t)) cur.Terms.Add(t);
         }
         return blocks.Where(b => b.Terms.Count > 0).ToList();
     }
 
-    // Identifier tokens worth attributing on: things in `backticks`, [Attributes], and PascalCase
-    // names. Lowercased english prose words are filtered by the Stop list at the call site.
-    private static IEnumerable<string> Identifiers(string line)
+    private static IEnumerable<string> Identifiers(string s)
     {
-        foreach (Match m in Word().Matches(line))
+        foreach (Match m in Word().Matches(s))
         {
             var w = m.Value;
-            // keep tokens that look like API identifiers: an internal capital, or a capitalized
-            // token >=5 chars (Metric, Callout, TreeNode, MarkoutSection, TableFormatter, Tsv...).
-            bool internalCap = w.Skip(1).Any(char.IsUpper);
-            bool bigCap = char.IsUpper(w[0]) && w.Length >= 5;
-            if (internalCap || bigCap) yield return w;
+            if (w.Skip(1).Any(char.IsUpper) || (char.IsUpper(w[0]) && w.Length >= 5)) yield return w;
         }
     }
 
-    // ---- per-rung deficit + dig-subjects -----------------------------------
-    private static Rung? BuildRung(Scenario s, IetScheme model, double ietPremium)
-    {
-        var b = Loader.Row(s.Baseline, model);
-        var g = Loader.Row(s.SkilledIsolated, model);
-        if (b is null) return null;
-        var name = s.ScenarioName ?? s.Name ?? "?";
-        var r = new Rung
-        {
-            Short = Shorten(name),
-            Tier = Tier(name),
-            BasePass = b.Ft > 0 && b.Fp == b.Ft,
-            GrndPass = g is not null && g.Ft > 0 && g.Fp == g.Ft,
-            Activated = Loader.ActivatedOf(s, "skilledIsolated"),
-            BaseArch = b.Cache + b.NugetWeb + b.Web,
-            GrndArch = g is null ? 0 : g.Cache + g.NugetWeb + g.Web,
-            BaseIet = b.Iet,
-            GrndIet = g?.Iet ?? 0,
-            Subjects = DigSubjects(s.Baseline),
-        };
-        // Deficit: baseline underperforms — fails, digs, or over-pays vs the grounded arm.
-        var premium = r.BaseIet > 0 && g is not null && (r.BaseIet - r.GrndIet) / r.BaseIet >= ietPremium;
-        if (!r.BasePass) { r.Deficit = true; r.DeficitKind = "fail"; }
-        else if (r.BaseArch > 0) { r.Deficit = true; r.DeficitKind = "archaeology"; }
-        else if (premium) { r.Deficit = true; r.DeficitKind = "iet"; }
-        return r;
-    }
-
-    // What baseline went digging for: web domains + URL/query keywords + bash grep/inspect targets.
-    private static HashSet<string> DigSubjects(Arm? baseline)
-    {
-        var subs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var e in baseline?.Metrics?.Events ?? new())
-        {
-            if (e.Type != "tool.execution_start") continue;
-            var name = e.Data?.ToolName ?? "";
-            var a = ParseArgs(e.Data?.Arguments ?? "{}");
-            string text = name switch
-            {
-                "web_fetch" => a.TryGetValue("url", out var u) ? PathWords(u) : "",
-                "web_search" => a.TryGetValue("query", out var q) ? q : "",
-                "bash" => a.TryGetValue("command", out var c) ? c : "",
-                _ => "",
-            };
-            if (text.Length == 0) continue;
-            foreach (Match m in Word().Matches(text))
-                if (!Stop.Contains(m.Value) && !Noise(m.Value)) subs.Add(m.Value);
-        }
-        return subs;
-    }
-
-    // Reject non-identifier tokens that pollute dig-subjects: hex hashes / session GUIDs, macOS
-    // temp-dir slugs, digit-heavy ids. Real API identifiers have vowels, aren't hex, aren't
-    // digit-dominated — so this keeps MarkoutSection / GetVersionsAsync and drops sv-9f3a… noise.
-    private static bool Noise(string w)
-    {
-        int digits = w.Count(char.IsDigit);
-        if (digits * 5 >= w.Length * 2) return true;                       // >40% digits
-        if (w.Length >= 8 && w.All(c => Uri.IsHexDigit(c))) return true;   // hex hash
-        if (w.Length >= 12 && !w.Any(c => "aeiouAEIOU".Contains(c))) return true; // vowelless slug
-        return false;
-    }
-
-    private static string PathWords(string url)
-    {
-        var m = Url().Match(url);
-        return m.Success ? m.Groups[1].Value + " " + m.Groups[2].Value : url;
-    }
-
-    private static Dictionary<string, string> ParseArgs(string json)
-    {
-        var outp = new Dictionary<string, string>();
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return outp;
-            foreach (var p in doc.RootElement.EnumerateObject())
-                if (p.Value.ValueKind == JsonValueKind.String) outp[p.Name] = p.Value.GetString() ?? "";
-        }
-        catch (JsonException) { }
-        return outp;
-    }
-
-    // Distinctive terms = those NOT shared by most blocks. A term appearing in more than half the
-    // blocks is the doc's ambient vocabulary (e.g. NuGetClient, MarkoutSerializer) and carries no
-    // attribution signal — matching on it makes every block cover every rung. Keep the rare ones.
+    // Ambient vocabulary (in > half the blocks) carries no attribution signal — keep the rare terms.
     private static HashSet<string> Distinctive(List<Block> blocks)
     {
         var df = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var b in blocks)
-            foreach (var t in b.Terms)
-                df[t] = df.GetValueOrDefault(t) + 1;
+        foreach (var b in blocks) foreach (var t in b.Terms) df[t] = df.GetValueOrDefault(t) + 1;
         var maxDf = Math.Max(1, blocks.Count / 2);
-        return df.Where(kv => kv.Value <= maxDf).Select(kv => kv.Key)
-                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return df.Where(kv => kv.Value <= maxDf).Select(kv => kv.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    // ---- attribution -------------------------------------------------------
-    // A block is attributed to a deficit-rung only when it shares >= minOverlap DISTINCTIVE terms
-    // with what baseline dug for. One coincidental token (e.g. a package name that happened to
-    // surface once) is not enough — that fragility masks true orphans (see the negative control).
-    private static void Attribute(List<Block> blocks, List<Rung> rungs, HashSet<string> distinctive, int minOverlap)
+    // ---- per-scenario assertion diff --------------------------------------
+    private static Scen? BuildScen(Scenario s, IetScheme model, double ietPremium)
     {
-        foreach (var r in rungs.Where(r => r.Deficit))
+        var bArm = s.Baseline; var gArm = s.SkilledIsolated;
+        var bRes = bArm?.Metrics?.AssertionResults; var gRes = gArm?.Metrics?.AssertionResults;
+        if (bRes is null || gRes is null) return null;
+        var bRow = Loader.Row(bArm, model); var gRow = Loader.Row(gArm, model);
+        var name = s.ScenarioName ?? s.Name ?? "?";
+        var sc = new Scen
         {
-            var digDistinct = r.Subjects.Where(distinctive.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (digDistinct.Count == 0) continue;
-            foreach (var blk in blocks)
-            {
-                var overlap = blk.Terms.Where(t => digDistinct.Contains(t)).ToList();
-                if (overlap.Count < minOverlap) continue;
-                r.Attributed.Add(blk.Title);
-                blk.Rungs[r.Short] = r.Tier;
-                foreach (var t in overlap) blk.Via.Add(t);
-                blk.DArch += Math.Max(0, r.BaseArch - r.GrndArch);
-                blk.DIet += Math.Max(0, r.BaseIet - r.GrndIet);
-            }
+            Short = Shorten(name), Tier = Tier(name),
+            BaseIet = bRow?.Iet ?? 0, GrndIet = gRow?.Iet ?? 0,
+            BaseArch = bRow is null ? 0 : bRow.Cache + bRow.NugetWeb + bRow.Web,
+            GrndArch = gRow is null ? 0 : gRow.Cache + gRow.NugetWeb + gRow.Web,
+        };
+        int n = Math.Min(bRes.Count, gRes.Count);
+        for (int i = 0; i < n; i++)
+        {
+            var a = MakeAsrt(bRes[i], gRes[i].Passed);
+            if (a is not null) sc.Asserts.Add(a);
         }
+        // task pass = every non-reject (functional) assertion passes.
+        var func = sc.Asserts.Where(a => a.Kind != "reject").ToList();
+        sc.BaseTaskPass = func.Count > 0 && func.All(a => a.BasePass);
+        sc.GrndTaskPass = func.Count > 0 && func.All(a => a.GrndPass);
+        // classify: correctness (fail→pass), else efficiency vs redundant by the resource divide.
+        var bigDivide = (sc.BaseIet > 0 && (sc.BaseIet - sc.GrndIet) / sc.BaseIet >= ietPremium) || sc.BaseArch - sc.GrndArch >= 2;
+        sc.Case = !sc.BaseTaskPass && sc.GrndTaskPass ? "correctness"
+            : sc.BaseTaskPass && !sc.GrndTaskPass ? "regressed"
+            : bigDivide ? "efficiency" : "redundant";
+        return sc;
+    }
+
+    private static Asrt? MakeAsrt(AssertionResult bRes, bool grndPass)
+    {
+        var asr = bRes.Assertion; if (asr is null) return null;
+        var a = new Asrt { BasePass = bRes.Passed, GrndPass = grndPass };
+        switch (asr.Type)
+        {
+            case 2: // file_contains -> API identifier
+                a.Kind = "api";
+                foreach (var t in Identifiers(asr.Value ?? "")) if (!Stop.Contains(t)) a.Targets.Add(t);
+                break;
+            case 11: // reject_tools -> archaeology guard
+                a.Kind = "reject"; a.RejectTool = asr.Value;
+                break;
+            case 9: // run_command -> build (structural) or output oracle
+                a.Kind = (asr.CommandArgs?.CommandArguments ?? "").Contains("build") ? "build" : "output";
+                break;
+            default:
+                a.Kind = "other";
+                break;
+        }
+        return a;
+    }
+
+    // ---- attribution: assertion.targets ∩ block distinctive terms ----------
+    private static void Attribute(List<Block> blocks, List<Scen> scens, HashSet<string> distinctive, int minOverlap)
+    {
+        foreach (var sc in scens)
+            foreach (var a in sc.Asserts.Where(a => a.Kind == "api" && a.Targets.Count > 0))
+            {
+                var tgt = a.Targets.Where(distinctive.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (tgt.Count == 0) continue;
+                foreach (var blk in blocks)
+                {
+                    var overlap = blk.Terms.Where(tgt.Contains).ToList();
+                    if (overlap.Count < minOverlap) continue;
+                    blk.Rungs.Add(sc.Short);
+                    foreach (var t in overlap) blk.Via.Add(t);
+                    if (a.Flip) { blk.Flips++; if (sc.Tier == "CT") blk.FlipHeld++; else blk.FlipAuth++; }
+                    else if (a.BothPass) blk.BothPass++;
+                    else if (a.StillFail) blk.StillFail++;
+                }
+            }
     }
 
     // ---- output ------------------------------------------------------------
-    private void Emit(string doc, string model, List<Block> blocks, List<Rung> rungs)
+    private void Emit(string doc, string model, List<Block> blocks, List<Scen> scens)
     {
-        var deficits = rungs.Where(r => r.Deficit).ToList();
-        var hasCt = rungs.Any(r => r.Tier == "CT");
+        var api = scens.SelectMany(s => s.Asserts.Where(a => a.Kind == "api")).ToList();
+        int flips = api.Count(a => a.Flip), redundant = api.Count(a => a.BothPass), failing = api.Count(a => a.StillFail);
         _o.WriteLine($"### Content ledger — `{doc}` | `{model}`\n");
-        _o.WriteLine($"_{blocks.Count} content blocks · {rungs.Count} rungs ({deficits.Count} with a baseline deficit). "
-            + "Attribution = baseline's dig-subject ∩ block index-terms (correlational; run[last] subjects; section granularity)._\n");
+        _o.WriteLine($"_{blocks.Count} blocks · {scens.Count} rungs · {api.Count} API assertions "
+            + $"({flips} flipped fail→pass, {failing} still failing, {redundant} baseline-already-knew). "
+            + "Attribution = assertion API-id ∩ block terms (curated join; no re-run)._\n");
 
-        // Justification table: rows = blocks, what deficit-rungs each covers.
-        _o.WriteLine("#### Justification (block → deficit-rungs it covers)\n");
-        _o.WriteLine("| Content block | rungs covered | ΔIET | Δarch | via (distinctive) | generalization |");
-        _o.WriteLine("| --- | --- | ---: | ---: | --- | --- |");
+        // Scenario cases (your 3 cases).
+        _o.WriteLine("#### Rung cases\n");
+        _o.WriteLine("| case | rungs |");
+        _o.WriteLine("| --- | --- |");
+        foreach (var g in new[] { "correctness", "efficiency", "redundant", "regressed" })
+        {
+            var rs = scens.Where(s => s.Case == g).Select(s => s.Short).OrderBy(x => x).ToList();
+            if (rs.Count > 0) _o.WriteLine($"| {CaseLabel(g)} | {string.Join(", ", rs)} |");
+        }
+
+        // Block justification.
+        _o.WriteLine("\n#### Justification (block → API assertions it covers)\n");
+        _o.WriteLine("| Content block | load-bearing (flips) | redundant | ineffective | generalization | via |");
+        _o.WriteLine("| --- | ---: | ---: | ---: | --- | --- |");
         foreach (var b in blocks)
         {
-            var covered = b.Rungs.Count;
-            var rungList = covered == 0 ? "—" : string.Join(", ", b.Rungs.Keys.OrderBy(x => x));
-            var via = covered == 0 ? "—" : string.Join(" ", b.Via.Take(5));
-            var gen = "—";
-            if (hasCt && covered > 0)
-            {
-                int held = b.Rungs.Count(kv => kv.Value == "CT");
-                int auth = covered - held;
-                gen = auth == 0 ? (held > 0 ? "held-out only" : "—") : $"{held}/{auth} held/auth";
-            }
-            var flag = covered == 0 ? " **ORPHAN**" : "";
-            _o.WriteLine($"| {b.Title}{flag} | {rungList} | {(covered == 0 ? "—" : ((long)b.DIet).ToString())} | {(covered == 0 ? "—" : ((long)Math.Round(b.DArch)).ToString())} | {via} | {gen} |");
+            int covered = b.Flips + b.BothPass + b.StillFail;
+            var gen = b.Flips == 0 ? "—" : b.FlipHeld > 0 && b.FlipAuth == 0 ? "held-out only" : $"{b.FlipHeld}/{b.FlipAuth} held/auth";
+            var flag = covered == 0 ? " **ORPHAN**" : b.Flips == 0 ? " *(redundant here)*" : "";
+            var via = b.Via.Count == 0 ? "—" : string.Join(" ", b.Via.Take(5));
+            _o.WriteLine($"| {b.Title}{flag} | {b.Flips} | {b.BothPass} | {b.StillFail} | {gen} | {via} |");
         }
 
         // Orphans.
-        var orphans = blocks.Where(b => b.Rungs.Count == 0).Select(b => b.Title).ToList();
-        _o.WriteLine($"\n#### Orphans ({orphans.Count}) — blocks no deficit-rung attributes\n");
-        _o.WriteLine(orphans.Count == 0
-            ? "_None — every block is justified by ≥1 deficit-rung._"
-            : "_Cut candidates, **or** the ladder doesn't yet exercise them (grow a rung):_ " + string.Join("; ", orphans));
+        var orphans = blocks.Where(b => b.Flips + b.BothPass + b.StillFail == 0).Select(b => b.Title).ToList();
+        _o.WriteLine($"\n#### Orphans ({orphans.Count}) — blocks no assertion exercises\n");
+        _o.WriteLine(orphans.Count == 0 ? "_None — every block is exercised by ≥1 API assertion._"
+            : "_Cut candidates, **or** the ladder doesn't test them (grow a rung):_ " + string.Join("; ", orphans));
 
-        // Coverage — the honest signal is EMPIRICAL: deficit-rungs the grounded arm did NOT close
-        // (still fails, or still digs). Attribution-gaps alone are masked by foundational blocks that
-        // match every rung via ambient terms, so we report what the content actually failed to fix.
-        var unrec = deficits.Where(r => !r.GrndPass || r.GrndArch >= 1).ToList();
-        _o.WriteLine($"\n#### Coverage gaps ({unrec.Count}) — deficit-rungs the grounded arm did NOT close\n");
-        if (unrec.Count == 0) _o.WriteLine("_None — every baseline deficit was recovered (grounded passes, no residual archaeology)._");
-        else
-        {
-            _o.WriteLine("| Rung | deficit | grounded still | attributed? | top dig-subjects |");
-            _o.WriteLine("| --- | --- | --- | --- | --- |");
-            foreach (var r in unrec)
+        // Assertion-level coverage (the rung/assertion side): what content failed to land / is missing.
+        var salience = new List<string>(); var missing = new List<string>(); var uncredited = new List<string>();
+        foreach (var sc in scens)
+            foreach (var a in sc.Asserts.Where(a => a.Kind == "api" && a.Targets.Count > 0))
             {
-                var still = !r.GrndPass ? "**fails**" : $"digs {r.GrndArch:0.#}";
-                // attributed by a SPECIALIZED block (not just a foundational catch-all) is the real test.
-                var attr = r.Attributed.Count == 0 ? "no — **undocumented**"
-                    : $"yes ({r.Attributed.Count})";
-                var top = string.Join(" ", r.Subjects.Where(x => x.Length >= 5).Take(6));
-                _o.WriteLine($"| {r.Short} | {r.DeficitKind} | {still} | {attr} | {top} |");
+                bool covered = blocks.Any(b => b.Terms.Overlaps(a.Targets));
+                var tag = $"{sc.Short}:{string.Join("/", a.Targets.Take(2))}";
+                if (a.StillFail && covered) salience.Add(tag);
+                else if (a.StillFail && !covered) missing.Add(tag);
+                else if (a.Flip && !covered) uncredited.Add(tag);
             }
-            _o.WriteLine("\n_undocumented + unrecovered = genuinely missing content; documented + unrecovered = "
-                + "content present but ineffective (salience/quality, not coverage)._");
-        }
+        _o.WriteLine($"\n#### Assertion coverage\n");
+        _o.WriteLine($"- **present but ineffective (salience)** — documented, grounded still fails: {Fmt(salience)}");
+        _o.WriteLine($"- **missing content** — undocumented, grounded still fails: {Fmt(missing)}");
+        _o.WriteLine($"- **uncredited flips** — grounded fixed it, but no block documents it: {Fmt(uncredited)}");
         _o.WriteLine();
     }
 
-    // ---- naming ------------------------------------------------------------
-    private static string Shorten(string name)
+    private static string Fmt(List<string> xs) => xs.Count == 0 ? "_none_" : string.Join(", ", xs);
+    private static string CaseLabel(string c) => c switch
     {
-        var colon = name.IndexOf(':');
-        var head = colon > 0 ? name[..colon] : name;
-        return head.Trim();
-    }
+        "correctness" => "correctness (baseline fail → grounded pass)",
+        "efficiency" => "efficiency (both pass, big IET/arch divide)",
+        "redundant" => "redundant (both pass, small divide)",
+        "regressed" => "regressed (baseline pass → grounded fail)",
+        _ => c,
+    };
 
-    private static string Tier(string name)
-    {
-        var m = TierRx().Match(name);
-        return m.Success ? m.Groups[1].Value.ToUpperInvariant() : "";
-    }
-
-    [GeneratedRegex(@"^\s*([A-Za-z]+)\d")]
-    private static partial Regex TierRx();
+    private static string Shorten(string name) { var c = name.IndexOf(':'); return (c > 0 ? name[..c] : name).Trim(); }
+    private static string Tier(string name) { var m = TierRx().Match(name); return m.Success ? m.Groups[1].Value.ToUpperInvariant() : ""; }
 }

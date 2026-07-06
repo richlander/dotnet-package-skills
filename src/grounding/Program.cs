@@ -82,8 +82,8 @@ var ledgerPremiumOpt = new Option<double>("--iet-premium")
 };
 var ledgerMinOverlapOpt = new Option<int>("--min-overlap")
 {
-    Description = "Distinctive terms a block must share with a rung's dig-subjects to be attributed (guards against coincidental single-term matches). Default 2.",
-    DefaultValueFactory = _ => 2,
+    Description = "Distinctive terms a block must share with a rung's dig-subjects to be attributed (guards against coincidental matches; assertion API-ids are curated, so 1 is the default). Default 1.",
+    DefaultValueFactory = _ => 1,
 };
 var ledgerIetOpt = new Option<string>("--iet-model") { Description = $"IET model: {IetModels.Names}.", DefaultValueFactory = _ => "auto" };
 var ledger = new Command("ledger", "Attribute AGENTS.md content blocks to the ladder rungs where baseline has a deficit.")
