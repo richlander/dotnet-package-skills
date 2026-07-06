@@ -198,16 +198,27 @@ internal sealed partial class Ledger
     }
 
     // ---- attribution: assertion.targets ∩ block distinctive terms ----------
+    // Assertion values are often a lenient SUBSTRING the eval greps for ("ShowWhen", "Unwrap") while
+    // the doc writes the full identifier ("ShowWhenProperty", "MarkoutUnwrap"). Match on containment
+    // (either side, min length 5) so the identifier family joins; keep exact for short tokens.
+    private static bool TermMatch(string blockTerm, string target)
+    {
+        if (string.Equals(blockTerm, target, StringComparison.OrdinalIgnoreCase)) return true;
+        int min = Math.Min(blockTerm.Length, target.Length);
+        if (min < 5) return false;
+        return blockTerm.Contains(target, StringComparison.OrdinalIgnoreCase)
+            || target.Contains(blockTerm, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void Attribute(List<Block> blocks, List<Scen> scens, HashSet<string> distinctive, int minOverlap)
     {
         foreach (var sc in scens)
             foreach (var a in sc.Asserts.Where(a => a.Kind == "api" && a.Targets.Count > 0))
             {
-                var tgt = a.Targets.Where(distinctive.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                if (tgt.Count == 0) continue;
                 foreach (var blk in blocks)
                 {
-                    var overlap = blk.Terms.Where(tgt.Contains).ToList();
+                    // filter the BLOCK side by distinctive (drop ambient vocab); match targets by family.
+                    var overlap = blk.Terms.Where(t => distinctive.Contains(t) && a.Targets.Any(g => TermMatch(t, g))).ToList();
                     if (overlap.Count < minOverlap) continue;
                     blk.Rungs.Add(sc.Short);
                     foreach (var t in overlap) blk.Via.Add(t);
@@ -217,6 +228,9 @@ internal sealed partial class Ledger
                 }
             }
     }
+
+    private static bool Covered(List<Block> blocks, HashSet<string> targets) =>
+        blocks.Any(b => b.Terms.Any(t => targets.Any(g => TermMatch(t, g))));
 
     // ---- output ------------------------------------------------------------
     private void Emit(string doc, string model, List<Block> blocks, List<Scen> scens)
@@ -262,7 +276,7 @@ internal sealed partial class Ledger
         foreach (var sc in scens)
             foreach (var a in sc.Asserts.Where(a => a.Kind == "api" && a.Targets.Count > 0))
             {
-                bool covered = blocks.Any(b => b.Terms.Overlaps(a.Targets));
+                bool covered = Covered(blocks, a.Targets);
                 var tag = $"{sc.Short}:{string.Join("/", a.Targets.Take(2))}";
                 if (a.StillFail && covered) salience.Add(tag);
                 else if (a.StillFail && !covered) missing.Add(tag);
