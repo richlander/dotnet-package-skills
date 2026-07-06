@@ -97,7 +97,8 @@ internal sealed partial class RescoreAssertions
                     // On a CHANGED assertion, --write must update BOTH the verdict AND the recorded
                     // assertion definition, or the dataset is left internally inconsistent (old value,
                     // new pass/fail) and a later run would re-detect it as "changed" and re-flip.
-                    if (write && changed && recAssert is JsonObject ra)
+                    // --all is a read-only audit, so it never writes (even with --write).
+                    if (write && !all && changed && recAssert is JsonObject ra)
                     {
                         ra["type"] = spec.Type;
                         if (spec.Value is not null) ra["value"] = spec.Value; else ra.Remove("value");
@@ -125,7 +126,9 @@ internal sealed partial class RescoreAssertions
                 + "(reconstruction imperfection — multi-edit replay / bash-written files; not applied):");
             foreach (var f in driftFlips) _o.WriteLine($"  - {f}");
         }
-        if (write && changedWritten > 0)
+        if (write && all)
+            _o.WriteLine("- note: `--all` is a read-only audit; nothing written. Re-run without `--all` to apply changed assertions.");
+        if (write && !all && changedWritten > 0)
         {
             File.WriteAllText(ds, node.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
             _o.WriteLine($"\n_updated {changedWritten} changed assertion(s) ({changedFlips.Count} verdict flip(s)) -> {System.IO.Path.GetFileName(ds)} (run `analyze` to re-derive cards)_");
@@ -210,7 +213,7 @@ internal sealed partial class RescoreAssertions
     private static partial Regex InlineFileRe();
     [GeneratedRegex(@"type:\s*(?<type>[a-z_]+)")]
     private static partial Regex TypeRe();
-    [GeneratedRegex(@"value:\s*""?(?<v>[^""}]*?)""?\s*[}\n]?$")]
+    [GeneratedRegex(@"value:\s*""(?<v>[^""]*)""|value:\s*(?<v>[^\s,}\n]+)")]
     private static partial Regex ValueRe();
     [GeneratedRegex(@"path:\s*""?(?<p>[^"",}\n]+)")]
     private static partial Regex PathRe();
