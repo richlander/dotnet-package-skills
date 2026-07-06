@@ -130,11 +130,12 @@ var emitSkillOpt = new Option<string?>("--emit-skill") { Description = "Write th
 var rootOpt = new Option<string?>("--root") { Description = "Grounding root holding grounding/<unit> — a target package repo (default: the infra repo). Also GROUNDING_ROOT. Eval reads AGENTS.md in place; no packing." };
 var baselineOutOpt = new Option<string?>("--baseline-out") { Description = "Shared-baseline flow: run and persist the ungrounded baseline to this path (a {model} token is substituted per model). Reuse it with --baseline-from so push/pull compare against one pinned baseline." };
 var baselineFromOpt = new Option<string?>("--baseline-from") { Description = "Shared-baseline flow: reuse a baseline persisted by --baseline-out (skips the baseline arm). Must match model/judge/prompts. {model} substituted per model." };
+var freshOpt = new Option<bool>("--fresh") { Description = "Regenerate even when a dataset with matching provenance (same corpus + doc content) already exists. Default reuses it (cheap re-runs)." };
 
 var run = new Command("run", "Run a grounding unit through skill-validator with a chosen source.")
 {
     unitArg, sourceOpt, deliveryOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
-    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt, baselineOutOpt, baselineFromOpt,
+    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt, baselineOutOpt, baselineFromOpt, freshOpt,
 };
 run.SetAction(parse =>
 {
@@ -159,10 +160,31 @@ run.SetAction(parse =>
         Root = parse.GetValue(rootOpt),
         BaselineOut = parse.GetValue(baselineOutOpt),
         BaselineFrom = parse.GetValue(baselineFromOpt),
+        Fresh = parse.GetValue(freshOpt),
     };
     return Runner.Run(opts);
 });
 root.Subcommands.Add(run);
+
+// ---- provenance ---------------------------------------------------------
+// Inspect the pin key stamped into datasets. With one dataset: show it. With two+: report whether
+// each later dataset is REUSABLE as the first (same corpus + doc identity) — the cheap-re-run check.
+var provFilesArg = new Argument<string[]>("datasets")
+{
+    Description = "One or more dataset results.json paths.",
+    Arity = ArgumentArity.OneOrMore,
+};
+var provenance = new Command("provenance", "Show dataset provenance (pin key); with 2+, check reuse compatibility.")
+{
+    provFilesArg,
+};
+provenance.SetAction(parse =>
+{
+    var files = FileArgs.Expand(parse.GetValue(provFilesArg) ?? Array.Empty<string>());
+    if (files.Count == 0) { Console.Error.WriteLine("provenance: no input files."); return 1; }
+    return Grounding.Run.Provenance.Report(files);
+});
+root.Subcommands.Add(provenance);
 
 // ---- check-agents -------------------------------------------------------
 // SKILL.md is NOT generated — it is an optional, maintainer-authored Textbook the eval

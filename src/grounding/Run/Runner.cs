@@ -22,6 +22,7 @@ internal sealed class RunOptions
     // A `{model}` token is substituted with the short model name (for multi-model invocations).
     public string? BaselineOut;           // --baseline-out: run + persist the baseline here
     public string? BaselineFrom;          // --baseline-from: reuse a persisted baseline (skip the baseline arm)
+    public bool Fresh;                    // --fresh: regenerate even when a provenance-matching dataset exists
 }
 
 internal static class Runner
@@ -62,10 +63,13 @@ internal static class Runner
 
         var doc = SkillDoc.ParseAgents(agentsPath, metaPath);
         string skillText;
+        string? srcDocPath = null;   // the grounding doc feeding this arm (null for baseline) — its
+                                     // content hash is the arm's provenance/pin key.
         switch (o.Source)
         {
             case "agents":
                 skillText = doc.Render(doc.Body);
+                srcDocPath = agentsPath;
                 break;
             case "skill":
                 // The authored Complete Textbook is a REAL Claude skill, not grounding: it lives
@@ -80,6 +84,7 @@ internal static class Runner
                     return 1;
                 }
                 skillText = File.ReadAllText(authoredSkill);
+                srcDocPath = authoredSkill;
                 break;
             case "readme":
                 var readmePath = o.ReadmeFile ?? Path.Combine(unitDir, "README.md");
@@ -90,6 +95,7 @@ internal static class Runner
                     return 1;
                 }
                 skillText = doc.Render(NormalizeBody(File.ReadAllText(readmePath)));
+                srcDocPath = readmePath;
                 break;
             case "none":
                 skillText = doc.Render("(no package grounding supplied.)\n");
@@ -110,6 +116,12 @@ internal static class Runner
         var bin = FindSkillValidator(infraRoot);
         var skillPath = Path.Combine(unitDir, "SKILL.md");
         var groundingArg = Path.Combine("grounding", o.Unit);
+
+        // Provenance = the pin key. Corpus (nuget + fixtures) + this arm's doc content-hash decide
+        // whether an already-generated dataset can be REUSED instead of regenerated — the core of
+        // cheap re-runs. Computed once here (model-independent) and stamped into each dataset.
+        var fixturesDir = Path.Combine(root, o.TestsDir!, o.Unit, "fixtures");
+        var prov = Provenance.Compute(root, o.Source, srcDocPath, fixturesDir);
 
         // skill-validator requires a plugin.json above the skill dir. Infra ships one at
         // grounding/plugin.json; a target repo need not. If absent, synthesize a transient
@@ -152,6 +164,18 @@ internal static class Runner
                 if (o.DryRun)
                     continue;
 
+                // Pin-reuse: if a dataset for this arm already exists with matching provenance
+                // (same corpus + same doc content), reuse it instead of regenerating — this is what
+                // makes re-running an unchanged arm free. `--fresh` forces regeneration.
+                var destPath = Path.Combine(outDir, tag + ".json");
+                if (!o.Fresh && Provenance.FromDataset(destPath) is { } cached && cached.ReusableAs(prov))
+                {
+                    Console.WriteLine($"    ↺ REUSED (provenance match: {prov.Source} doc {prov.DocContentHash ?? "—"}, "
+                        + $"nuget {prov.NugetVersion ?? "?"}, fixtures {prov.FixtureHash ?? "?"}) — skipped generation.");
+                    new Analyze.Cards().Table(new[] { destPath });
+                    continue;
+                }
+
                 if (bin is null)
                 {
                     Console.Error.WriteLine(
@@ -160,7 +184,7 @@ internal static class Runner
                 }
 
                 Directory.CreateDirectory(outDir);
-                rc |= RunOne(root, skillPath, skillText, bin, o, model, resultsDir, groundingArg, outDir, tag);
+                rc |= RunOne(root, skillPath, skillText, bin, o, model, resultsDir, groundingArg, outDir, tag, prov);
             }
         }
         finally
@@ -175,7 +199,7 @@ internal static class Runner
     // artifact: pull -> SKILL.md (model-invoked skill); push -> <unit>.agent.md (always-on
     // agent, selected as primary persona at t=0). skill-validator auto-discovers which.
     private static int RunOne(string root, string skillPath, string skillText, string bin,
-        RunOptions o, string model, string resultsDir, string groundingArg, string outDir, string tag)
+        RunOptions o, string model, string resultsDir, string groundingArg, string outDir, string tag, Provenance prov)
     {
         var unitDir = Path.GetDirectoryName(skillPath)!;
         var target = o.Delivery == "push" ? Path.Combine(unitDir, $"{o.Unit}.agent.md") : skillPath;
@@ -229,6 +253,9 @@ internal static class Runner
             var msb = ShortModel(model);
             if (o.BaselineOut is { } bo2) SharedBaseline.Save(dest, bo2.Replace("{model}", msb));
             if (o.BaselineFrom is { } bf2) SharedBaseline.Apply(dest, bf2.Replace("{model}", msb));
+            // Stamp provenance last so the dataset carries its pin key (corpus + doc identity) for
+            // future reuse decisions.
+            Provenance.Stamp(dest, prov);
             Console.WriteLine($"   -> {dest}");
             new Analyze.Cards().Table(new[] { dest });
             return 0;
