@@ -17,39 +17,51 @@ namespace Grounding.Analyze;
 public sealed class QualityCard
 {
     [MarkoutPropertyName("tasks correct (+)")]
+    [MarkoutGoal(Goal.Higher)]
     public Change<Fraction> TasksCorrect { get; init; }
 
     [MarkoutPropertyName("func passed (assertions) (+)")]
+    [MarkoutGoal(Goal.Higher)]
     public Change<Fraction> FuncPassed { get; init; }
 
     [MarkoutPropertyName("tool calls: web / bash / other (context)")]
+    [MarkoutGoal(Goal.Context)]
     public Change<Segments> ToolCalls { get; init; }
 
     [MarkoutPropertyName("nuget archaeology: cache / nuget.org (-)")]
+    [MarkoutGoal(Goal.Lower)]
     public Change<Segments> NugetArchaeology { get; init; }
 
     [MarkoutPropertyName("grounding load (tok) (context)")]
+    [MarkoutGoal(Goal.Context)]
     public Change<int> GroundingLoad { get; init; }
 
     [MarkoutPropertyName("read grounding (%)")]
+    [MarkoutGoal(Goal.Context)]
     public Change<Percent> ReadGrounding { get; init; }
 
     [MarkoutPropertyName("output tok (% of IET) (-)")]
+    [MarkoutGoal(Goal.Lower)]
     public Change<Share> OutputTok { get; init; }
 
     [MarkoutPropertyName("tool-call turns (% of total) (-)")]
+    [MarkoutGoal(Goal.Lower)]
     public Change<Share> ToolCallTurns { get; init; }
 
     [MarkoutPropertyName("tool-turn secs (% of turn time) (-)"), MarkoutUnit("s")]
+    [MarkoutGoal(Goal.Lower)]
     public Change<Share> ToolTurnSecs { get; init; }
 
     [MarkoutPropertyName("tool-turn IET (% of turn IET) (-)")]
+    [MarkoutGoal(Goal.Lower)]
     public Change<Percent> ToolTurnIet { get; init; }
 
     [MarkoutPropertyName("Session turns (-)")]
+    [MarkoutGoal(Goal.Lower)]
     public Change<long> SessionTurns { get; init; }
 
     [MarkoutPropertyName("Session IET (-)"), MarkoutDelta(Delta.Percent)]
+    [MarkoutGoal(Goal.Lower)]
     public Change<long> SessionIet { get; init; }
 
     [MarkoutPropertyName("verdict")]
