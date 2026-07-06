@@ -11,7 +11,7 @@ internal sealed class SkillDoc
     public string Body = "";
 
     private const string GeneratedMarker =
-        "<!-- Transient SKILL.md wrapper synthesized from AGENTS.md by the grounding harness at eval time. Do not edit or commit. -->";
+        "<!-- Transient grounding wrapper (SKILL.md or .agent.md) synthesized from AGENTS.md by the harness at eval time. Do not edit or commit. -->";
 
     public static SkillDoc ParseAgents(string agentsPath, string? metaPath)
     {

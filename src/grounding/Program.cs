@@ -73,6 +73,12 @@ var sourceOpt = new Option<string>("--source", "-s")
     DefaultValueFactory = _ => "agents",
 };
 sourceOpt.AcceptOnlyFromAmong("agents", "skill", "readme", "none");
+var deliveryOpt = new Option<string>("--delivery")
+{
+    Description = "Delivery mode: pull = model-invoked skill (SKILL.md, must be activated); push = always-on agent (.agent.md, in context at t=0).",
+    DefaultValueFactory = _ => "pull",
+};
+deliveryOpt.AcceptOnlyFromAmong("pull", "push");
 var modelOpt = new Option<string[]>("--model", "-m")
 {
     Description = "Model id(s); repeat or space-separate. Default claude-haiku-4.5.",
@@ -91,7 +97,7 @@ var rootOpt = new Option<string?>("--root") { Description = "Grounding root hold
 
 var run = new Command("run", "Run a grounding unit through skill-validator with a chosen source.")
 {
-    unitArg, sourceOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
+    unitArg, sourceOpt, deliveryOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
     testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt,
 };
 run.SetAction(parse =>
@@ -104,6 +110,7 @@ run.SetAction(parse =>
     {
         Unit = parse.GetValue(unitArg)!,
         Source = parse.GetValue(sourceOpt)!,
+        Delivery = parse.GetValue(deliveryOpt)!,
         Models = models,
         Runs = parse.GetValue(runsOpt),
         JudgeModel = parse.GetValue(judgeOpt)!,

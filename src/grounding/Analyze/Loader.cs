@@ -255,16 +255,21 @@ internal static class Loader
         var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : new Verdict();
         var sn = v.SkillName ?? "?";
         var agg = Aggregate(v.Scenarios ?? new(), iet);
+        var file = System.IO.Path.GetFileName(path).ToLowerInvariant();
+        // Push delivery (.agent.md, always-on primary persona) is loaded at t=0 by construction,
+        // so there is no activation gate — the SkillActivation field is a pull (skill-invoke)
+        // signal and is absent for agent-eval. Treat push grounded arms as 100% activated.
+        var isPush = file.Contains("push");
         // The grounding document is only charged when the grounded arm actually READ it
         // (skill invoked). Weight the doc's token load by the activation rate — a run that
-        // never activated loaded 0 grounding tokens.
+        // never activated loaded 0 grounding tokens. Push is always resident (rate = 1).
         var gtok = GroundingTokens(v.SkillPath, sn) ?? 0;
         foreach (var (key, arm) in agg)
         {
             arm.Grounded = key != "baseline";
+            if (isPush && arm.Grounded) arm.Activated = 1.0;
             arm.DocTok = arm.Grounded ? (int)Math.Round(gtok * arm.Activated) : 0;
         }
-        var file = System.IO.Path.GetFileName(path).ToLowerInvariant();
         return new LoadedArm
         {
             Model = model,
@@ -278,6 +283,7 @@ internal static class Loader
             // tag encodes it: `<unit>-readme.*` / `<unit>-skill.*`; bare `<unit>.*` = agents).
             IsReadme = file.Contains("readme"),
             IsSkill = file.Contains("skill"),
+            IsPush = isPush,
             Path = path,
         };
     }

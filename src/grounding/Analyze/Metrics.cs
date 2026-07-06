@@ -40,6 +40,7 @@ internal sealed class LoadedArm
     public required Dictionary<string, ArmAgg> Agg;
     public required bool IsReadme;
     public required bool IsSkill;
+    public bool IsPush;
     public required string Path;
 }
 
