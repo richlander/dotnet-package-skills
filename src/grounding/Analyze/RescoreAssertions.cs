@@ -53,6 +53,7 @@ internal sealed partial class RescoreAssertions
         var changedFlips = new List<string>();
         var driftFlips = new List<string>();
         int reScored = 0, kept = 0, funcChanged = 0;
+        int changedWritten = 0;
         var arms = new[] { "baseline", "skilledIsolated", "skilledPlugin" };
         foreach (var sc in node["verdicts"]?[0]?["scenarios"]?.AsArray() ?? new JsonArray())
         {
@@ -75,8 +76,13 @@ internal sealed partial class RescoreAssertions
                     var spec = scen.Asserts[i];
                     if (spec.Type is not (2 or 11)) { kept++; continue; }   // run_command: keep (needs rebuild)
                     var recorded = results[i]?["passed"]?.GetValue<bool>() ?? false;
-                    var recordedVal = results[i]?["assertion"]?["value"]?.GetValue<string>();
-                    var changed = recordedVal != spec.Value;
+                    var recAssert = results[i]?["assertion"];
+                    var recordedVal = recAssert?["value"]?.GetValue<string>();
+                    var recordedPath = recAssert?["path"]?.GetValue<string>();
+                    var recordedType = recAssert?["type"]?.GetValue<int>();
+                    // Changed = full assertion identity differs (type/value/path), not just value — a
+                    // path or type change is a real change and must be re-scored too.
+                    var changed = recordedType != spec.Type || recordedVal != spec.Value || recordedPath != spec.Path;
 
                     // Default: only re-score assertions whose definition CHANGED vs what was recorded
                     // (the tightening case) — this is safe against reconstruction drift on unchanged
@@ -88,14 +94,21 @@ internal sealed partial class RescoreAssertions
                             && files.TryGetValue(System.IO.Path.GetFileName(p), out var content) && content.Contains(v)
                         : spec.Value is { } tool && !usedTools.Contains(tool);
                     reScored++;
+                    // On a CHANGED assertion, --write must update BOTH the verdict AND the recorded
+                    // assertion definition, or the dataset is left internally inconsistent (old value,
+                    // new pass/fail) and a later run would re-detect it as "changed" and re-flip.
+                    if (write && changed && recAssert is JsonObject ra)
+                    {
+                        ra["type"] = spec.Type;
+                        if (spec.Value is not null) ra["value"] = spec.Value; else ra.Remove("value");
+                        if (spec.Type == 2) { if (spec.Path is not null) ra["path"] = spec.Path; }
+                        results[i]!["passed"] = rescored;
+                        changedWritten++;
+                    }
                     if (rescored != recorded)
                     {
                         var line = $"{id}/{Short(armKey)} [{Kind(spec.Type)} {recordedVal}→{spec.Value}] {recorded}→{rescored}";
-                        if (changed)
-                        {
-                            changedFlips.Add(line);
-                            if (write) results[i]!["passed"] = rescored;
-                        }
+                        if (changed) changedFlips.Add(line);
                         else driftFlips.Add($"{id}/{Short(armKey)} [{Kind(spec.Type)} {spec.Value}] {recorded}→{rescored}");
                     }
                 }
@@ -110,10 +123,10 @@ internal sealed partial class RescoreAssertions
                 + "(reconstruction imperfection — multi-edit replay / bash-written files; not applied):");
             foreach (var f in driftFlips) _o.WriteLine($"  - {f}");
         }
-        if (write && changedFlips.Count > 0)
+        if (write && changedWritten > 0)
         {
             File.WriteAllText(ds, node.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
-            _o.WriteLine($"\n_wrote {changedFlips.Count} updated assertionResults -> {System.IO.Path.GetFileName(ds)} (run `enrich`/`analyze` to re-derive cards)_");
+            _o.WriteLine($"\n_updated {changedWritten} changed assertion(s) ({changedFlips.Count} verdict flip(s)) -> {System.IO.Path.GetFileName(ds)} (run `analyze` to re-derive cards)_");
         }
         _o.WriteLine();
         return 0;
