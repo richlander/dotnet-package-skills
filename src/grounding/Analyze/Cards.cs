@@ -253,7 +253,37 @@ internal sealed partial class Cards
     // is a separate layout (see Card).
     public void DocCard(IReadOnlyList<string> files, bool jsonl)
     {
-        var a = Loader.LoadArm(files[0]);
+        // Multiple models → the multi-model pivot (rows = metrics, columns = models). A single model
+        // keeps the dense single-model card below.
+        var arms = files.Select(Loader.LoadArm).Where(x => !x.IsReadme && !x.IsSkill)
+            .OrderBy(x => x.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal).ToList();
+        if (arms.Count == 0)
+        {
+            _o.WriteLine("doc-card needs at least one AGENTS.md dataset (non-'readme'/'skill' path).");
+            return;
+        }
+        if (arms.Count > 1)
+        {
+            // The pivot keys columns by model, so duplicate models would collide into one column and
+            // silently drop an arm. Require one dataset per distinct model.
+            if (arms.Select(x => x.Model).Distinct(StringComparer.Ordinal).Count() != arms.Count)
+            {
+                _o.WriteLine("doc-card multi-model needs one dataset per distinct model (duplicate models supplied).");
+                return;
+            }
+            // The card is one grounding unit compared across models; the header/token note come from
+            // arms[0], so mixing units would mislabel the card and combine unrelated metrics.
+            if (arms.Select(x => x.SkillName).Distinct(StringComparer.Ordinal).Count() > 1)
+            {
+                _o.WriteLine("doc-card multi-model needs all datasets from the same grounding unit (mixed units supplied).");
+                return;
+            }
+            DocCardMultiModel(arms, jsonl);
+            return;
+        }
+
+        // Exactly one AGENTS arm (input may also include a README/SKILL dataset that sorts ahead of it).
+        var a = arms[0];
         var b = a.Agg["baseline"];
         var g = a.Agg[Arm];
         var card = QualityCard.Build(b, g, a.Iet, GradeLabel(b, g));
@@ -269,6 +299,33 @@ internal sealed partial class Cards
             _o.WriteLine("\n_Same model, decomposed to typed JSONL rows:_\n");
             _o.WriteLine("```jsonl");
             MarkoutSerializer.Serialize(card, _o, new TableFormatter(), QualityCardContext.Default,
+                new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl, JsonTypedValues = true, OmitEmptyJsonFields = true });
+            _o.WriteLine("```");
+        }
+    }
+
+    // The multi-model quality card via Markout 0.17.0 multi-source rows: models pivot into columns
+    // (mini-tier first), each cell a baseline → grounded Change<Shape>, verdict as GateStatus. One
+    // declarative model renders the dense Markdown card and, with --jsonl, the decomposed typed rows.
+    private void DocCardMultiModel(IReadOnlyList<LoadedArm> arms, bool jsonl)
+    {
+        var models = arms
+            .Select(a => (a.Model, B: a.Agg["baseline"], G: a.Agg[Arm], Grade: GradeLabel(a.Agg["baseline"], a.Agg[Arm])))
+            .ToList();
+        var card = MultiModelCard.Build(models);
+
+        var sn = arms[0].SkillName;
+        var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
+        var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
+        if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. "
+            + $"Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
+        _o.Write(MarkoutSerializer.Serialize(card, MultiModelCardContext.Default));
+        if (jsonl)
+        {
+            _o.WriteLine("\n_Same card, decomposed to typed JSONL rows (one per metric; roles are models):_\n");
+            _o.WriteLine("```jsonl");
+            MarkoutSerializer.Serialize(card, _o, new TableFormatter(), MultiModelCardContext.Default,
                 new MarkoutWriterOptions { TableMode = MarkoutTableMode.Jsonl, JsonTypedValues = true, OmitEmptyJsonFields = true });
             _o.WriteLine("```");
         }

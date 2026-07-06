@@ -77,12 +77,12 @@ public sealed class QualityCard
     };
 
     // Tool-call composition, rounded to whole calls to match the card's integer display.
-    private static Segments Split(ArmAgg a) => new(
+    internal static Segments Split(ArmAgg a) => new(
         new Segment("web", Math.Round(a.Web)),
         new Segment("bash", Math.Round(a.Bash)),
         new Segment("other", Math.Round(a.Other)));
 
-    private static Segments Nuget(ArmAgg a) => new(
+    internal static Segments Nuget(ArmAgg a) => new(
         new Segment("cache", Math.Round(a.Cache)),
         new Segment("nuget.org", Math.Round(a.NugetWeb)));
 
@@ -101,6 +101,8 @@ public sealed class QualityCard
             return new Share(0, 1);            // 0 (0%)
         return new Share(shown, pct == 0 ? 0 : shown * 100.0 / pct);
     }
+
+    internal static Share SharePctPublic(double value, double pct) => SharePct(value, pct);
 }
 
 [MarkoutContext(typeof(QualityCard))]
