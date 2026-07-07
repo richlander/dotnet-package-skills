@@ -245,6 +245,111 @@ internal sealed partial class Cards
         _o.WriteLine("| **verdict** | " + string.Join(" | ", models.Select(m => $"**{GradeLabel(m.Agents!.Agg[Arm], m.Skill!.Agg[Arm])}**")) + " |");
     }
 
+    // ---- document H2H over the answerable space (the LIET insight) -------------------------
+    //
+    // Each table lists the QUESTIONS at least one arm answered correctly (the union — so you can see
+    // the space where some arm could NOT answer, the ✗ cells: unlocks and regressions, not just the
+    // all-correct region). Failed arms show ✗ and are never extrapolated (docs/liet.md). The subset
+    // every arm answered is the efficiency-comparable set (mean-IET footer); reach shows capability.
+    // Two tables per model:
+    //   1. baseline / README / AGENTS — does the Missing Manual pay its way over the Brochure.
+    //   2. baseline / AGENTS  / SKILL — what the Textbook's extra tokens buy over the Missing Manual.
+    // Secondary views: `--card` per document (baseline vs each over the full ladder) and `--view liet`
+    // (the per-rung curve, all arms).
+    public void H2H(IReadOnlyList<string> files)
+    {
+        var parsed = new List<(string file, ResultsFile d)>();
+        foreach (var f in files.Distinct())
+        {
+            try { parsed.Add((f, Loader.Parse(f))); }
+            catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); }
+        }
+        var groups = parsed.GroupBy(x => x.d.Model ?? "?")
+            .OrderBy(g => Metrics.Tier(g.Key) == "mini" ? 0 : 1).ThenBy(g => g.Key, StringComparer.Ordinal);
+        foreach (var g in groups)
+        {
+            var model = g.Key;
+            var iet = IetModels.For(model);
+            ResultsFile? Pick(Func<string, bool> pred) =>
+                g.Where(x => pred(System.IO.Path.GetFileName(x.file).ToLowerInvariant()))
+                 .Select(x => x.d).FirstOrDefault();
+            var agents = Pick(n => !n.Contains("readme") && !n.Contains("skill"));
+            var readme = Pick(n => n.Contains("readme"));
+            var skill = Pick(n => n.Contains("skill"));
+            if (agents is null)
+            {
+                _o.WriteLine($"_(h2h: no AGENTS dataset for `{model}` — need a path without 'readme'/'skill'.)_\n");
+                continue;
+            }
+            var sn = (agents.Verdicts is { Count: > 0 } ? agents.Verdicts[0].SkillName : null) ?? "?";
+            if (!NoTitle) _o.WriteLine($"### Document H2H (answerable questions) — {sn} | `{model}`\n");
+            if (readme is not null)
+                EmitH2H("Missing Manual vs Brochure — does `AGENTS.md` pay its way over `README.md`", model, iet,
+                    ("baseline", agents, "baseline"), ("README.md", readme, Arm), ("AGENTS.md", agents, Arm));
+            if (skill is not null)
+                EmitH2H("Textbook premium — what `SKILL.md`'s extra tokens buy over `AGENTS.md`", model, iet,
+                    ("baseline", agents, "baseline"), ("AGENTS.md", agents, Arm), ("SKILL.md", skill, Arm));
+            if (readme is null && skill is null)
+                _o.WriteLine("_(h2h needs a README (`*readme*`) and/or SKILL (`*skill*`) dataset beside the AGENTS dataset.)_\n");
+        }
+    }
+
+    private void EmitH2H(string title, string model, IetScheme iet,
+        params (string label, ResultsFile ds, string armKey)[] cols)
+    {
+        // Row set = the QUESTIONS at least one arm answered correctly (union) — so the table shows
+        // the whole answerable space, including rungs where some arm could NOT answer (✗). Rungs
+        // nobody answered are dropped (uninformative). Failed arms are shown ✗, never extrapolated.
+        var names = ScenarioShorts(cols[0].ds);
+        var rows = new List<(string name, (bool present, bool passed, double iet)[] cells)>();
+        foreach (var name in names)
+        {
+            var cells = cols.Select(c => CellAt(c.ds, c.armKey, name, iet)).ToArray();
+            if (cells.Any(x => x.passed)) rows.Add((name, cells));
+        }
+        _o.WriteLine($"#### {title}\n");
+        if (rows.Count == 0) { _o.WriteLine("_No question answered by any arm._\n"); return; }
+        int allCorrect = rows.Count(r => r.cells.All(x => x.passed));
+        _o.WriteLine($"_{rows.Count} question(s) answered by ≥1 arm ({allCorrect} by all — the efficiency-comparable "
+            + $"set). Cell = per-question IET; `✗` = that arm did not answer (not extrapolated). "
+            + $"IET model {IetModels.CaptionFor(new[] { model })}._\n");
+        _o.WriteLine("| question | " + string.Join(" | ", cols.Select(c => $"`{c.label}`")) + " |");
+        _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", cols.Length)));
+        foreach (var (name, cells) in rows)
+            _o.WriteLine($"| {name} | " + string.Join(" | ", cells.Select(Cell)) + " |");
+        // Footer: reach per arm (capability) + value delivered on the all-correct set (efficiency).
+        _o.WriteLine("| **reach** (answered) | " + string.Join(" | ",
+            Enumerable.Range(0, cols.Length).Select(i => $"{rows.Count(r => r.cells[i].passed)}/{rows.Count}")) + " |");
+        var allSet = rows.Where(r => r.cells.All(x => x.passed)).ToList();
+        if (allSet.Count > 0 && cols.Length >= 2)
+        {
+            string Mean(int i) => K(allSet.Average(r => r.cells[i].iet));
+            _o.WriteLine("| **mean IET** (all-correct set) | " + string.Join(" | ",
+                cols.Select((c, i) => Mean(i))) + " |");
+        }
+        _o.WriteLine();
+    }
+
+    private static string Cell((bool present, bool passed, double iet) x) =>
+        x.passed ? K(x.iet) : (x.present ? "✗" : "—");
+
+    private static string K(double v) => v >= 1000 ? $"{(v / 1000.0).ToString("0.#", CultureInfo.InvariantCulture)}k"
+        : v.ToString("0", CultureInfo.InvariantCulture);
+
+    private static List<string> ScenarioShorts(ResultsFile d) =>
+        ((d.Verdicts is { Count: > 0 } ? d.Verdicts[0].Scenarios : null) ?? new()).Select(Short).ToList();
+
+    private static string Short(Scenario s) => (s.ScenarioName ?? "").Split(':')[0].Trim();
+
+    private static (bool present, bool passed, double iet) CellAt(ResultsFile d, string armKey, string name, IetScheme iet)
+    {
+        var sc = ((d.Verdicts is { Count: > 0 } ? d.Verdicts[0].Scenarios : null) ?? new())
+            .FirstOrDefault(s => Short(s) == name);
+        var r = sc is null ? null : Loader.Row(Loader.ArmOf(sc, armKey), iet);
+        if (r is null) return (false, false, 0);
+        return (true, r.Ft > 0 && r.Fp == r.Ft, r.Iet);
+    }
+
     // ---- declarative card (Markout composite cells) ----------------------
 
     // The quality card rendered from a single declarative model (QualityCard) of Markout
