@@ -50,7 +50,7 @@ We start from the idea that every package has a `README.md`. It is the default g
 
 We use a three-tier task ladder that maps to the three documents.
 
-- **Core (Core-6)** -- the most 6 basic/common task questions
+- **Brochure (BR-6)** -- the most 6 basic/common task questions
 - **Missing Manual (MM-12)** -- the +6 most valuable model-gap task questions
 - **Complete Textbook (CT-24)** -- the +12 most valuable advanced task questions
 
@@ -109,13 +109,13 @@ The tests answer a set of questions and drive quality work.
 
 ### `AGENTS.md` Creation
 
-We start by using eval as a generative process. We start with only baseline eval on Core-6. This is how we identify what the gaps are. `AGENTS.md` is intended to be an emergent result of _probing the model_ with our task questions. If we get back perfect scores, then `AGENTS.md` isn't needed. Assuming non-perfect scores, we add content to `AGENTS.md` that improves scores, reduces archeology, or that lowers thinking. This is an iterative process until we hit steady state. We then enter the gauntlet of the H2H eval.
+We start by using eval as a generative process. We start with only baseline eval on BR-6. This is how we identify what the gaps are. `AGENTS.md` is intended to be an emergent result of _probing the model_ with our task questions. If we get back perfect scores, then `AGENTS.md` isn't needed. Assuming non-perfect scores, we add content to `AGENTS.md` that improves scores, reduces archeology, or that lowers thinking. This is an iterative process until we hit steady state. We then enter the gauntlet of the H2H eval.
 
-### Test: Core-6 H2H
+### Test: BR-6 H2H
 
 >Theme: How effective are these documents at providing insight to the model?
 
-Eval using the Core-6 questions:
+Eval using the BR-6 questions:
 
 - Baseline vs `README.md`
 - Baseline vs `AGENTS.md`
@@ -154,7 +154,7 @@ Non-Goal:
 
 - Update `README.md` until it answers this broader set of questions. We don't update it unless there is a desire to make `README.md` more effective for its audience. The process itself does not call for that.
 
-Note: There is a desire to avoid overfitting to the questions. In favorable cases, we've found that content hits 11/12 on MM-12 on first run. We then just address that last question and call it good. If the first MM-12 run results in a 6/12 score, that likely means that `AGENTS.md` is overfit to Core-6 or the tasks in Core-6 and the MM-12 +6 are in disjoint domains. This latter problem is likely a task design problem. The tasks should grow in complexity not switch domains. Otherwise, there is no connective tissue between the ladder rungs and the value that they provide is significantly lessened.
+Note: There is a desire to avoid overfitting to the questions. In favorable cases, we've found that content hits 11/12 on MM-12 on first run. We then just address that last question and call it good. If the first MM-12 run results in a 6/12 score, that likely means that `AGENTS.md` is overfit to BR-6 or the tasks in BR-6 and the MM-12 +6 are in disjoint domains. This latter problem is likely a task design problem. The tasks should grow in complexity not switch domains. Otherwise, there is no connective tissue between the ladder rungs and the value that they provide is significantly lessened.
 
 ### Test: CT-24 H2H
 

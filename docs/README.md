@@ -6,14 +6,14 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
 
 - **[overview.md](./overview.md)** — **read this first**: the whole system in one pass — the three
   documents (Brochure / Missing Manual / Complete Textbook), the three task tiers
-  (Core-6 / MM-12 / CT-24), and the eval-diff triangulation that gives each its confidence signal.
+  (BR-6 / MM-12 / CT-24), and the eval-diff triangulation that gives each its confidence signal.
 - **[getting-started.md](./getting-started.md)** — build the `grounding` CLI, author a unit, run the
   ladder, read the card.
 - **[running-eval.md](./running-eval.md)** — point the harness at a package repo's grounding and read
   the result. Grounding lives in the target repo; the harness reads it in place (no packing).
 - **[grounding-eval-methodology.md](./grounding-eval-methodology.md)** — the *approach*: content arms
   (baseline / Missing Manual / Brochure / Complete Textbook), the three nested tiers
-  (Core-6 / MM-12 / CT-24), the cost-tiered ladder, and the confounds.
+  (BR-6 / MM-12 / CT-24), the cost-tiered ladder, and the confounds.
 - **[delivery-methodology.md](./delivery-methodology.md)** — the *delivery axis* (orthogonal to
   content): **push** (always-on `.agent.md` at t=0) vs **pull** (model-invoked `SKILL.md`). The
   push-advantage identity `≈ effect × (1 − pull activation)`, the shared-pinned-baseline procedure,

@@ -57,11 +57,11 @@ a **separate lever**, layered in deliberately as its own arm — not part of the
 
 ### Three question tiers, the arms that run them, and a cost-tiered ladder
 
-Three **nested** question tiers, named for the doc that should clear each (`Core ⊂ MM ⊂ CT`):
+Three **nested** question tiers, named for the doc that should clear each (`BR ⊂ MM ⊂ CT`):
 
 | Tier | Size | Role |
 | --- | --- | --- |
-| **Core** | **6** | smoke test — fast sanity for any doc |
+| **Brochure (BR)** | **6** | smoke test — fast sanity for any doc |
 | **MM** (Missing Manual) | **12** (6 + 6) | what `AGENTS.md` should clear — and, being broader than the smoke 6, the **overfit guard** |
 | **CT** (Complete Textbook) | **24** (12 + 12) | the full exam; the top 12 are **`SKILL.md` territory** |
 
@@ -69,11 +69,11 @@ A **cost-tiered, opt-in ladder** — run as much as the question warrants:
 
 | Rung | Arms | Tier | Question |
 | --- | --- | --- | --- |
-| **0 — smoke** | baseline vs Missing Manual | Core-6 | does grounding beat none, quickly? |
+| **0 — smoke** | baseline vs Missing Manual | BR-6 | does grounding beat none, quickly? |
 | **1 — remit** | baseline · Brochure · Missing Manual | MM-12 | does `AGENTS.md` clear its remit without overfitting; is the README usable? |
 | **2 — full** (optional) | baseline · Missing Manual · Brochure · **Textbook** | CT-24 | where does `AGENTS.md` fall off, and **what do `SKILL.md`'s extra tokens buy** (`AGENTS.md`@24 vs `SKILL.md`@24)? |
 
-**Core** is the cheap smoke; **MM-12** is the overfit guard (a compact doc tuned to the smoke 6 must still
+**Brochure (BR-6)** is the cheap smoke; **MM-12** is the overfit guard (a compact doc tuned to the smoke 6 must still
 generalize to 12); **CT-24** runs the real `SKILL.md` (so it **doubles as a skill eval**) and, by also
 running `AGENTS.md` across all 24, measures the Textbook's marginal value. The **Brochure** arm *is* the
 README usability test (it replaces the older "source-diff card"): if the README-grounded agent fails a

@@ -19,14 +19,14 @@ Results:
 
 ## Effectiveness by tier
 
-Nested task tiers — **Core-6 ⊂ MM-12 ⊂ CT-24** (day-1 common → day-100 niche). Each cell is
+Nested task tiers — **BR-6 ⊂ MM-12 ⊂ CT-24** (day-1 common → day-100 niche). Each cell is
 baseline (no grounding) → `AGENTS.md` (~`<tok>` tok): **tasks correct** and the **cost** cut.
 Judge `<judge>`, n=`<n>`. (Cost = IET × input price; IET weights output 5x, cache read 0.1x — see
 [docs/overview.md](../overview.md).)
 
 | Tier | `claude-haiku-4.5` (mini) | `claude-opus-4.8` (frontier) | Verdict |
 | --- | --- | --- | --- |
-| **Core-6** (smoke) | 5/6 -> 6/6 - cost -68% | 6/6 -> 6/6 - -69% | **BETTER** |
+| **BR-6** (smoke) | 5/6 -> 6/6 - cost -68% | 6/6 -> 6/6 - -69% | **BETTER** |
 | **MM-12** (remit + overfit guard) | 11/12 -> 12/12 - -61% | 12/12 -> 12/12 - -40% | **BETTER** |
 
 _**FAIL** = fewer tasks correct; **BETTER** = more tasks correct / archaeology->0 / cost cut >=20%;
