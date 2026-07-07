@@ -21,6 +21,10 @@ var svgOpt = new Option<string?>("--svg")
 {
     Description = "For --view liet: also write the LIET curve as an SVG to this path.",
 };
+var oraclePluginOpt = new Option<bool>("--oracle-from-plugin")
+{
+    Description = "For --view liet: read the skilledPlugin arm as the SKILL.md oracle (opt-in; use only when that arm carried the fuller doc).",
+};
 var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
@@ -41,7 +45,7 @@ var legacy = new[] { "card", "model-diff", "source-diff", "skill-diff", "tools-c
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
 {
-    filesArg, viewOpt, noTitleOpt, ietModelOpt, jsonlOpt, svgOpt,
+    filesArg, viewOpt, noTitleOpt, ietModelOpt, jsonlOpt, svgOpt, oraclePluginOpt,
 };
 foreach (var o in legacy.Values) analyze.Options.Add(o);
 analyze.SetAction(parse =>
@@ -58,7 +62,7 @@ analyze.SetAction(parse =>
     {
         case "card": cards.Card(files); break;
         case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
-        case "liet": new Liet(Console.Out) { NoTitle = parse.GetValue(noTitleOpt) }.Render(files, parse.GetValue(svgOpt)); break;
+        case "liet": new Liet(Console.Out) { NoTitle = parse.GetValue(noTitleOpt), OracleFromPlugin = parse.GetValue(oraclePluginOpt) }.Render(files, parse.GetValue(svgOpt)); break;
         case "model-diff": cards.ModelDiff(files); break;
         case "source-diff": cards.SourceDiff(files); break;
         case "skill-diff": cards.SkillDiff(files); break;

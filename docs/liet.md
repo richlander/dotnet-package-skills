@@ -48,6 +48,8 @@ Plot IET against ladder rung, one curve per arm — baseline, `AGENTS.md`, and t
 
 The property both charts share: **comparison happens at equal difficulty.** Two energy curves are compared at the same year; two grounding curves at the same rung. No curve is credited or penalized for operating in a different regime than another.
 
+![Figure 1: the LIET curve for a well-known package](liet-curve-figure.svg)
+
 *Figure 1 — well-known-package regime. The line shapes are meaningful, not decorative: the oracle (`SKILL.md`) rises **gently** — that slope is irreducible difficulty, the cost even perfect knowledge must pay as questions harden. Baseline is **flat while the model knows the package, then spikes** as its knowledge gap opens, and fails after rung 3. `AGENTS.md` sits **above** the envelope on the easy rungs (open markers — the harm region, where it is pure doc tax and baseline wins), **crosses** as baseline spikes, then **rides under** the envelope with a slight upward knee of its own. The vertical marker is the handoff rung, where the cheapest competitor switches from baseline to the oracle. A niche package looks different — no harm region, no crossover, baseline exiting immediately — as described above.*
 
 ## Reading the curve
@@ -102,7 +104,11 @@ Two consequences make this the spine of the ship decision:
 
 **It defines a maximum, not a minimum, price.** If `SKILL.md` answers rung 6 at 4000 IET, then 4000 is the *most* `AGENTS.md` may spend to answer rung 6 and still justify existing — above that, ship the textbook and skip the missing manual. The band between `AGENTS.md` and the envelope is a training target with a built-in stop: close the gap until you are under the line, not to zero, because under the line is where "worth maintaining" already lives and further compression is effort past the point it changes the decision.
 
+![Figure 2: the max price of generalization on a rung AGENTS.md fails](liet-curve-figure-2.svg)
+
 *Figure 2 — the same chart when `AGENTS.md` fails rung 6. It answers rungs 1–5 (last filled marker), then has no correct answer at rung 6, so **no point is plotted there** — the failed rung is not extrapolated, exactly as baseline was not. What *is* drawn is the ceiling: the oracle's measured cost at rung 6 is the **maximum price of generalization**, the most a future `AGENTS.md` may spend to answer that rung and still beat "just ship `SKILL.md`." Anything under the ceiling (green) pays its way; anything over it (red) means shipping the textbook is cheaper. The ceiling is a measured value from an arm that succeeded, never a guess about the arm that failed — which is the whole point.*
+
+*(Both figures are generated from synthetic datasets by the grounding tool itself — `eng/gen-liet-figures.py` runs `grounding analyze --view liet --svg --oracle-from-plugin` — so they render through the same code path as real eval curves.)*
 
 This retires the survivorship problem cleanly, which is the tell that it is the right instrument: the hurdle depends only on the *observed* IET of arms that *succeeded* at the rung. Nothing unmeasured enters. The part of the chart you couldn't trust is deleted; the part you could is kept.
 

@@ -1,0 +1,43 @@
+<svg viewBox="0 0 760 480" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="760" height="480" fill="#ffffff"/>
+  <text x="382" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">LIET curve — example (claude-haiku-4.5)</text>
+  <text x="382" y="49" text-anchor="middle" font-size="12" fill="#64748b">IET per correctly-answered rung. Failed rungs are not plotted; the ceiling is the max price to beat.</text>
+  <line x1="100" y1="380" x2="664" y2="380" stroke="#334155" stroke-width="1.5"/>
+  <line x1="100" y1="380" x2="100" y2="64" stroke="#334155" stroke-width="1.5"/>
+  <text x="382" y="430" text-anchor="middle" font-size="12" fill="#334155">rung (difficulty) →</text>
+  <text x="52" y="222" text-anchor="middle" font-size="12" fill="#334155" transform="rotate(-90 52 222)">IET (per correct answer) →</text>
+  <g font-size="11" fill="#64748b" text-anchor="middle">
+    <text x="100" y="398">1</text>
+    <text x="212" y="398">2</text>
+    <text x="325" y="398">3</text>
+    <text x="438" y="398">4</text>
+    <text x="551" y="398">5</text>
+    <text x="664" y="398">6</text>
+  </g>
+  <polyline points="100,222 212,214.1 325,190.4 438,166.7 551,143 664,119.3" fill="none" stroke="#d97706" stroke-width="2.5"/>
+  <circle cx="100" cy="222" r="3.5" fill="#d97706"/>
+  <circle cx="212" cy="214.1" r="3.5" fill="#d97706"/>
+  <circle cx="325" cy="190.4" r="3.5" fill="#d97706"/>
+  <circle cx="438" cy="166.7" r="3.5" fill="#d97706"/>
+  <circle cx="551" cy="143" r="3.5" fill="#d97706"/>
+  <circle cx="664" cy="119.3" r="3.5" fill="#d97706"/>
+  <text x="660" y="111.3" text-anchor="end" font-size="11.5" font-weight="700" fill="#d97706">SKILL.md (oracle)</text>
+  <polyline points="100,332.6 212,324.7 325,64" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+  <circle cx="100" cy="332.6" r="3.5" fill="#dc2626"/>
+  <circle cx="212" cy="324.7" r="3.5" fill="#dc2626"/>
+  <circle cx="325" cy="64" r="3.5" fill="#dc2626"/>
+  <text x="321" y="56" text-anchor="end" font-size="11.5" font-weight="700" fill="#dc2626">baseline</text>
+  <polyline points="100,293.1 212,288.4 325,237.8 438,214.1 551,198.3 664,182.5" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+  <circle cx="100" cy="293.1" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="212" cy="288.4" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="325" cy="237.8" r="4" fill="#2563eb"/>
+  <circle cx="438" cy="214.1" r="4" fill="#2563eb"/>
+  <circle cx="551" cy="198.3" r="4" fill="#2563eb"/>
+  <circle cx="664" cy="182.5" r="4" fill="#2563eb"/>
+  <text x="660" y="174.5" text-anchor="end" font-size="11.5" font-weight="700" fill="#2563eb">AGENTS.md</text>
+  <g font-size="10.5" fill="#475569">
+    <circle cx="112" cy="456" r="4" fill="none" stroke="#2563eb" stroke-width="2"/><text x="122" y="460">AGENTS over ceiling (harm)</text>
+    <circle cx="290" cy="456" r="4" fill="#2563eb"/><text x="300" y="460">AGENTS under ceiling (pays its way)</text>
+    <text x="540" y="460" font-style="italic">failed rungs not plotted</text>
+  </g>
+</svg>
