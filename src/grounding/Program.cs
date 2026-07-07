@@ -13,10 +13,10 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | doc-card | liet | model-diff | source-diff | skill-diff | tools-card | web-card",
+    Description = "table | card | doc-card | liet | h2h | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "liet", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "liet", "h2h", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
 var svgOpt = new Option<string?>("--svg")
 {
     Description = "For --view liet: also write the LIET curve as an SVG to this path.",
@@ -62,6 +62,7 @@ analyze.SetAction(parse =>
     {
         case "card": cards.Card(files); break;
         case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
+        case "h2h": cards.H2H(files); break;
         case "liet": new Liet(Console.Out) { NoTitle = parse.GetValue(noTitleOpt), OracleFromPlugin = parse.GetValue(oraclePluginOpt) }.Render(files, parse.GetValue(svgOpt)); break;
         case "model-diff": cards.ModelDiff(files); break;
         case "source-diff": cards.SourceDiff(files); break;
