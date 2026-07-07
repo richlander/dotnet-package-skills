@@ -48,7 +48,7 @@ model; the salient shape:
 | `AGENTS.md` | **Missing Manual** | models | co-located, always-on | fill the model's gaps; terse |
 | `SKILL.md` | **Complete Textbook** | models (opt-in) | opted-in repo asset — *not* packed | complete instruction; the eval **ceiling** |
 
-Three nested task tiers — **Core-6 ⊂ MM-12 ⊂ CT-24** — grow from day-1 common tasks to niche
+Three nested task tiers — **BR-6 ⊂ MM-12 ⊂ CT-24** — grow from day-1 common tasks to niche
 day-100 ones. We run head-to-head per tier (baseline vs each document, on a mini *and* a frontier
 model) and read the **eval diff across the documents**. That triangulation is the payoff: it shows
 where each document earns its keep, whether `AGENTS.md` generalizes up the ladder, and whether

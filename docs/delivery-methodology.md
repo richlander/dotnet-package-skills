@@ -300,7 +300,7 @@ without fooling itself.
 
 ## Worked example — `markout`, runs=3, shared pinned baseline
 
-Mini-6 scenario set, `runs=3`, one baseline pinned per model and reused across both delivery arms
+BR-6 scenario set, `runs=3`, one baseline pinned per model and reused across both delivery arms
 (`--baseline-out` on the pull run, `--baseline-from` on the push run). Baseline is byte-identical
 across arms (same turns, archaeology, IET), so the grounded arms are directly comparable.
 
