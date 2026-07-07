@@ -328,7 +328,8 @@ internal sealed partial class Cards
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", cols.Length)));
         foreach (var (name, cells) in rows)
             _o.WriteLine($"| {name} | " + string.Join(" | ", cells.Select(Cell)) + " |");
-        // Footer: reach per arm (capability) + value delivered on the all-correct set (efficiency).
+        // Footer: reach per arm (capability), mean IET on the all-correct set (efficiency), and the
+        // session total — the sum of each arm's per-question IET over the questions it answered.
         _o.WriteLine("| **reach** (answered) | " + string.Join(" | ",
             Enumerable.Range(0, cols.Length).Select(i => $"{rows.Count(r => r.cells[i].passed)}/{rows.Count}")) + " |");
         var allSet = rows.Where(r => r.cells.All(x => x.passed)).ToList();
@@ -338,6 +339,8 @@ internal sealed partial class Cards
             _o.WriteLine("| **mean IET** (all-correct set) | " + string.Join(" | ",
                 cols.Select((c, i) => Mean(i))) + " |");
         }
+        _o.WriteLine("| **total IET** (answered) | " + string.Join(" | ",
+            Enumerable.Range(0, cols.Length).Select(i => K(rows.Where(r => r.cells[i].passed).Sum(r => r.cells[i].iet)))) + " |");
         _o.WriteLine();
     }
 
