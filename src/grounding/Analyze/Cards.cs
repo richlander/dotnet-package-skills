@@ -290,7 +290,11 @@ internal sealed partial class Cards
                 _o.WriteLine($"_(h2h: no AGENTS dataset for {unit}/`{model}` — need a path without 'readme'/'skill'.)_\n");
                 continue;
             }
-            if (!NoTitle) _o.WriteLine($"### Document H2H (answerable questions) — {unit} | `{model}`\n");
+            if (!NoTitle)
+            {
+                var display = (agents.Verdicts is { Count: > 0 } ? agents.Verdicts[0].SkillName : null) ?? unit;
+                _o.WriteLine($"### Document H2H (answerable questions) — {display} | `{model}`\n");
+            }
             if (readme is not null)
                 EmitH2H("Missing Manual vs Brochure — does `AGENTS.md` pay its way over `README.md`", model, iet,
                     ("baseline", agents, "baseline"), ("README.md", readme, Arm), ("AGENTS.md", agents, Arm));
@@ -348,8 +352,15 @@ internal sealed partial class Cards
 
     private static string Short(Scenario s) => (s.ScenarioName ?? "").Split(':')[0].Trim();
 
-    private static string UnitOf(ResultsFile d) =>
-        (d.Verdicts is { Count: > 0 } ? d.Verdicts[0].SkillName : null) ?? "?";
+    // Stable unit identity for grouping. Prefer skillPath (the grounding/<unit> dir — shared across
+    // a unit's readme/agents/skill runs, distinct between units) over skillName, which is NOT unique
+    // (e.g. markout and markout-013 both use `name: markout`; see Loader.cs). Falls back to name.
+    private static string UnitOf(ResultsFile d)
+    {
+        var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : null;
+        if (v is null) return "?";
+        return !string.IsNullOrEmpty(v.SkillPath) ? v.SkillPath!.Replace('\\', '/').TrimEnd('/') : (v.SkillName ?? "?");
+    }
 
     private static (bool present, bool passed, double iet) CellAt(ResultsFile d, string armKey, string name, IetScheme iet)
     {
