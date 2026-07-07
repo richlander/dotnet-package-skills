@@ -1,0 +1,111 @@
+# Markout 0.13.7 (PRISTINE) — clean-baseline exam.
+#
+# Why 0.13.7: it is the last Markout whose nupkg packs README.md only (AGENTS.md
+# packing began at 0.13.8). So the baseline arm cannot self-ground by reading a
+# packed AGENTS.md out of the restored NuGet cache — the baseline reflects the
+# model's innate knowledge, and grounding's true value is measurable.
+#
+# Each scenario: a web-blocked agent must drive output THROUGH Markout (no hand-written
+# Markdown), with a build gate + a run-output regex that only correct Markout usage yields.
+#
+# STATUS: pipeline bring-up (BR-6 + the TreeNode flagship). MM/CT to follow.
+
+config:
+  max_parallel_scenarios: 1
+
+scenarios:
+  # BR1 — single object -> H1 + field table. The core pattern at its simplest:
+  # [MarkoutSerializable(TitleProperty)] -> H1, scalars -> a "| Field | Value |" table,
+  # serialized through a registered MarkoutSerializerContext.
+  - name: "BR1: single object as an H1 + field table"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs holds a service status in plain values. Using that library, print a
+      GitHub-flavored Markdown report to the console with:
+        - an H1 title taken from the service name
+        - a two-column field table of the remaining values (environment, version, replicas)
+      Produce the output through that library's serializer (do not hand-write the Markdown
+      strings). Build and run the project to confirm it prints the expected report.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/fields/Report.csproj
+        - path: Program.cs
+          source: fixtures/fields/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "MarkoutSerializer.Serialize"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*# Cache Service)(?=[\\s\\S]*\\| Version \\| 2\\.3\\.0 \\|)(?=[\\s\\S]*\\| Replicas \\| 3 \\|)"
+        command_timeout: 120
+    rubric:
+      - "Annotates a model with [MarkoutSerializable(TitleProperty = ...)] so the name renders as the H1"
+      - "Renders the scalar properties as a two-column field table (the title property is excluded automatically)"
+      - "Registers the type via [MarkoutContext(typeof(T))] on a partial MarkoutSerializerContext and serializes through it"
+      - "The project builds and prints the report; does not hand-write Markdown strings"
+    timeout: 900
+
+  # CT13 (FLAGSHIP) — the TreeNode constructor mismatch. In 0.13.7 the ctor is
+  #   TreeNode(string text, string? badge = null)
+  #   TreeNode(string text, string? badge, ReadOnlySpan<TreeNode> children)
+  # so children is the THIRD positional arg, AFTER badge. The natural (modern-API)
+  # `new TreeNode("myapp", [child])` binds [child] to the `badge` string? and does NOT
+  # compile. Correct: `new TreeNode("myapp", null, [child])`. Also the ctor takes a
+  # ReadOnlySpan<TreeNode> while the Children PROPERTY is List<TreeNode>? — a real mismatch.
+  # The build gate is the trap: only the correct arg-order compiles.
+  - name: "CT13: dependency tree via the TreeNode shape"
+    prompt: |
+      This console project references a source-generated .NET serializer library that
+      projects annotated objects into Markdown (see the package reference in the .csproj).
+      Program.cs describes a dependency hierarchy in comments. Using that library's
+      TreeNode shape, print the hierarchy to the console as an indented Markdown tree,
+      showing each node's name and — where present — its badge. The tree is:
+        myapp
+          - Newtonsoft.Json        (badge: "pkg")
+          - Serilog                (badge: "pkg")
+              - Serilog.Sinks.Console
+      Produce the output through that library's serializer (do not hand-write the tree).
+      Build and run the project to confirm it prints the expected tree.
+    setup:
+      files:
+        - path: Report.csproj
+          source: fixtures/treenode/Report.csproj
+        - path: Program.cs
+          source: fixtures/treenode/Program.cs
+    reject_tools:
+      - web_search
+      - web_fetch
+    assertions:
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "build"
+        expected_exit_code: 0
+        command_timeout: 600
+      - type: file_contains
+        path: "Program.cs"
+        value: "TreeNode"
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build"
+        expected_exit_code: 0
+        expected_std_output_matches: "(?=[\\s\\S]*pkg Newtonsoft\\.Json)(?=[\\s\\S]*pkg Serilog)(?=[\\s\\S]*Serilog\\.Sinks\\.Console)"
+        command_timeout: 120
+    rubric:
+      - "Constructs the tree with the correct 0.13.7 TreeNode ctor: children is the 3rd arg after badge, e.g. new TreeNode(\"myapp\", null, [ ... ])"
+      - "Nests Serilog.Sinks.Console under Serilog (children-of-children)"
+      - "Shows the 'pkg' badge on the two direct children"
+      - "The project builds and prints the tree through the Markout serializer; does not hand-write the tree glyphs"
+    timeout: 900

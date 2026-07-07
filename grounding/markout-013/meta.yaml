@@ -1,0 +1,8 @@
+# Harness-only metadata. The shipped artifact is AGENTS.md, whose YAML frontmatter
+# is the source of truth for name and description (used to generate SKILL.md).
+# package is the NuGet package this grounding ships in; it is not part of AGENTS.md.
+#
+# This is the PRISTINE example: Markout 0.13.7 is the last version whose nupkg packs
+# README.md only (AGENTS.md packing began at 0.13.8), so the baseline arm cannot
+# self-ground by archaeology of a packed AGENTS.md — giving a clean baseline.
+package: Markout
