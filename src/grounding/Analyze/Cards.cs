@@ -264,25 +264,33 @@ internal sealed partial class Cards
             try { parsed.Add((f, Loader.Parse(f))); }
             catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); }
         }
-        var groups = parsed.GroupBy(x => x.d.Model ?? "?")
-            .OrderBy(g => Metrics.Tier(g.Key) == "mini" ? 0 : 1).ThenBy(g => g.Key, StringComparer.Ordinal);
+        var groups = parsed.GroupBy(x => (Model: x.d.Model ?? "?", Unit: UnitOf(x.d)))
+            .OrderBy(g => Metrics.Tier(g.Key.Model) == "mini" ? 0 : 1)
+            .ThenBy(g => g.Key.Unit, StringComparer.Ordinal).ThenBy(g => g.Key.Model, StringComparer.Ordinal);
         foreach (var g in groups)
         {
-            var model = g.Key;
+            var (model, unit) = g.Key;
             var iet = IetModels.For(model);
-            ResultsFile? Pick(Func<string, bool> pred) =>
-                g.Where(x => pred(System.IO.Path.GetFileName(x.file).ToLowerInvariant()))
-                 .Select(x => x.d).FirstOrDefault();
-            var agents = Pick(n => !n.Contains("readme") && !n.Contains("skill"));
-            var readme = Pick(n => n.Contains("readme"));
-            var skill = Pick(n => n.Contains("skill"));
+            var items = g.ToList();
+            // Exactly one dataset per doc type within a (model, unit) group; grouping by unit
+            // prevents silently pairing AGENTS from one unit with README/SKILL from another, and
+            // >1 match of a type is ambiguous — skip that type rather than pick an arbitrary one.
+            ResultsFile? Pick(string kind, Func<string, bool> pred)
+            {
+                var m = items.Where(x => pred(System.IO.Path.GetFileName(x.file).ToLowerInvariant()))
+                             .Select(x => x.d).ToList();
+                if (m.Count > 1) { _o.WriteLine($"_(h2h: {m.Count} {kind} datasets for {unit}/`{model}` — ambiguous, skipping {kind}.)_\n"); return null; }
+                return m.FirstOrDefault();
+            }
+            var agents = Pick("AGENTS", n => !n.Contains("readme") && !n.Contains("skill"));
+            var readme = Pick("README", n => n.Contains("readme"));
+            var skill = Pick("SKILL", n => n.Contains("skill"));
             if (agents is null)
             {
-                _o.WriteLine($"_(h2h: no AGENTS dataset for `{model}` — need a path without 'readme'/'skill'.)_\n");
+                _o.WriteLine($"_(h2h: no AGENTS dataset for {unit}/`{model}` — need a path without 'readme'/'skill'.)_\n");
                 continue;
             }
-            var sn = (agents.Verdicts is { Count: > 0 } ? agents.Verdicts[0].SkillName : null) ?? "?";
-            if (!NoTitle) _o.WriteLine($"### Document H2H (answerable questions) — {sn} | `{model}`\n");
+            if (!NoTitle) _o.WriteLine($"### Document H2H (answerable questions) — {unit} | `{model}`\n");
             if (readme is not null)
                 EmitH2H("Missing Manual vs Brochure — does `AGENTS.md` pay its way over `README.md`", model, iet,
                     ("baseline", agents, "baseline"), ("README.md", readme, Arm), ("AGENTS.md", agents, Arm));
@@ -297,10 +305,9 @@ internal sealed partial class Cards
     private void EmitH2H(string title, string model, IetScheme iet,
         params (string label, ResultsFile ds, string armKey)[] cols)
     {
-        // Row set = the QUESTIONS at least one arm answered correctly (union) — so the table shows
-        // the whole answerable space, including rungs where some arm could NOT answer (✗). Rungs
-        // nobody answered are dropped (uninformative). Failed arms are shown ✗, never extrapolated.
-        var names = ScenarioShorts(cols[0].ds);
+        // Row set = the QUESTIONS at least one arm answered correctly (union), across ALL column
+        // datasets — a question present only in the README/SKILL run still counts.
+        var names = cols.SelectMany(c => ScenarioShorts(c.ds)).Distinct().ToList();
         var rows = new List<(string name, (bool present, bool passed, double iet)[] cells)>();
         foreach (var name in names)
         {
@@ -340,6 +347,9 @@ internal sealed partial class Cards
         ((d.Verdicts is { Count: > 0 } ? d.Verdicts[0].Scenarios : null) ?? new()).Select(Short).ToList();
 
     private static string Short(Scenario s) => (s.ScenarioName ?? "").Split(':')[0].Trim();
+
+    private static string UnitOf(ResultsFile d) =>
+        (d.Verdicts is { Count: > 0 } ? d.Verdicts[0].SkillName : null) ?? "?";
 
     private static (bool present, bool passed, double iet) CellAt(ResultsFile d, string armKey, string name, IetScheme iet)
     {
