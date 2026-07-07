@@ -325,14 +325,17 @@ internal sealed class Liet
     private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
     // Unique, filename-safe SVG path per (source file, verdict) so multiple curves never collide or
-    // escape the target directory (model ids like "openai/gpt-5" contain separators).
+    // escape the target directory (model ids like "openai/gpt-5" contain separators). A short hash of
+    // the FULL source path guards the common case of many inputs all named `results.json`.
     private static string SvgVariant(string basePath, string sourceFile, string unit, string? model, int verdictIndex)
     {
         var dir = Path.GetDirectoryName(basePath) ?? ".";
         var stem = Path.GetFileNameWithoutExtension(basePath);
         var ext = Path.GetExtension(basePath);
         var src = Path.GetFileNameWithoutExtension(sourceFile);
-        var tag = Sanitize($"{src}.{unit}.{model}") + (verdictIndex > 0 ? $".v{verdictIndex}" : "");
+        var h = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes(Path.GetFullPath(sourceFile))))[..6].ToLowerInvariant();
+        var tag = Sanitize($"{src}.{unit}.{model}.{h}") + (verdictIndex > 0 ? $".v{verdictIndex}" : "");
         return Path.Combine(dir, $"{stem}.{tag}{ext}");
     }
 
