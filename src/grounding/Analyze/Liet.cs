@@ -47,19 +47,21 @@ internal sealed class Liet
             try { d = Loader.Parse(f); }
             catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); continue; }
             var iet = IetModels.For(d.Model);
+            int vi = 0;
             foreach (var v in d.Verdicts ?? new())
             {
                 var rungs = BuildRungs(v, iet);
-                if (rungs.Count == 0) continue;
+                if (rungs.Count == 0) { vi++; continue; }
                 var unit = v.SkillName ?? "?";
                 EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel);
                 if (svgPath is { Length: > 0 })
                 {
-                    var outPath = files.Count > 1 || (d.Verdicts?.Count ?? 0) > 1
-                        ? SvgVariant(svgPath, unit, d.Model) : svgPath;
+                    var multi = files.Count > 1 || (d.Verdicts?.Count ?? 0) > 1;
+                    var outPath = multi ? SvgVariant(svgPath, f, unit, d.Model, vi) : svgPath;
                     File.WriteAllText(outPath, BuildSvg(rungs, unit, d.Model ?? "?"));
                     _o.WriteLine($"\n_LIET curve written to `{outPath}`._");
                 }
+                vi++;
             }
         }
     }
@@ -251,14 +253,14 @@ internal sealed class Liet
         sb.Append($"  <text x=\"52\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 52 222)\">IET (per correct answer) →</text>\n");
         // rung ticks
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
-        for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{X(i):0.#}\" y=\"{B + 18}\">{Esc(rungs[i].Name)}</text>\n");
+        for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(rungs[i].Name)}</text>\n");
         sb.Append("  </g>\n");
         // ceilings on rungs where AGENTS failed (max price of generalization)
         foreach (var r in rungs.Where(r => !r.Ag.Passed && r.Ceiling is not null))
         {
             double y = Y(r.Ceiling!.Value), x = X(r.Index);
-            sb.Append($"  <line x1=\"{x - 26:0.#}\" y1=\"{y:0.#}\" x2=\"{x + 26:0.#}\" y2=\"{y:0.#}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
-            sb.Append($"  <text x=\"{x:0.#}\" y=\"{B + 32:0.#}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">AGENTS ✗</text>\n");
+            sb.Append($"  <line x1=\"{N(x - 26)}\" y1=\"{N(y)}\" x2=\"{N(x + 26)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
+            sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 32}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">AGENTS ✗</text>\n");
         }
         // series
         sb.Append(Series(rungs, p => p.Oracle, "#d97706", "SKILL.md (oracle)", X, Y, false));
@@ -279,8 +281,24 @@ internal sealed class Liet
         var pts = rungs.Where(r => sel(r).Passed).Select(r => (x: X(r.Index), y: Y(sel(r).Iet), r)).ToList();
         if (pts.Count == 0) return "";
         var sb = new StringBuilder();
-        // polyline connecting passed rungs
-        sb.Append($"  <polyline points=\"{string.Join(" ", pts.Select(p => $"{p.x:0.#},{p.y:0.#}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2.5\"/>\n");
+        // Connect only CONSECUTIVE passed rungs. A gap (an interior failed rung) breaks the line so
+        // no solid segment crosses a difficulty where this arm produced no correct answer — the
+        // failed rung is neither plotted nor implied (docs/liet.md).
+        var segment = new List<(double x, double y)>();
+        int? prevIndex = null;
+        void Flush()
+        {
+            if (segment.Count >= 2)
+                sb.Append($"  <polyline points=\"{string.Join(" ", segment.Select(p => $"{N(p.x)},{N(p.y)}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2.5\"/>\n");
+            segment.Clear();
+        }
+        foreach (var p in pts)
+        {
+            if (prevIndex is { } pi && p.r.Index != pi + 1) Flush();
+            segment.Add((p.x, p.y));
+            prevIndex = p.r.Index;
+        }
+        Flush();
         // markers
         foreach (var p in pts)
         {
@@ -288,29 +306,40 @@ internal sealed class Liet
             {
                 bool over = sel(p.r).Iet > (p.r.Ceiling ?? double.PositiveInfinity);
                 sb.Append(over
-                    ? $"  <circle cx=\"{p.x:0.#}\" cy=\"{p.y:0.#}\" r=\"4\" fill=\"#ffffff\" stroke=\"{color}\" stroke-width=\"2\"/>\n"
-                    : $"  <circle cx=\"{p.x:0.#}\" cy=\"{p.y:0.#}\" r=\"4\" fill=\"{color}\"/>\n");
+                    ? $"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"4\" fill=\"#ffffff\" stroke=\"{color}\" stroke-width=\"2\"/>\n"
+                    : $"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"4\" fill=\"{color}\"/>\n");
             }
-            else sb.Append($"  <circle cx=\"{p.x:0.#}\" cy=\"{p.y:0.#}\" r=\"3.5\" fill=\"{color}\"/>\n");
+            else sb.Append($"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"3.5\" fill=\"{color}\"/>\n");
         }
         // label near the last point
         var last = pts[^1];
-        sb.Append($"  <text x=\"{last.x - 4:0.#}\" y=\"{last.y - 8:0.#}\" text-anchor=\"end\" font-size=\"11.5\" font-weight=\"700\" fill=\"{color}\">{Esc(label)}</text>\n");
+        sb.Append($"  <text x=\"{N(last.x - 4)}\" y=\"{N(last.y - 8)}\" text-anchor=\"end\" font-size=\"11.5\" font-weight=\"700\" fill=\"{color}\">{Esc(label)}</text>\n");
         return sb.ToString();
     }
 
     // ---- helpers --------------------------------------------------------------------------------
 
     private static string K(double v) => v >= 1000 ? $"{(v / 1000.0).ToString("0.#", Inv)}k" : v.ToString("0", Inv);
+    private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
     private static string Signed(double v) => (v >= 0 ? "+" : "") + K(v);
     private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-    private static string SvgVariant(string basePath, string unit, string? model)
+    // Unique, filename-safe SVG path per (source file, verdict) so multiple curves never collide or
+    // escape the target directory (model ids like "openai/gpt-5" contain separators).
+    private static string SvgVariant(string basePath, string sourceFile, string unit, string? model, int verdictIndex)
     {
         var dir = Path.GetDirectoryName(basePath) ?? ".";
         var stem = Path.GetFileNameWithoutExtension(basePath);
         var ext = Path.GetExtension(basePath);
-        var tag = $"{unit}.{model}".Replace(' ', '-');
+        var src = Path.GetFileNameWithoutExtension(sourceFile);
+        var tag = Sanitize($"{src}.{unit}.{model}") + (verdictIndex > 0 ? $".v{verdictIndex}" : "");
         return Path.Combine(dir, $"{stem}.{tag}{ext}");
+    }
+
+    private static string Sanitize(string s)
+    {
+        var bad = Path.GetInvalidFileNameChars();
+        var chars = s.Select(c => bad.Contains(c) || c is '/' or '\\' or ' ' ? '-' : c).ToArray();
+        return new string(chars);
     }
 }
