@@ -340,7 +340,7 @@ internal sealed partial class Cards
             _o.WriteLine("| **mean IET** (all-correct set) | " + string.Join(" | ",
                 cols.Select((c, i) => Mean(i))) + " |");
         }
-        _o.WriteLine("| **total IET** (session) | " + string.Join(" | ",
+        _o.WriteLine("| **total IET** (shown questions) | " + string.Join(" | ",
             Enumerable.Range(0, cols.Length).Select(i => K(rows.Where(r => r.cells[i].present).Sum(r => r.cells[i].iet)))) + " |");
         _o.WriteLine();
     }
