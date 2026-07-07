@@ -248,9 +248,10 @@ internal sealed partial class Cards
     // ---- document H2H over the answerable space (the LIET insight) -------------------------
     //
     // Each table lists the QUESTIONS at least one arm answered correctly (the union — so you can see
-    // the space where some arm could NOT answer, the ✗ cells: unlocks and regressions, not just the
-    // all-correct region). Failed arms show ✗ and are never extrapolated (docs/liet.md). The subset
-    // every arm answered is the efficiency-comparable set (mean-IET footer); reach shows capability.
+    // the space where some arm could NOT answer). Every attempted cell shows its per-question IET
+    // with a `(true/false)` correctness tag (a wrong answer still costs IET); `—` = the question was
+    // not in that arm's dataset. The subset every arm answered is the efficiency-comparable set
+    // (mean-IET footer); reach shows capability; total IET is the per-arm session sum.
     // Two tables per model:
     //   1. baseline / README / AGENTS — does the Missing Manual pay its way over the Brochure.
     //   2. baseline / AGENTS  / SKILL — what the Textbook's extra tokens buy over the Missing Manual.
@@ -322,8 +323,8 @@ internal sealed partial class Cards
         if (rows.Count == 0) { _o.WriteLine("_No question answered by any arm._\n"); return; }
         int allCorrect = rows.Count(r => r.cells.All(x => x.passed));
         _o.WriteLine($"_{rows.Count} question(s) answered by ≥1 arm ({allCorrect} by all — the efficiency-comparable "
-            + $"set). Cell = per-question IET; `✗` = that arm did not answer (not extrapolated). "
-            + $"IET model {IetModels.CaptionFor(new[] { model })}._\n");
+            + $"set). Cell = per-question IET with `(true/false)` = whether that arm answered correctly "
+            + $"(a wrong answer still costs IET); `—` = not attempted. IET model {IetModels.CaptionFor(new[] { model })}._\n");
         _o.WriteLine("| question | " + string.Join(" | ", cols.Select(c => $"`{c.label}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", cols.Length)));
         foreach (var (name, cells) in rows)
@@ -339,13 +340,13 @@ internal sealed partial class Cards
             _o.WriteLine("| **mean IET** (all-correct set) | " + string.Join(" | ",
                 cols.Select((c, i) => Mean(i))) + " |");
         }
-        _o.WriteLine("| **total IET** (answered) | " + string.Join(" | ",
-            Enumerable.Range(0, cols.Length).Select(i => K(rows.Where(r => r.cells[i].passed).Sum(r => r.cells[i].iet)))) + " |");
+        _o.WriteLine("| **total IET** (session) | " + string.Join(" | ",
+            Enumerable.Range(0, cols.Length).Select(i => K(rows.Where(r => r.cells[i].present).Sum(r => r.cells[i].iet)))) + " |");
         _o.WriteLine();
     }
 
     private static string Cell((bool present, bool passed, double iet) x) =>
-        x.passed ? K(x.iet) : (x.present ? "✗" : "—");
+        x.present ? $"{K(x.iet)} ({(x.passed ? "true" : "false")})" : "—";
 
     private static string K(double v) => v >= 1000 ? $"{(v / 1000.0).ToString("0.#", CultureInfo.InvariantCulture)}k"
         : v.ToString("0", CultureInfo.InvariantCulture);
