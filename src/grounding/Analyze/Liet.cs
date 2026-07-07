@@ -17,6 +17,7 @@ internal sealed class Liet
 {
     private readonly TextWriter _o;
     public bool NoTitle;
+    public bool OracleFromPlugin;   // opt-in: read skilledPlugin as the SKILL.md oracle
     public Liet(TextWriter o) => _o = o;
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -50,7 +51,7 @@ internal sealed class Liet
             int vi = 0;
             foreach (var v in d.Verdicts ?? new())
             {
-                var rungs = BuildRungs(v, iet);
+                var rungs = BuildRungs(v, iet, OracleFromPlugin);
                 if (rungs.Count == 0) { vi++; continue; }
                 var unit = v.SkillName ?? "?";
                 EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel);
@@ -66,7 +67,7 @@ internal sealed class Liet
         }
     }
 
-    private static List<Rung> BuildRungs(Verdict v, IetScheme iet)
+    private static List<Rung> BuildRungs(Verdict v, IetScheme iet, bool oracleFromPlugin)
     {
         var rungs = new List<Rung>();
         int i = 0;
@@ -74,17 +75,18 @@ internal sealed class Liet
         {
             var b = Loader.Row(Loader.ArmOf(sc, "baseline"), iet);
             var a = Loader.Row(Loader.ArmOf(sc, "skilledIsolated"), iet);
-            // NOTE: skilledPlugin is a DELIVERY variant of the same AGENTS.md (whole-shelf
-            // self-select), NOT a SKILL.md oracle — so it is deliberately NOT read here. The oracle
-            // is a `--source skill` run, overlaid separately when available. Without it the ceiling
-            // is baseline alone: "grounding must beat the model knowing nothing".
+            // skilledPlugin is a DELIVERY variant of the same AGENTS.md (whole-shelf self-select),
+            // NOT a SKILL.md oracle — so it is read as the oracle ONLY when --oracle-from-plugin is
+            // set (the caller asserts that arm carried the fuller doc). Otherwise the ceiling is
+            // baseline alone: "grounding must beat the model knowing nothing".
+            var o = oracleFromPlugin ? Loader.Row(Loader.ArmOf(sc, "skilledPlugin"), iet) : null;
             var r = new Rung
             {
                 Name = (sc.ScenarioName ?? "").Split(':')[0].Trim(),
                 Index = i++,
                 Base = new Point { Present = b is not null, Passed = Correct(b), Iet = b?.Iet ?? 0 },
                 Ag = new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0 },
-                Oracle = new Point(),
+                Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0 },
             };
             // Competitor envelope for AGENTS.md = min IET of the OTHER arms that passed.
             var comp = new List<double>();
@@ -255,11 +257,14 @@ internal sealed class Liet
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(rungs[i].Name)}</text>\n");
         sb.Append("  </g>\n");
-        // ceilings on rungs where AGENTS failed (max price of generalization)
+        // ceilings on rungs where AGENTS failed (max price of generalization): a dashed ceiling
+        // line with a green "pays its way" zone under it and a red "ship SKILL.md" zone over it.
         foreach (var r in rungs.Where(r => !r.Ag.Passed && r.Ceiling is not null))
         {
-            double y = Y(r.Ceiling!.Value), x = X(r.Index);
-            sb.Append($"  <line x1=\"{N(x - 26)}\" y1=\"{N(y)}\" x2=\"{N(x + 26)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
+            double y = Y(r.Ceiling!.Value), x = X(r.Index); const double hw = 28;
+            sb.Append($"  <rect x=\"{N(x - hw)}\" y=\"{N(y)}\" width=\"{N(2 * hw)}\" height=\"{N(B - y)}\" fill=\"#bbf7d0\" opacity=\"0.4\"/>\n");
+            sb.Append($"  <rect x=\"{N(x - hw)}\" y=\"{T}\" width=\"{N(2 * hw)}\" height=\"{N(y - T)}\" fill=\"#fecaca\" opacity=\"0.4\"/>\n");
+            sb.Append($"  <line x1=\"{N(x - hw)}\" y1=\"{N(y)}\" x2=\"{N(x + hw)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
             sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 32}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">AGENTS ✗</text>\n");
         }
         // series
