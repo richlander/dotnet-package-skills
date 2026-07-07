@@ -13,10 +13,14 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | doc-card | model-diff | source-diff | skill-diff | tools-card | web-card",
+    Description = "table | card | doc-card | liet | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "liet", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+var svgOpt = new Option<string?>("--svg")
+{
+    Description = "For --view liet: also write the LIET curve as an SVG to this path.",
+};
 var noTitleOpt = new Option<bool>("--no-title")
 {
     Description = "Omit the ### heading; fold the model into the italic descriptor.",
@@ -37,7 +41,7 @@ var legacy = new[] { "card", "model-diff", "source-diff", "skill-diff", "tools-c
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
 {
-    filesArg, viewOpt, noTitleOpt, ietModelOpt, jsonlOpt,
+    filesArg, viewOpt, noTitleOpt, ietModelOpt, jsonlOpt, svgOpt,
 };
 foreach (var o in legacy.Values) analyze.Options.Add(o);
 analyze.SetAction(parse =>
@@ -54,6 +58,7 @@ analyze.SetAction(parse =>
     {
         case "card": cards.Card(files); break;
         case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
+        case "liet": new Liet(Console.Out) { NoTitle = parse.GetValue(noTitleOpt) }.Render(files, parse.GetValue(svgOpt)); break;
         case "model-diff": cards.ModelDiff(files); break;
         case "source-diff": cards.SourceDiff(files); break;
         case "skill-diff": cards.SkillDiff(files); break;
