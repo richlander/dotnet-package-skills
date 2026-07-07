@@ -154,12 +154,30 @@ internal sealed partial class Provenance
 
     // Content hash of a fixture set: sha256 over each file's repo-relative path + bytes, in sorted
     // order, so it is stable across machines and invalidates on any fixture edit/add/remove.
+    // VCS/OS metadata is excluded — it is never fixture content and would otherwise cause spurious
+    // invalidations (e.g. a committed .gitignore, or macOS silently dropping a .DS_Store). The
+    // exclusion is a narrow leaf-name deny-list plus the .git/ dir, so meaningful dot-prefixed
+    // *content* (.editorconfig, .config/dotnet-tools.json, .template.config/template.json) is STILL
+    // hashed — dropping those would let two different corpora hash identically.
+    private static readonly HashSet<string> MetadataFileNames = new(StringComparer.Ordinal)
+    {
+        ".gitignore", ".gitattributes", ".gitkeep", ".DS_Store", "Thumbs.db",
+    };
+
+    private static bool IsMetadata(string rel)
+    {
+        var segments = rel.Split('/');
+        if (segments.Any(s => s == ".git")) return true; // the git dir, at any depth
+        return MetadataFileNames.Contains(segments[^1]);
+    }
+
     private static string? HashDir(string dir)
     {
         if (!Directory.Exists(dir)) return null;
         using var sha = SHA256.Create();
         foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
                      .Select(p => (rel: Rel(dir, p), path: p))
+                     .Where(x => !IsMetadata(x.rel))
                      .OrderBy(x => x.rel, StringComparer.Ordinal))
         {
             var relBytes = Encoding.UTF8.GetBytes(f.rel + "\0");
