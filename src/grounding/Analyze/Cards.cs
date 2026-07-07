@@ -247,11 +247,11 @@ internal sealed partial class Cards
 
     // ---- document H2H over the answerable space (the LIET insight) -------------------------
     //
-    // Each table lists the QUESTIONS at least one arm answered correctly (the union — so you can see
-    // the space where some arm could NOT answer). Every attempted cell shows its per-question IET
-    // with a `(true/false)` correctness tag (a wrong answer still costs IET); `—` = the question was
-    // not in that arm's dataset. The subset every arm answered is the efficiency-comparable set
-    // (mean-IET footer); reach shows capability; total IET is the per-arm session sum.
+    // Each table lists every QUESTION at least one arm ATTEMPTED — so the table is the whole session,
+    // including questions all arms got wrong. Every attempted cell shows its per-question IET with a
+    // `(true/false)` correctness tag (a wrong answer still costs IET); `—` = the question was not in
+    // that arm's dataset. The subset every arm answered is the efficiency-comparable set (mean-IET
+    // footer); reach shows correctness capability; total IET is the per-arm session sum.
     // Two tables per model:
     //   1. baseline / README / AGENTS — does the Missing Manual pay its way over the Brochure.
     //   2. baseline / AGENTS  / SKILL — what the Textbook's extra tokens buy over the Missing Manual.
@@ -310,19 +310,19 @@ internal sealed partial class Cards
     private void EmitH2H(string title, string model, IetScheme iet,
         params (string label, ResultsFile ds, string armKey)[] cols)
     {
-        // Row set = the QUESTIONS at least one arm answered correctly (union), across ALL column
-        // datasets — a question present only in the README/SKILL run still counts.
+        // Row set = every QUESTION at least one arm ATTEMPTED (present) across all column datasets —
+        // so the table is the whole session, including questions all arms got wrong (all `(false)`).
         var names = cols.SelectMany(c => ScenarioShorts(c.ds)).Distinct().ToList();
         var rows = new List<(string name, (bool present, bool passed, double iet)[] cells)>();
         foreach (var name in names)
         {
             var cells = cols.Select(c => CellAt(c.ds, c.armKey, name, iet)).ToArray();
-            if (cells.Any(x => x.passed)) rows.Add((name, cells));
+            if (cells.Any(x => x.present)) rows.Add((name, cells));
         }
         _o.WriteLine($"#### {title}\n");
-        if (rows.Count == 0) { _o.WriteLine("_No question answered by any arm._\n"); return; }
+        if (rows.Count == 0) { _o.WriteLine("_No question attempted by any arm._\n"); return; }
         int allCorrect = rows.Count(r => r.cells.All(x => x.passed));
-        _o.WriteLine($"_{rows.Count} question(s) answered by ≥1 arm ({allCorrect} by all — the efficiency-comparable "
+        _o.WriteLine($"_{rows.Count} question(s) attempted ({allCorrect} answered by all — the efficiency-comparable "
             + $"set). Cell = per-question IET with `(true/false)` = whether that arm answered correctly "
             + $"(a wrong answer still costs IET); `—` = not attempted. IET model {IetModels.CaptionFor(new[] { model })}._\n");
         _o.WriteLine("| question | " + string.Join(" | ", cols.Select(c => $"`{c.label}`")) + " |");
@@ -330,7 +330,7 @@ internal sealed partial class Cards
         foreach (var (name, cells) in rows)
             _o.WriteLine($"| {name} | " + string.Join(" | ", cells.Select(Cell)) + " |");
         // Footer: reach per arm (capability), mean IET on the all-correct set (efficiency), and the
-        // session total — the sum of each arm's per-question IET over the questions it answered.
+        // session total — the sum of each arm's per-question IET over every question it attempted.
         _o.WriteLine("| **reach** (answered) | " + string.Join(" | ",
             Enumerable.Range(0, cols.Length).Select(i => $"{rows.Count(r => r.cells[i].passed)}/{rows.Count}")) + " |");
         var allSet = rows.Where(r => r.cells.All(x => x.passed)).ToList();
@@ -340,7 +340,7 @@ internal sealed partial class Cards
             _o.WriteLine("| **mean IET** (all-correct set) | " + string.Join(" | ",
                 cols.Select((c, i) => Mean(i))) + " |");
         }
-        _o.WriteLine("| **total IET** (shown questions) | " + string.Join(" | ",
+        _o.WriteLine("| **total IET** (session) | " + string.Join(" | ",
             Enumerable.Range(0, cols.Length).Select(i => K(rows.Where(r => r.cells[i].present).Sum(r => r.cells[i].iet)))) + " |");
         _o.WriteLine();
     }
