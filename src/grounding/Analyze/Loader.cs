@@ -269,6 +269,12 @@ internal static class Loader
             arm.Grounded = key != "baseline";
             if (isPush && arm.Grounded) arm.Activated = 1.0;
             arm.DocTok = arm.Grounded ? (int)Math.Round(gtok * arm.Activated) : 0;
+            // Grounding IET = the doc's own carrying cost: written once, cache-read each later turn.
+            // Work IET = everything else (agent thinking/output/tools). Total = Grounding + Work.
+            var writeW = iet.FoldNonCachedIntoCacheWrite ? iet.WCacheWrite : iet.WFresh;
+            var reads = Math.Max(0.0, arm.AllTurns - 1);
+            arm.GroundingIet = arm.DocTok * (writeW + iet.WCacheRead * reads);
+            arm.WorkIet = arm.Iet - arm.GroundingIet;
         }
         return new LoadedArm
         {

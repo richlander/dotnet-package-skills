@@ -29,7 +29,7 @@ internal sealed partial class Cards
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
-    private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * 100)}%";
+    private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * a.N)}/{a.N}";
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
     private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
     private static string RawToolCallTurns(ArmAgg a) => $"{F0(a.ToolTurns)} ({F0(a.ToolTurnPct)}%)";
@@ -39,11 +39,17 @@ internal sealed partial class Cards
     private static string DiffCache(ArmAgg n, ArmAgg o) => $"{F0(o.Cache)}/{F0(o.NugetWeb)}\u2192{F0(n.Cache)}/{F0(n.NugetWeb)}";
     private static string DiffToolSplit(ArmAgg n, ArmAgg o) =>
         $"{F0(o.Web)}/{F0(o.Bash)}/{F0(o.Other)}\u2192{F0(n.Web)}/{F0(n.Bash)}/{F0(n.Other)}";
-    private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
+    private static string DiffIet(ArmAgg n, ArmAgg o) => $"{K(o.Iet)}\u2192{K(n.Iet)} ({SignedPct(Pct(n.Iet, o.Iet))})";
+    // Grounding IET = the doc's carrying cost (baseline 0). Its "change" is expressed as a share of
+    // the baseline total so the three IET rows add up: Total% = Grounding% + Work%.
+    private static string RawGroundingIet(ArmAgg a) => F0(a.GroundingIet);
+    private static string DiffGroundingIet(ArmAgg n, ArmAgg o) => $"{K(o.GroundingIet)}\u2192{K(n.GroundingIet)} ({SignedPct(o.Iet > 0 ? (double)n.GroundingIet / o.Iet * 100 : 0)})";
+    private static string RawWorkIet(ArmAgg a) => F0(a.WorkIet);
+    private static string DiffWorkIet(ArmAgg n, ArmAgg o) => $"{K(o.WorkIet)}\u2192{K(n.WorkIet)} ({SignedPct(Pct(n.WorkIet, o.WorkIet))})";
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
     private static string DiffReadGrounding(ArmAgg n, ArmAgg o) =>
-        $"{F0(o.Activated * 100)}%\u2192{F0(n.Activated * 100)}%";
+        $"{F0(o.Activated * o.N)}/{o.N}\u2192{F0(n.Activated * n.N)}/{n.N}";
     private static string DiffToolTurnSecs(ArmAgg n, ArmAgg o) =>
         $"{F0(o.ToolTurnSecs)}\u2192{F0(n.ToolTurnSecs)}s ({F0(o.ToolTurnSecsPct)}\u2192{F0(n.ToolTurnSecsPct)}%)";
     private static string DiffToolTurnIet(ArmAgg n, ArmAgg o) =>
@@ -61,14 +67,15 @@ internal sealed partial class Cards
 
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
+        // Narrative headline (3 rows, same X/total format so the connection is obvious):
+        // (1) did the agent answer correctly, (2) did it rely on the grounding (tasks that
+        // invoked it), (3) did it fall back to archaeology instead.
         ("tasks correct (+)",                  RawSuccess, DiffSuccess),
+        ("relied on grounding: tasks (+)",     RawReadGrounding, DiffReadGrounding),
+        ("relied on archaeology, fallback: cache / nuget.org (-)", RawCache,  DiffCache),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
-        // Narrative: (1) all tool calls, (2) the subset (largely bash) that dug the nuget cache,
-        // (3) the grounding meant to mitigate that, (4) the evidence.
         ("tool calls: web / bash / other (context)", RawToolSplit, DiffToolSplit),
-        ("nuget archaeology: cache / nuget.org (-)", RawCache,  DiffCache),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
-        ("read grounding (%)",                 RawReadGrounding, DiffReadGrounding),
         ("output tok (% of IET) (-)",          RawOut,     DiffOut),
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
@@ -78,27 +85,37 @@ internal sealed partial class Cards
         // 216/216), so a separate cost row would just restate turns — dropped. `Session IET`
         // is the real token-weighted cost.
         ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
-        ("Session IET (-)",                    RawIet,     DiffIet),
+        ("Total IET (-)",                      RawIet,          DiffIet),
+        ("↳ Grounding IET (doc) (-)",          RawGroundingIet, DiffGroundingIet),
+        ("↳ Work IET (agent) (-)",             RawWorkIet,      DiffWorkIet),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
 
-    // Verdict model: FAIL is the only correctness gate (grounding made the model answer
-    // fewer scenarios correctly). The rest — archaeology, web, IET, output, cost, judge —
-    // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
+    // Verdict model (efficacy-gate-first): the EFFICACY gate is primary — the doc must answer
+    // 100% of its tier correctly or the verdict is FAIL (unfinished/no-man's-land), and the
+    // efficiency labels are withheld. Only once 100% is reached do the SIGNALS — archaeology,
+    // IET, output — rank the doc BETTER / NEUTRAL / WORSE. Correct answers trump tokens.
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet, b.Iet);   // session IET (full token-weighted cost, doc included)
+        var iet = Pct(g.WorkIet, b.WorkIet);   // WORK IET — doc carrying-cost netted out (the agent's effort)
         var @out = Pct(g.Out, b.Out);
         var dsucc = g.Succ - b.Succ;
         double bArch = b.Arch, gArch = g.Arch;
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {F0(bArch)}\u2192{F0(gArch)}, IET {SignedPct(iet)}";
+                 + $"resourcefulness {F0(bArch)}\u2192{F0(gArch)}, work IET {SignedPct(iet)}";
 
-        // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
-        if (dsucc < 0)
-            return $"**FAIL** — fewer tasks correct ({tail})";
+        // EFFICACY GATE (primary — the dotnet/skills philosophy: correct answers trump tokens).
+        // The doc must answer 100% of its tier correctly before efficiency is even considered.
+        // Below the gate the doc is unfinished, so FAIL dominates and we WITHHOLD BETTER/WORSE
+        // (grading efficiency on an incomplete doc would be premature — no-man's-land).
+        if (g.Succ < g.N)
+        {
+            var why = dsucc < 0 ? "regressed vs baseline" : "unfinished";
+            return $"**FAIL** — below efficacy gate ({why}): {g.Succ}/{g.N} correct ({tail})";
+        }
 
+        // At the gate: 100% efficacy. NOW — and only now — grade efficiency.
         // WORSE: real IET/output inflation (a harm signal), not a stray web call. (Premium-request
         // "cost" is 1:1 with turns, and IET is the token-weighted cost gate, so cost is not a
         // separate axis.)
@@ -108,7 +125,7 @@ internal sealed partial class Cards
         if (worse.Count > 0)
             return $"**WORSE** — {string.Join(", ", worse)} ({tail})";
 
-        // BETTER: solved more, eliminated archaeology, or materially cheaper (IET).
+        // BETTER: reached the gate from below, eliminated archaeology, or materially cheaper (IET).
         if (dsucc > 0 || -iet >= IetWinFrac * 100 || (bArch >= 0.5 && gArch < 0.5))
             return $"**BETTER** — {tail}";
 
