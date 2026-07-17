@@ -49,9 +49,18 @@ internal static class Runner
         }
         var agentsPath = Path.Combine(unitDir, "AGENTS.md");
         var metaPath = Path.Combine(unitDir, "meta.yaml");
-        if (!File.Exists(agentsPath))
+        var hasAgents = File.Exists(agentsPath);
+        // AGENTS.md is required only for --source agents (its body IS the grounding). SKILL.md-only
+        // units ship no AGENTS.md; they carry name/description in meta.yaml. Every other arm
+        // (skill/readme/none) only needs those two scalars for the SKILL wrapper.
+        if (!hasAgents && o.Source == "agents")
         {
-            Console.Error.WriteLine($"grounding: {agentsPath} missing.");
+            Console.Error.WriteLine($"grounding: {agentsPath} missing (required for --source agents).");
+            return 1;
+        }
+        if (!hasAgents && !File.Exists(metaPath))
+        {
+            Console.Error.WriteLine($"grounding: neither {agentsPath} nor {metaPath} present for unit '{o.Unit}'.");
             return 1;
         }
 
@@ -61,7 +70,7 @@ internal static class Runner
         if (o.TestsDir is null)
             o.TestsDir = File.Exists(Path.Combine(unitDir, "eval.yaml")) ? "grounding" : "tests";
 
-        var doc = SkillDoc.ParseAgents(agentsPath, metaPath);
+        var doc = hasAgents ? SkillDoc.ParseAgents(agentsPath, metaPath) : SkillDoc.FromMeta(metaPath, o.Unit);
         string skillText;
         string? srcDocPath = null;   // the grounding doc feeding this arm (null for baseline) — its
                                      // content hash is the arm's provenance/pin key.
@@ -114,8 +123,19 @@ internal static class Runner
 
         var outDir = o.OutDir ?? DataCache.DatasetDir(o.Unit);
         var bin = FindSkillValidator(infraRoot);
-        var skillPath = Path.Combine(unitDir, "SKILL.md");
-        var groundingArg = Path.Combine("grounding", o.Unit);
+        // For --source skill (pull), the graded artifact is the REAL authored skill under
+        // skills/<unit>, and the whole skills/ plugin is loaded so the agent can pull ANY sibling
+        // domain skill (matching production: a package can ship a base skill + domain workflow
+        // skills). skill-validator resolves the eval by the skill's DIRECTORY NAME via
+        // --tests-dir (grounding/<unit>/eval.yaml), independent of the skill's location, and
+        // resolves setup fixture sources relative to that eval dir — so the eval + fixtures stay
+        // under grounding/<unit> while the skills live under skills/. Other sources
+        // (agents/readme/none, or push) drop the synthesized doc into grounding/<unit>.
+        var multiSkill = o.Source == "skill" && o.Delivery != "push";
+        var skillPath = multiSkill
+            ? Path.Combine(root, "skills", o.Unit, "SKILL.md")
+            : Path.Combine(unitDir, "SKILL.md");
+        var groundingArg = multiSkill ? Path.Combine("skills", o.Unit) : Path.Combine("grounding", o.Unit);
 
         // Provenance = the pin key. Corpus (nuget + fixtures) + this arm's doc content-hash decide
         // whether an already-generated dataset can be REUSED instead of regenerated — the core of
@@ -123,12 +143,25 @@ internal static class Runner
         var fixturesDir = Path.Combine(root, o.TestsDir!, o.Unit, "fixtures");
         var prov = Provenance.Compute(root, o.Source, srcDocPath, fixturesDir);
 
-        // skill-validator requires a plugin.json above the skill dir. Infra ships one at
-        // grounding/plugin.json; a target repo need not. If absent, synthesize a transient
-        // one (cleaned up below) so target repos hold ONLY grounding inputs — no scaffolding.
-        var pluginJson = Path.Combine(root, "grounding", "plugin.json");
+        // skill-validator requires a plugin.json above the skill dir. The multi-skill arm loads the
+        // REAL skills/plugin.json (skills:["."]) so every sibling skill is discoverable — it is a
+        // committed package artifact, not scaffolding. Other arms synthesize a transient
+        // grounding/plugin.json (cleaned up below) so target repos hold only grounding inputs.
+        var pluginJson = multiSkill
+            ? Path.Combine(root, "skills", "plugin.json")
+            : Path.Combine(root, "grounding", "plugin.json");
         var wrotePlugin = false;
-        if (!o.DryRun && !File.Exists(pluginJson))
+        if (multiSkill)
+        {
+            if (!File.Exists(pluginJson))
+            {
+                Console.Error.WriteLine(
+                    $"grounding: --source skill needs a plugin manifest at {pluginJson} (e.g. {{\"skills\":[\".\"]}}) "
+                    + "so all sibling domain skills load. Add one.");
+                return 1;
+            }
+        }
+        else if (!o.DryRun && !File.Exists(pluginJson))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(pluginJson)!);
             File.WriteAllText(pluginJson,
@@ -209,11 +242,17 @@ internal static class Runner
     {
         var unitDir = Path.GetDirectoryName(skillPath)!;
         var target = o.Delivery == "push" ? Path.Combine(unitDir, $"{o.Unit}.agent.md") : skillPath;
+        // skill-validator resolves an AGENT's eval by the agent NAME (ResolveAgentEvalPath looks for
+        // <tests-dir>/<name>/eval.yaml). The authored doc is named for the package (e.g. "markout"),
+        // but the eval lives under grounding/<unit>/ (e.g. "markout-013"). For the push artifact,
+        // rewrite the frontmatter name to the unit so the always-on agent's eval is discovered.
+        // (Pull discovers by directory, so it needs no rewrite.)
+        var artifactText = o.Delivery == "push" ? ForceFrontmatterName(skillText, o.Unit) : skillText;
         var backup = File.Exists(target) ? File.ReadAllText(target) : null;
         try
         {
             if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, true);
-            File.WriteAllText(target, skillText);
+            File.WriteAllText(target, artifactText);
 
             var psi = new ProcessStartInfo(bin) { WorkingDirectory = root, UseShellExecute = false };
             psi.ArgumentList.Add("evaluate");
@@ -316,6 +355,25 @@ internal static class Runner
         m.Contains("opus") ? "opus" :
         m.Contains("haiku") ? "haiku" :
         m.Contains("sonnet") ? "sonnet" : m;
+
+    // Rewrite the YAML frontmatter `name:` to `unit`. Used only for the push artifact so
+    // skill-validator's agent-eval discovery (keyed on the agent name) resolves the unit's
+    // eval.yaml. No-op when there is no leading `---` frontmatter block.
+    private static string ForceFrontmatterName(string text, string unit)
+    {
+        var nl = text.Contains("\r\n") ? "\r\n" : "\n";
+        var lines = text.Replace("\r\n", "\n").Split('\n').ToList();
+        if (lines.Count == 0 || lines[0] != "---") return text;
+        for (var i = 1; i < lines.Count && lines[i] != "---"; i++)
+        {
+            if (lines[i].StartsWith("name:"))
+            {
+                lines[i] = $"name: {unit}";
+                return string.Join(nl, lines);
+            }
+        }
+        return text;
+    }
 
     // README markdown often starts with its own frontmatter / leading blanks; keep it
     // as-is but guarantee a trailing newline so the SKILL.md body is well-formed.

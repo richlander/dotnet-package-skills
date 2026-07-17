@@ -1,8 +1,22 @@
-# dotnet-package-grounding
+# dotnet-package-skills
 
-A repo dedicated to **NuGet package grounding** — `AGENTS.md` files that ship in a package's
-root and make the package *self-teaching* for an AI agent — and to **measuring** whether that
-content actually helps.
+A repo dedicated to **NuGet package skills** — `SKILL.md` skill sets that teach an AI agent how to
+use a specific package correctly — and to **measuring** whether that content actually helps. A
+package carries a small **base skill** (named for the package) plus a handful of **domain skills**
+for its long-tail workflows; a root meta-skill orchestrates install and push-vs-pull delivery.
+
+The skills follow **Anthropic's [Agent Skills](https://www.anthropic.com/news/skills) convention** —
+a `SKILL.md` with YAML frontmatter (`name` + a "use when…" `description`) and progressive
+disclosure into supporting files — so any Skills-aware agent host can load them. They are meant to
+be **installed into a *consuming* repository** (the project that depends on the package), where the
+agent opts into them and can remove them — not packed into the `.nupkg` and forced on everyone.
+
+> **Status — pivoted to `SKILL.md`.** This project began as *package grounding* (an always-on
+> `AGENTS.md` packed in the `.nupkg`) and has since moved to authoring **`SKILL.md` skill sets** as
+> the shipped artifact. "Grounding" remains our word for the *technique and the measurement* —
+> adding proven-missing context to an agent and evaluating the lift — but the delivered document is
+> now `SKILL.md`. Sections below that still describe the `AGENTS.md`-primary framing predate the
+> pivot and are being reconciled as the push-vs-pull delivery model settles.
 
 **Why this is needed.** When an agent touches a package today, the best it gets is the package's
 README — and **often not even that**: across the **top 1,000** Microsoft/Azure/System packages,
@@ -16,8 +30,8 @@ contributing boilerplate (2–4 kB on its own in the Azure-SDK template), and br
 *most of which the model already knows*. Installation is the clearest case of waste: by the time an
 agent is working in a project that *references* the package, installation is **solved by
 definition** — the dependency is already there. Little of a README is the non-obvious, version-
-specific gotcha an agent actually needs. Grounding inverts that ratio: a small, targeted doc
-(~3.5 kB) carrying only what the model is proven to lack.
+specific gotcha an agent actually needs. A skill inverts that ratio: a small, targeted doc
+carrying only what the model is proven to lack.
 
 Use it two ways:
 

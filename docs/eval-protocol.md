@@ -52,10 +52,17 @@ ordering, key wording. When authoring, confirm the assertion passes the referenc
 at least one reasonable valid variant.
 
 - **Mistake it prevents:** SCL **M8** failed `items: a,b,c` because the model emitted the
-  equally-correct `items: a, b, c`. A brittle assertion manufactured a "gap."
-- **How:** prefer tolerant patterns (`a,\s*b,\s*c`, `[Tt]rue`), assert on stable anchors
-  (a deterministic value, an exit code, a substring), and avoid pinning exact whitespace or
-  punctuation a competent solution may vary.
+  equally-correct `items: a, b, c`. A brittle assertion manufactured a "gap." Same class, JSON
+  edition: STJ **J4** emitted a perfectly correct pretty-printed object (`"Name": "Ada"`) but the
+  matcher demanded compact `"Name":"Ada"` — a manufactured content failure that the doc could never
+  fix, because the code was already right.
+- **How:** prefer tolerant patterns (`a,\s*b,\s*c`, `[Tt]rue`, `\":\s*\"` for JSON), assert on
+  stable anchors (a deterministic value, an exit code, a substring), and avoid pinning exact
+  whitespace or punctuation a competent solution may vary.
+- **Diagnostic tell:** if **every arm — including `baseline` — produces the same wrong output**, the
+  fault is almost never the model or the doc; it is the *test* (assertion, prompt, or fixture). A real
+  content gap shows up as *variation* across arms (the doc moves the needle); a phantom shows up as
+  *invariance*. When all arms agree and all fail, fix the instrument, not the document.
 
 ### 5. No splicing — one dataset = one clean condition
 When the document changes, **re-run the whole suite** under identical harness conditions.
@@ -103,6 +110,23 @@ its cost ≈ `0.1 × doc_tokens × turns`. That scales with **turn count**, and 
   the tax *move* but can't *attribute* it; only the split makes "adds reading-tax without removing
   exploration turns" a measurement rather than a sentence. (We already count exploration per scenario
   in `toolStats` — surfacing it per rung is a reporting change, not new instrumentation.)
+
+### 10. Prompts must pin a unique correct answer — no ambiguous values, no unpinned round-trips
+An assertion can only be as precise as the task. If the prompt leaves the required answer
+under-determined, competent models diverge to *different* valid outputs and the assertion fails them
+all — a phantom that looks like a content gap. Two recurring shapes, both from STJ:
+- **Value collides with a domain term.** STJ **J5** said *"serialize `` `System.Text.Json` ``"* as a
+  data value — but `System.Text.Json` is also *the library under test*, so every arm (baseline
+  included) resolved it to a canonical sample package (`Newtonsoft.Json`) and failed the exact-string
+  match, despite mapping the custom property names flawlessly. Pick sample values that cannot be read
+  as the API, the library, or any term in the surrounding prose.
+- **Unpinned round-trip input.** STJ **J7** asked to *"deserialize string-valued status JSON"* without
+  saying **which** value; models picked `Running`, the assertion wanted `Complete`. The skill being
+  tested (enum-as-string) round-tripped correctly — only the unspecified input value differed. Pin the
+  exact input the round-trip must consume (e.g. *"deserialize `{"Status":"Complete"}`"*).
+- **How:** for every prompt, ask "is there exactly one output a correct solution can produce?" If a
+  value, order, or intermediate is free, either pin it in the prompt or widen the assertion to accept
+  the whole valid set — never both under-specify *and* match exactly.
 
 ---
 
