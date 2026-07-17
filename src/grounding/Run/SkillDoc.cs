@@ -32,6 +32,21 @@ internal sealed class SkillDoc
         return doc;
     }
 
+    // Build a doc from meta.yaml alone (no AGENTS.md). Used by SKILL.md-only units, whose
+    // graded artifact is skills/<unit>/SKILL.md; here we only need name/description for the
+    // baseline/readme wrapper. Body stays empty (never rendered for --source skill/none).
+    public static SkillDoc FromMeta(string? metaPath, string unit)
+    {
+        var doc = new SkillDoc { Name = unit };
+        if (metaPath is not null && File.Exists(metaPath))
+        {
+            var meta = File.ReadAllText(metaPath);
+            doc.Name = ExtractScalar(meta, "name") ?? unit;
+            doc.Description = ExtractScalar(meta, "description");
+        }
+        return doc;
+    }
+
     // Split leading `---` ... `---` frontmatter from the body; strip blank lines
     // immediately after the closing fence. If absent, the whole file is the body.
     private static (string Frontmatter, string Body) SplitFrontmatter(string text)

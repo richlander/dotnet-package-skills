@@ -33,7 +33,7 @@ internal sealed class Liet
     {
         public string Name = "";
         public int Index;
-        public Point Base = new(), Ag = new(), Oracle = new();
+        public Point Base = new(), Ag = new(), Oracle = new(), Readme = new();
         public double? Ceiling;  // competitor envelope for AGENTS.md (min IET of other passing arms)
         public string Region = "";
     }
@@ -42,22 +42,40 @@ internal sealed class Liet
 
     public void Render(IReadOnlyList<string> files, string? svgPath)
     {
-        foreach (var f in files.Distinct().OrderBy(x => x, StringComparer.Ordinal))
+        var parsed = new List<(string path, ResultsFile d)>();
+        foreach (var f in files.Distinct())
         {
-            ResultsFile d;
-            try { d = Loader.Parse(f); }
-            catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); continue; }
+            try { parsed.Add((f, Loader.Parse(f))); }
+            catch (Exception e) { _o.WriteLine($"!! {f}: {e.Message}"); }
+        }
+        // A dataset whose file name contains "readme" is the packed-README arm; fold it into the
+        // matching primary (AGENTS/skill) curve as a third series rather than plotting it separately.
+        static bool IsReadme(string p) => System.IO.Path.GetFileName(p).ToLowerInvariant().Contains("readme");
+        var readmeFiles = parsed.Where(p => IsReadme(p.path)).ToList();
+        var primary = parsed.Where(p => !IsReadme(p.path)).ToList();
+        if (primary.Count == 0) primary = parsed;   // all-readme input: fall back to plotting them
+
+        foreach (var (f, d) in primary.OrderBy(x => x.path, StringComparer.Ordinal))
+        {
             var iet = IetModels.For(d.Model);
+            var rf = readmeFiles.FirstOrDefault(r => r.d.Model == d.Model);
+            var readmeMap = rf.d is not null ? BuildReadmeMap(rf.d, iet) : null;
             int vi = 0;
             foreach (var v in d.Verdicts ?? new())
             {
-                var rungs = BuildRungs(v, iet, OracleFromPlugin);
+                var rungs = BuildRungs(v, iet, OracleFromPlugin, readmeMap);
                 if (rungs.Count == 0) { vi++; continue; }
+                // Levelize: order rungs by MEASURED difficulty (baseline IET) — the LCOE-faithful
+                // x-axis — not authored order. Rungs the baseline could not answer are the hardest
+                // and sort to the end (their AGENTS/oracle 'unlock' points plot at the right).
+                rungs = rungs.OrderBy(r => r.Base.Passed ? r.Base.Iet : double.PositiveInfinity)
+                             .ThenBy(r => r.Index).ToList();
+                for (int k = 0; k < rungs.Count; k++) rungs[k].Index = k;
                 var unit = v.SkillName ?? "?";
                 EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel);
                 if (svgPath is { Length: > 0 })
                 {
-                    var multi = files.Count > 1 || (d.Verdicts?.Count ?? 0) > 1;
+                    var multi = primary.Count > 1 || (d.Verdicts?.Count ?? 0) > 1;
                     var outPath = multi ? SvgVariant(svgPath, f, unit, d.Model, vi) : svgPath;
                     File.WriteAllText(outPath, BuildSvg(rungs, unit, d.Model ?? "?"));
                     _o.WriteLine($"\n_LIET curve written to `{outPath}`._");
@@ -67,7 +85,22 @@ internal sealed class Liet
         }
     }
 
-    private static List<Rung> BuildRungs(Verdict v, IetScheme iet, bool oracleFromPlugin)
+    // README grounding = the readme dataset's `skilledIsolated` arm, keyed by rung name.
+    private static Dictionary<string, Point> BuildReadmeMap(ResultsFile d, IetScheme iet)
+    {
+        var map = new Dictionary<string, Point>();
+        foreach (var v in d.Verdicts ?? new())
+            foreach (var sc in v.Scenarios ?? new())
+            {
+                var a = Loader.Row(Loader.ArmOf(sc, "skilledIsolated"), iet);
+                map[(sc.ScenarioName ?? "").Split(':')[0].Trim()] =
+                    new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0 };
+            }
+        return map;
+    }
+
+    private static List<Rung> BuildRungs(Verdict v, IetScheme iet, bool oracleFromPlugin,
+        Dictionary<string, Point>? readmeMap = null)
     {
         var rungs = new List<Rung>();
         int i = 0;
@@ -88,7 +121,10 @@ internal sealed class Liet
                 Ag = new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0 },
                 Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0 },
             };
-            // Competitor envelope for AGENTS.md = min IET of the OTHER arms that passed.
+            if (readmeMap is not null && readmeMap.TryGetValue(r.Name, out var rm)) r.Readme = rm;
+            // Competitor envelope for AGENTS.md = min IET of baseline + oracle that passed. README is
+            // PLOTTED as a reference series but kept OUT of the ceiling: where README≈AGENTS (common),
+            // per-rung README-vs-AGENTS differences are n=1 noise and would flip win/harm spuriously.
             var comp = new List<double>();
             if (r.Base.Passed) comp.Add(r.Base.Iet);
             if (r.Oracle.Passed) comp.Add(r.Oracle.Iet);
@@ -118,14 +154,18 @@ internal sealed class Liet
     private void EmitTable(List<Rung> rungs, string unit, string model, string? judge)
     {
         if (!NoTitle) _o.WriteLine($"### LIET curve — {unit} | `{model}`\n");
-        _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = authored rung order. `✗` = arm failed "
+        _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = measured baseline IET (levelized). `✗` = arm failed "
             + $"(not plotted, not extrapolated). Ceiling = min IET of passing competitors — the max price "
             + $"`AGENTS.md` may pay. Judge `{judge ?? "?"}`. IET model {IetModels.CaptionFor(new[] { model })}._\n");
-        _o.WriteLine("| rung | baseline | `AGENTS.md` | oracle | ceiling | region |");
-        _o.WriteLine("| --- | ---: | ---: | ---: | ---: | --- |");
+        bool hasReadme = rungs.Any(r => r.Readme.Present);
+        var rHdr = hasReadme ? " `README.md` |" : "";
+        var rSep = hasReadme ? " ---: |" : "";
+        _o.WriteLine($"| rung | baseline |{rHdr} `AGENTS.md` | oracle | ceiling | region |");
+        _o.WriteLine($"| --- | ---: |{rSep} ---: | ---: | ---: | --- |");
         foreach (var r in rungs)
         {
-            _o.WriteLine($"| {r.Name} | {Cell(r.Base)} | {AgCell(r)} | {Cell(r.Oracle)} "
+            var rCell = hasReadme ? $" {Cell(r.Readme)} |" : "";
+            _o.WriteLine($"| {r.Name} | {Cell(r.Base)} |{rCell} {AgCell(r)} | {Cell(r.Oracle)} "
                 + $"| {(r.Ceiling is { } c ? K(c) : "—")} | {RegionTag(r.Region)} |");
         }
         EmitScalars(rungs);
@@ -236,10 +276,13 @@ internal sealed class Liet
         double maxIet = rungs.SelectMany(r => new[]
         {
             r.Base.Passed ? r.Base.Iet : 0, r.Ag.Passed ? r.Ag.Iet : 0,
+            r.Readme.Passed ? r.Readme.Iet : 0,
             r.Oracle.Passed ? r.Oracle.Iet : 0, r.Ceiling ?? 0,
         }).DefaultIfEmpty(1).Max();
         maxIet = Math.Max(maxIet, 1);
         int n = rungs.Count;
+        double yStep = NiceStep(maxIet / 4.0);
+        maxIet = Math.Ceiling(maxIet / yStep) * yStep;   // snap the top to a round gridline value
         double X(int i) => n <= 1 ? (L + R) / 2.0 : L + (R - L) * i / (n - 1);
         double Y(double v) => B - (B - T) * (v / maxIet);
 
@@ -251,8 +294,33 @@ internal sealed class Liet
         // axes
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{R}\" y2=\"{B}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{L}\" y2=\"{T}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
+        // y-axis scale: round gridlines + numeric labels (IET in tokens, `k` = thousands) so the
+        // curve magnitude is readable and the arms are directly comparable in absolute cost.
+        for (double gv = 0; gv <= maxIet + yStep * 0.01; gv += yStep)
+        {
+            double gy = Y(gv);
+            if (gv > 0) sb.Append($"  <line x1=\"{L}\" y1=\"{N(gy)}\" x2=\"{R}\" y2=\"{N(gy)}\" stroke=\"#e2e8f0\" stroke-width=\"1\"/>\n");
+            sb.Append($"  <text x=\"{L - 8}\" y=\"{N(gy + 4)}\" text-anchor=\"end\" font-size=\"10.5\" fill=\"#64748b\">{K(gv)}</text>\n");
+        }
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"430\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
-        sb.Append($"  <text x=\"52\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 52 222)\">IET (per correct answer) →</text>\n");
+        sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">IET per correct answer (tokens) →</text>\n");
+        // arms legend (top-left, inside plot): one line swatch per plotted arm so the baseline,
+        // README and oracle curves are named, not just the AGENTS.md dots explained below.
+        {
+            double lx = L + 12, ly = T + 8; int row = 0;
+            bool hasOracle = rungs.Any(r => r.Oracle.Passed), hasReadme = rungs.Any(r => r.Readme.Present);
+            sb.Append("  <g font-size=\"11\" fill=\"#475569\">\n");
+            void Swatch(string color, string label)
+            {
+                double y = ly + row++ * 16;
+                sb.Append($"    <line x1=\"{N(lx)}\" y1=\"{N(y)}\" x2=\"{N(lx + 22)}\" y2=\"{N(y)}\" stroke=\"{color}\" stroke-width=\"2.5\"/><text x=\"{N(lx + 28)}\" y=\"{N(y + 4)}\">{Esc(label)}</text>\n");
+            }
+            Swatch("#dc2626", "baseline (archaeology only)");
+            if (hasReadme) Swatch("#7c3aed", "README.md (packed)");
+            Swatch("#2563eb", "AGENTS.md");
+            if (hasOracle) Swatch("#d97706", "SKILL.md (oracle)");
+            sb.Append("  </g>\n");
+        }
         // rung ticks
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(rungs[i].Name)}</text>\n");
@@ -270,6 +338,7 @@ internal sealed class Liet
         // series
         sb.Append(Series(rungs, p => p.Oracle, "#d97706", "SKILL.md (oracle)", X, Y, false));
         sb.Append(Series(rungs, p => p.Base, "#dc2626", "baseline", X, Y, false));
+        sb.Append(Series(rungs, p => p.Readme, "#7c3aed", "README.md", X, Y, false));
         sb.Append(Series(rungs, p => p.Ag, "#2563eb", "AGENTS.md", X, Y, true));
         // legend
         sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
@@ -326,6 +395,13 @@ internal sealed class Liet
 
     private static string K(double v) => v >= 1000 ? $"{(v / 1000.0).ToString("0.#", Inv)}k" : v.ToString("0", Inv);
     private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
+    private static double NiceStep(double raw)                     // round axis step: 1/2/2.5/5 × 10ⁿ
+    {
+        if (raw <= 0 || double.IsNaN(raw)) return 1;
+        double mag = Math.Pow(10, Math.Floor(Math.Log10(raw))), norm = raw / mag;
+        double nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+        return nice * mag;
+    }
     private static string Signed(double v) => (v >= 0 ? "+" : "") + K(v);
     private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 

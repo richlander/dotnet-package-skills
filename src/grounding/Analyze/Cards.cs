@@ -23,13 +23,21 @@ internal sealed partial class Cards
     // ---- shared headline-metric spec (Python _METRICS) -------------------
 
     private static string RawSuccess(ArmAgg a) => $"{a.Succ}/{a.N}";
+    // The grounded primary is AGENTS.md or SKILL.md depending on the run (README is a separate
+    // secondary arm). A run is homogeneous, so label from the arms: all-skill → SKILL.md,
+    // any-skill (mixed, unusual) → generic, else AGENTS.md.
+    private static string DocLabel(IReadOnlyList<LoadedArm> arms) =>
+        arms.Count > 0 && arms.All(a => a.IsSkill) ? "SKILL.md"
+        : arms.Any(a => a.IsSkill) ? "grounding doc"
+        : "AGENTS.md";
+
     private static string RawFunc(ArmAgg a) => $"{a.Fp}/{a.Ft}";
     private static string RawCache(ArmAgg a) => $"{F0(a.Cache)} / {F0(a.NugetWeb)}";
     private static string RawToolSplit(ArmAgg a) => $"{F0(a.Web)}/{F0(a.Bash)}/{F0(a.Other)}";
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
-    private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * 100)}%";
+    private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * a.N)}/{a.N}";
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
     private static string RawToolTurnIet(ArmAgg a) => $"{F0(a.ToolTurnIetPct)}%";
     private static string RawToolCallTurns(ArmAgg a) => $"{F0(a.ToolTurns)} ({F0(a.ToolTurnPct)}%)";
@@ -39,11 +47,17 @@ internal sealed partial class Cards
     private static string DiffCache(ArmAgg n, ArmAgg o) => $"{F0(o.Cache)}/{F0(o.NugetWeb)}\u2192{F0(n.Cache)}/{F0(n.NugetWeb)}";
     private static string DiffToolSplit(ArmAgg n, ArmAgg o) =>
         $"{F0(o.Web)}/{F0(o.Bash)}/{F0(o.Other)}\u2192{F0(n.Web)}/{F0(n.Bash)}/{F0(n.Other)}";
-    private static string DiffIet(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Iet, o.Iet));
+    private static string DiffIet(ArmAgg n, ArmAgg o) => $"{K(o.Iet)}\u2192{K(n.Iet)} ({SignedPct(Pct(n.Iet, o.Iet))})";
+    // Grounding IET = the doc's carrying cost (baseline 0). Its "change" is expressed as a share of
+    // the baseline total so the three IET rows add up: Total% = Grounding% + Work%.
+    private static string RawGroundingIet(ArmAgg a) => F0(a.GroundingIet);
+    private static string DiffGroundingIet(ArmAgg n, ArmAgg o) => $"{K(o.GroundingIet)}\u2192{K(n.GroundingIet)} ({SignedPct(o.Iet > 0 ? (double)n.GroundingIet / o.Iet * 100 : 0)})";
+    private static string RawWorkIet(ArmAgg a) => F0(a.WorkIet);
+    private static string DiffWorkIet(ArmAgg n, ArmAgg o) => $"{K(o.WorkIet)}\u2192{K(n.WorkIet)} ({SignedPct(Pct(n.WorkIet, o.WorkIet))})";
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
     private static string DiffReadGrounding(ArmAgg n, ArmAgg o) =>
-        $"{F0(o.Activated * 100)}%\u2192{F0(n.Activated * 100)}%";
+        $"{F0(o.Activated * o.N)}/{o.N}\u2192{F0(n.Activated * n.N)}/{n.N}";
     private static string DiffToolTurnSecs(ArmAgg n, ArmAgg o) =>
         $"{F0(o.ToolTurnSecs)}\u2192{F0(n.ToolTurnSecs)}s ({F0(o.ToolTurnSecsPct)}\u2192{F0(n.ToolTurnSecsPct)}%)";
     private static string DiffToolTurnIet(ArmAgg n, ArmAgg o) =>
@@ -61,14 +75,15 @@ internal sealed partial class Cards
 
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
+        // Narrative headline (3 rows, same X/total format so the connection is obvious):
+        // (1) did the agent answer correctly, (2) did it rely on the grounding (tasks that
+        // invoked it), (3) did it fall back to archaeology instead.
         ("tasks correct (+)",                  RawSuccess, DiffSuccess),
+        ("relied on grounding: tasks (+)",     RawReadGrounding, DiffReadGrounding),
+        ("relied on archaeology, fallback: cache / nuget.org (-)", RawCache,  DiffCache),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
-        // Narrative: (1) all tool calls, (2) the subset (largely bash) that dug the nuget cache,
-        // (3) the grounding meant to mitigate that, (4) the evidence.
         ("tool calls: web / bash / other (context)", RawToolSplit, DiffToolSplit),
-        ("nuget archaeology: cache / nuget.org (-)", RawCache,  DiffCache),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
-        ("read grounding (%)",                 RawReadGrounding, DiffReadGrounding),
         ("output tok (% of IET) (-)",          RawOut,     DiffOut),
         ("tool-call turns (% of total) (-)",    RawToolCallTurns, DiffToolCallTurns),
         ("tool-turn secs (% of turn time) (-)", RawToolTurnSecs, DiffToolTurnSecs),
@@ -78,49 +93,49 @@ internal sealed partial class Cards
         // 216/216), so a separate cost row would just restate turns — dropped. `Session IET`
         // is the real token-weighted cost.
         ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
-        ("Session IET (-)",                    RawIet,     DiffIet),
+        ("Total IET (-)",                      RawIet,          DiffIet),
+        ("↳ Grounding IET (doc) (-)",          RawGroundingIet, DiffGroundingIet),
+        ("↳ Work IET (agent) (-)",             RawWorkIet,      DiffWorkIet),
     };
 
     // ---- grading (Python _grade) -----------------------------------------
 
-    // Verdict model: FAIL is the only correctness gate (grounding made the model answer
-    // fewer scenarios correctly). The rest — archaeology, web, IET, output, cost, judge —
-    // are SIGNALS that rank BETTER / NEUTRAL / WORSE; none of them flips the verdict alone.
+    // Verdict model — TWO ORTHOGONAL AXES (correctness is not the same question as efficiency):
+    //   1. EFFICACY GATE  → PASS / FAIL  — did the doc answer 100% of its tier correctly?
+    //      (the dotnet/skills philosophy: correct answers trump tokens; below 100% = unfinished.)
+    //   2. EFFICIENCY      → BETTER / NEUTRAL / WORSE — independent of the gate, rank the SIGNALS
+    //      (archaeology, work IET, output). A doc can FAIL the gate yet still be BETTER on
+    //      efficiency (e.g. haiku: more correct + cheaper, but not yet 100%) — the old single
+    //      verdict hid this by withholding the efficiency label whenever the gate failed.
+
+    // EFFICACY GATE: did the grounded arm answer 100% of its tier correctly?
+    private static string GateLabel(ArmAgg b, ArmAgg g) => g.Succ >= g.N ? "PASS" : "FAIL";
+
+    // EFFICIENCY: rank archaeology / work IET / output, independent of the gate.
+    private static string EffLabel(ArmAgg b, ArmAgg g)
+    {
+        var iet = Pct(g.WorkIet, b.WorkIet);   // WORK IET — doc carrying-cost netted out (the agent's effort)
+        var @out = Pct(g.Out, b.Out);
+        // WORSE: real IET/output inflation (a harm signal).
+        if (iet > IetHarmCapFrac * 100 || @out > OutInflateFrac * 100) return "WORSE";
+        // BETTER: eliminated archaeology, or materially cheaper (work IET), or more tasks correct.
+        if (g.Succ - b.Succ > 0 || -iet >= IetWinFrac * 100 || (b.Arch >= 0.5 && g.Arch < 0.5)) return "BETTER";
+        return "NEUTRAL";
+    }
+
     private static string Grade(ArmAgg b, ArmAgg g)
     {
-        var iet = Pct(g.Iet, b.Iet);   // session IET (full token-weighted cost, doc included)
-        var @out = Pct(g.Out, b.Out);
-        var dsucc = g.Succ - b.Succ;
-        double bArch = b.Arch, gArch = g.Arch;
+        var iet = Pct(g.WorkIet, b.WorkIet);
+        var gate = GateLabel(b, g);
+        var eff = EffLabel(b, g);
+        var gateWhy = gate == "PASS" ? "100% correct" : $"{g.Succ}/{g.N} correct{(g.Succ - b.Succ < 0 ? ", regressed vs baseline" : "")}";
         var tail = $"tasks correct {g.Succ}/{g.N} vs {b.Succ}/{b.N}, "
-                 + $"resourcefulness {F0(bArch)}\u2192{F0(gArch)}, IET {SignedPct(iet)}";
-
-        // FAIL: grounding regressed correctness — fewer scenarios answered correctly.
-        if (dsucc < 0)
-            return $"**FAIL** — fewer tasks correct ({tail})";
-
-        // WORSE: real IET/output inflation (a harm signal), not a stray web call. (Premium-request
-        // "cost" is 1:1 with turns, and IET is the token-weighted cost gate, so cost is not a
-        // separate axis.)
-        var worse = new List<string>();
-        if (iet > IetHarmCapFrac * 100) worse.Add($"IET +{F0(iet)}%");
-        if (@out > OutInflateFrac * 100) worse.Add($"output +{F0(@out)}%");
-        if (worse.Count > 0)
-            return $"**WORSE** — {string.Join(", ", worse)} ({tail})";
-
-        // BETTER: solved more, eliminated archaeology, or materially cheaper (IET).
-        if (dsucc > 0 || -iet >= IetWinFrac * 100 || (bArch >= 0.5 && gArch < 0.5))
-            return $"**BETTER** — {tail}";
-
-        return $"**NEUTRAL** — no material change ({tail})";
+                 + $"resourcefulness {F0(b.Arch)}\u2192{F0(g.Arch)}, work IET {SignedPct(iet)}";
+        return $"**{gate}** ({gateWhy}) / **{eff}** — {tail}";
     }
 
-    private static string GradeLabel(ArmAgg b, ArmAgg g)
-    {
-        var v = Grade(b, g);
-        var i = v.IndexOf("**", 2, StringComparison.Ordinal);
-        return v[2..i]; // FAIL | WORSE | NEUTRAL | BETTER
-    }
+    // Combined two-axis label for verdict cells, e.g. "PASS / BETTER" or "FAIL / BETTER".
+    private static string GradeLabel(ArmAgg b, ArmAgg g) => $"{GateLabel(b, g)} / {EffLabel(b, g)}";
 
     // ---- cards ------------------------------------------------------------
 
@@ -134,34 +149,49 @@ internal sealed partial class Cards
             _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
         var mpref = NoTitle ? $"`{a.Model}` | " : "";
         var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
-        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `AGENTS.md`{tokNote}. Judge `{a.Judge}`. IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
-        _o.WriteLine("| Metric (goal) | Baseline | AGENTS.md |");
+        var docLabel = a.IsSkill ? "SKILL.md" : "AGENTS.md";
+        _o.WriteLine($"_{mpref}Baseline (no grounding) vs `{docLabel}`{tokNote}. Judge `{a.Judge}`. IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
+        _o.WriteLine($"| Metric (goal) | Baseline | {docLabel} |");
         _o.WriteLine("| --- | ---: | ---: |");
         foreach (var (label, raw, _) in Spec)
-            _o.WriteLine($"| {label} | {raw(b)} | {raw(g)} |");
+        {
+            if (label.StartsWith("Total IET", StringComparison.Ordinal))
+                _o.WriteLine($"| {label} | {raw(b)} | {raw(g)} ({SignedPct(Pct(g.Iet, b.Iet))}) |");
+            else
+                _o.WriteLine($"| {label} | {raw(b)} | {raw(g)} |");
+        }
         _o.WriteLine($"\n> **Conclusion:** {Grade(b, g)}.");
     }
 
     public void Card(IReadOnlyList<string> files)
     {
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && !a.IsSkill)
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme)
             .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
         if (arms.Count == 0)
         {
-            _o.WriteLine("--card needs at least one AGENTS.md dataset (non-'readme'/'skill' path)."); return;
+            _o.WriteLine("--card needs at least one grounded dataset (AGENTS.md or SKILL.md; non-'readme' path)."); return;
         }
+        var docLabel = DocLabel(arms);
         var sn = arms[0].SkillName;
         var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
-        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `{docLabel}`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, raw, _) in Spec)
-            _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
+        {
+            // Total IET carries a per-arm % change (the bottom-line cost delta readers ask for first).
+            if (label.StartsWith("Total IET", StringComparison.Ordinal))
+                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a =>
+                    $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})")) + " |");
+            else
+                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
+        }
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
-        _o.WriteLine("\n_**FAIL** = fewer tasks correct; **BETTER** = more tasks correct / archaeology→0 / IET/cost cut ≥20%; "
-            + "**WORSE** = IET/cost/output inflated ≥20%; **NEUTRAL** = held. Archaeology, web, judge are signals, not gates._\n");
+        _o.WriteLine("\n_Two axes. **Gate** (correctness): **PASS** = 100% of tier correct, **FAIL** = below the gate. "
+            + "**Efficiency** (independent of the gate): **BETTER** = more tasks correct / archaeology→0 / work IET cut ≥20%; "
+            + "**WORSE** = work IET or output inflated ≥20%; **NEUTRAL** = held. A doc can FAIL the gate yet be BETTER on efficiency._\n");
         _o.WriteLine("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
             + "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
             + "**lower bound** and grounding's advantage is understated.\n");
@@ -169,16 +199,17 @@ internal sealed partial class Cards
 
     public void ModelDiff(IReadOnlyList<string> files)
     {
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && !a.IsSkill).ToList();
-        if (arms.Count == 0) { _o.WriteLine("model-diff needs at least one AGENTS.md dataset."); return; }
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme).ToList();
+        if (arms.Count == 0) { _o.WriteLine("model-diff needs at least one grounded dataset (AGENTS.md or SKILL.md)."); return; }
         arms = arms
             .OrderBy(a => a.Tier == "mini" ? 0 : 1)
             .ThenBy(a => a.Model, StringComparer.Ordinal)
             .ToList();
+        var docLabel = DocLabel(arms);
         var sn = arms[0].SkillName;
         if (!NoTitle)
-            _o.WriteLine($"### Model-diff — {sn} | AGENTS.md lift over baseline\n");
-        _o.WriteLine($"_Each cell: `AGENTS.md` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
+            _o.WriteLine($"### Model-diff — {sn} | {docLabel} lift over baseline\n");
+        _o.WriteLine($"_Each cell: `{docLabel}` change vs that model's own baseline (count Δ; before→after for archaeology; % for IET/output/cost, − = cheaper). Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
         foreach (var (label, _, diff) in Spec)
@@ -385,11 +416,11 @@ internal sealed partial class Cards
     {
         // Multiple models → the multi-model pivot (rows = metrics, columns = models). A single model
         // keeps the dense single-model card below.
-        var arms = files.Select(Loader.LoadArm).Where(x => !x.IsReadme && !x.IsSkill)
+        var arms = files.Select(Loader.LoadArm).Where(x => !x.IsReadme)
             .OrderBy(x => x.Tier == "mini" ? 0 : 1).ThenBy(x => x.Model, StringComparer.Ordinal).ToList();
         if (arms.Count == 0)
         {
-            _o.WriteLine("doc-card needs at least one AGENTS.md dataset (non-'readme'/'skill' path).");
+            _o.WriteLine("doc-card needs at least one grounded dataset (AGENTS.md or SKILL.md; non-'readme' path).");
             return;
         }
         if (arms.Count > 1)
@@ -412,15 +443,16 @@ internal sealed partial class Cards
             return;
         }
 
-        // Exactly one AGENTS arm (input may also include a README/SKILL dataset that sorts ahead of it).
+        // Exactly one grounded arm (input may also include a README/SKILL dataset that sorts ahead of it).
         var a = arms[0];
         var b = a.Agg["baseline"];
         var g = a.Agg[Arm];
         var card = QualityCard.Build(b, g, a.Iet, GradeLabel(b, g));
         var gtok = Loader.GroundingTokens(a.SkillPath, a.SkillName);
         var tokNote = gtok is { } t ? $" (~{t} tok, via grounding tool)" : "";
+        var docLabel = a.IsSkill ? "SKILL.md" : "AGENTS.md";
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {a.SkillName} | `{a.Model}`\n");
-        _o.WriteLine($"_Baseline (no grounding) → `AGENTS.md`{tokNote}. Judge `{a.Judge}`. "
+        _o.WriteLine($"_Baseline (no grounding) → `{docLabel}`{tokNote}. Judge `{a.Judge}`. "
             + $"IET model {IetModels.CaptionFor(new[] { a.Model })}. Means across scenarios._\n");
         _o.Write(MarkoutSerializer.Serialize(card, QualityCardContext.Default));
         _o.WriteLine($"\n> **Conclusion:** {Grade(b, g)}.");
@@ -447,8 +479,9 @@ internal sealed partial class Cards
         var sn = arms[0].SkillName;
         var gtok = Loader.GroundingTokens(arms[0].SkillPath, sn);
         var tokNote = gtok is { } t ? $" (~{t} tok)" : "";
+        var docLabel = DocLabel(arms);
         if (!NoTitle) _o.WriteLine($"### Grounding eval — {sn}\n");
-        _o.WriteLine($"_Each cell: baseline (no grounding) → `AGENTS.md`{tokNote}. Columns are models. "
+        _o.WriteLine($"_Each cell: baseline (no grounding) → `{docLabel}`{tokNote}. Columns are models. "
             + $"Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.Write(MarkoutSerializer.Serialize(card, MultiModelCardContext.Default));
         if (jsonl)
