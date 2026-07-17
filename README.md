@@ -5,6 +5,12 @@ use a specific package correctly — and to **measuring** whether that content a
 package carries a small **base skill** (named for the package) plus a handful of **domain skills**
 for its long-tail workflows; a root meta-skill orchestrates install and push-vs-pull delivery.
 
+The skills follow **Anthropic's [Agent Skills](https://www.anthropic.com/news/skills) convention** —
+a `SKILL.md` with YAML frontmatter (`name` + a "use when…" `description`) and progressive
+disclosure into supporting files — so any Skills-aware agent host can load them. They are meant to
+be **installed into a *consuming* repository** (the project that depends on the package), where the
+agent opts into them and can remove them — not packed into the `.nupkg` and forced on everyone.
+
 > **Status — pivoted to `SKILL.md`.** This project began as *package grounding* (an always-on
 > `AGENTS.md` packed in the `.nupkg`) and has since moved to authoring **`SKILL.md` skill sets** as
 > the shipped artifact. "Grounding" remains our word for the *technique and the measurement* —
