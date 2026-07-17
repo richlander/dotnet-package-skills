@@ -1,0 +1,6 @@
+{
+  "name": "system-text-json",
+  "version": "10.0.0",
+  "description": "System.Text.Json workflow skills: a compact base skill plus domain skills (newtonsoft-migration, source-generation-aot, converters-and-polymorphism, dom-and-streaming, dotnet-10-11-strictness). Install all together so an agent can pull whichever a task needs.",
+  "skills": ["."]
+}
