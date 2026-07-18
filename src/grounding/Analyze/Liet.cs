@@ -363,7 +363,7 @@ internal sealed class Liet
         // Footer stacks under the plot: circle legend, then a vertical bulleted skill list. Grow the
         // canvas to fit the list (variable count) instead of a single overflowing horizontal line.
         int footerBullets = skillLegend.Count;
-        int H = footerBullets > 0 ? 494 + footerBullets * 14 + 8 : 500;
+        int H = (footerBullets > 0 ? 494 + footerBullets * 14 + 8 : 500) + 24; // +24 for the Metrics row
         double maxIet = rungs.SelectMany(r => new[]
         {
             r.Base.Passed ? r.Base.Iet : 0, r.Ag.Passed ? r.Ag.Iet : 0,
@@ -381,8 +381,6 @@ internal sealed class Liet
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
         sb.Append($"  <rect width=\"{W}\" height=\"{H}\" fill=\"#ffffff\"/>\n");
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"30\" text-anchor=\"middle\" font-size=\"17\" font-weight=\"700\" fill=\"#0f172a\">LIET curve — {Esc(unit)} ({Esc(model)})</text>\n");
-        var sc = Score(rungs);
-        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"50\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"700\" fill=\"#0f172a\">correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}  \u00b7  shared-rung IET {PctStr(sc.sharedBaseIet, sc.sharedAgIet)}  \u00b7  archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls</text>\n");
         // axes
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{R}\" y2=\"{B}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{L}\" y2=\"{T}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
@@ -450,6 +448,7 @@ internal sealed class Liet
         sb.Append($"    <circle cx=\"290\" cy=\"{B + 82}\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"{B + 86}\">{Esc(docLabel.Replace(".md", ""))} under ceiling (pays its way)</text>\n");
         sb.Append($"    <text x=\"540\" y=\"{B + 86}\" font-style=\"italic\">failed rungs not plotted</text>\n");
         sb.Append("  </g>\n");
+        int metricsY = B + 108;
         if (skillLegend.Count > 0)
         {
             int hy = B + 104;
@@ -461,7 +460,11 @@ internal sealed class Liet
                 sb.Append($"    <text x=\"{L + 20}\" y=\"{hy + 14 + i * 14}\">\u2022 <tspan font-weight=\"700\">{Esc(l.id)}</tspan> = {Esc(l.name)} (\u00d7{l.count})</text>\n");
             }
             sb.Append("  </g>\n");
+            metricsY = hy + 14 + skillLegend.Count * 14 + 6;
         }
+        var sc = Score(rungs);
+        sb.Append($"  <text x=\"{L + 12}\" y=\"{metricsY}\" font-size=\"10.5\" fill=\"#334155\"><tspan font-weight=\"700\">Metrics:</tspan> "
+            + $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}  \u00b7  shared-rung IET {PctStr(sc.sharedBaseIet, sc.sharedAgIet)}  \u00b7  archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})</text>\n");
         sb.Append("</svg>\n");
         return sb.ToString();
     }
@@ -527,8 +530,6 @@ internal sealed class Liet
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
         sb.Append($"  <rect width=\"{W}\" height=\"{H}\" fill=\"#ffffff\"/>\n");
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"30\" text-anchor=\"middle\" font-size=\"17\" font-weight=\"700\" fill=\"#0f172a\">Archaeology — {Esc(unit)} ({Esc(model)})</text>\n");
-        var sc = Score(rungs);
-        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"49\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"700\" fill=\"#0f172a\">archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})  \u00b7  correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}</text>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{R}\" y2=\"{B}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{L}\" y2=\"{T}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         for (double gv = 0; gv <= maxArch + yStep * 0.01; gv += yStep)
@@ -555,7 +556,11 @@ internal sealed class Liet
         sb.Append($"    <circle cx=\"{L + 20}\" cy=\"{B + 62}\" r=\"3.8\" fill=\"#64748b\"/><text x=\"{L + 30}\" y=\"{B + 66}\">passed</text>\n");
         sb.Append($"    <circle cx=\"{L + 96}\" cy=\"{B + 62}\" r=\"3.8\" fill=\"#ffffff\" stroke=\"#64748b\" stroke-width=\"2\"/><text x=\"{L + 106}\" y=\"{B + 66}\">failed</text>\n");
         sb.Append($"    <text x=\"{L + 168}\" y=\"{B + 66}\"><tspan font-weight=\"700\" fill=\"#0891b2\">ⁿ</tspan> = skills pulled on the {Esc(docLabel.Replace(".md", ""))} line</text>\n");
-        sb.Append("  </g>\n</svg>\n");
+        sb.Append("  </g>\n");
+        var sc = Score(rungs);
+        sb.Append($"  <text x=\"{L + 20}\" y=\"{B + 86}\" font-size=\"10.5\" fill=\"#334155\"><tspan font-weight=\"700\">Metrics:</tspan> "
+            + $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})  \u00b7  correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}</text>\n");
+        sb.Append("</svg>\n");
         return sb.ToString();
     }
 
