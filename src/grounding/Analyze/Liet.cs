@@ -514,11 +514,11 @@ internal sealed class Liet
         var th = TargetHit(rungs);
         var metrics = new List<string>
         {
-            $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
-            $"IET per baseline-correct answer (floor {K(fm.floor)}, all 24 incl. waste): {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
-            $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})",
+            $"Correct answers: {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
+            $"LIET: {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
+            $"Archaeology operations: {N(sc.baseArch)}\u2192{N(sc.agArch)} ({PctStr(sc.baseArch, sc.agArch)})",
         };
-        if (th.total > 0) metrics.Add($"target-skill hit {th.hits}/{th.total} (expected skill was pulled)");
+        if (th.total > 0) metrics.Add($"Expected skill pulled: {th.hits}/{th.total}");
         sb.Append($"  <text x=\"{L + 12}\" y=\"{metricsY}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#334155\">Metrics:</text>\n");
         sb.Append("  <g font-size=\"9.5\" fill=\"#334155\">\n");
         for (int i = 0; i < metrics.Count; i++)
@@ -619,8 +619,8 @@ internal sealed class Liet
         var sc = Score(rungs);
         var metrics = new[]
         {
-            $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})",
-            $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
+            $"Archaeology operations: {N(sc.baseArch)}\u2192{N(sc.agArch)} ({PctStr(sc.baseArch, sc.agArch)})",
+            $"Correct answers: {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
         };
         sb.Append($"  <text x=\"{L + 20}\" y=\"{B + 86}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#334155\">Metrics:</text>\n");
         sb.Append("  <g font-size=\"9.5\" fill=\"#334155\">\n");
