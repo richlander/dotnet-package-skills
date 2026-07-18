@@ -214,6 +214,10 @@ internal sealed class Liet
             _o.WriteLine($"\n_Skills pulled (self-select from shelf): {leg}. "
                 + $"{legend.Count} distinct — all earn their place; a skill pulled ×0–1 is a deletion candidate._");
         }
+        var scr = Score(rungs);
+        _o.WriteLine($"\n**Score:** correct {scr.baseCorrect}→{scr.agCorrect}/{scr.total} · "
+            + $"shared-rung IET {PctStr(scr.sharedBaseIet, scr.sharedAgIet)} · "
+            + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}).");
         EmitScalars(rungs, ds);
         _o.WriteLine();
     }
@@ -354,7 +358,12 @@ internal sealed class Liet
     private static string BuildSvg(List<Rung> rungs, string unit, string model, string docLabel,
         Dictionary<string, string> skillIds)
     {
-        const int W = 760, H = 500, L = 100, R = 664, T = 64, B = 380; // plot box
+        const int W = 760, L = 100, R = 664, T = 64, B = 380; // plot box
+        var skillLegend = CardLegend(rungs, skillIds);
+        // Footer stacks under the plot: circle legend, then a vertical bulleted skill list. Grow the
+        // canvas to fit the list (variable count) instead of a single overflowing horizontal line.
+        int footerBullets = skillLegend.Count;
+        int H = footerBullets > 0 ? 494 + footerBullets * 14 + 8 : 500;
         double maxIet = rungs.SelectMany(r => new[]
         {
             r.Base.Passed ? r.Base.Iet : 0, r.Ag.Passed ? r.Ag.Iet : 0,
@@ -372,7 +381,8 @@ internal sealed class Liet
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
         sb.Append($"  <rect width=\"{W}\" height=\"{H}\" fill=\"#ffffff\"/>\n");
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"30\" text-anchor=\"middle\" font-size=\"17\" font-weight=\"700\" fill=\"#0f172a\">LIET curve — {Esc(unit)} ({Esc(model)})</text>\n");
-        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"49\" text-anchor=\"middle\" font-size=\"12\" fill=\"#64748b\">IET per correctly-answered rung. Failed rungs are not plotted; the ceiling is the max price to beat.</text>\n");
+        var sc = Score(rungs);
+        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"50\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"700\" fill=\"#0f172a\">correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}  \u00b7  shared-rung IET {PctStr(sc.sharedBaseIet, sc.sharedAgIet)}  \u00b7  archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls</text>\n");
         // axes
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{R}\" y2=\"{B}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{L}\" y2=\"{T}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
@@ -407,7 +417,6 @@ internal sealed class Liet
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(ShortRung(rungs[i].Name))}</text>\n");
         sb.Append("  </g>\n");
-        var skillLegend = CardLegend(rungs, skillIds);
         // ceilings on rungs where AGENTS failed (max price of generalization): a dashed ceiling
         // line with a green "pays its way" zone under it and a red "ship SKILL.md" zone over it.
         foreach (var r in rungs.Where(r => !r.Ag.Passed && r.Ceiling is not null))
@@ -433,15 +442,27 @@ internal sealed class Liet
                 if (cell != "—") sb.Append($"    <text x=\"{N(X(r.Index))}\" y=\"{N(Y(r.Ag.Iet) + 13)}\">{Esc(cell)}</text>\n");
             }
             sb.Append("  </g>\n");
-            var leg = string.Join(" \u00b7 ", skillLegend.Select(l => $"{l.id}={l.name}"));
-            sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"455\" text-anchor=\"middle\" font-size=\"8\" fill=\"#0891b2\">skills under each {Esc(docLabel.Replace(".md", ""))} dot — {Esc(leg)}</text>\n");
         }
-        // legend
+        // footer legend — circle legend row, then a vertical bulleted skill list beneath it so the
+        // long skill names never run off the canvas.
         sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
-        sb.Append($"    <circle cx=\"112\" cy=\"474\" r=\"4\" fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\"/><text x=\"122\" y=\"478\">{Esc(docLabel.Replace(".md", ""))} over ceiling (harm)</text>\n");
-        sb.Append($"    <circle cx=\"290\" cy=\"474\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"478\">{Esc(docLabel.Replace(".md", ""))} under ceiling (pays its way)</text>\n");
-        sb.Append($"    <text x=\"540\" y=\"478\" font-style=\"italic\">failed rungs not plotted</text>\n");
-        sb.Append("  </g>\n</svg>\n");
+        sb.Append($"    <circle cx=\"112\" cy=\"{B + 82}\" r=\"4\" fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\"/><text x=\"122\" y=\"{B + 86}\">{Esc(docLabel.Replace(".md", ""))} over ceiling (harm)</text>\n");
+        sb.Append($"    <circle cx=\"290\" cy=\"{B + 82}\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"{B + 86}\">{Esc(docLabel.Replace(".md", ""))} under ceiling (pays its way)</text>\n");
+        sb.Append($"    <text x=\"540\" y=\"{B + 86}\" font-style=\"italic\">failed rungs not plotted</text>\n");
+        sb.Append("  </g>\n");
+        if (skillLegend.Count > 0)
+        {
+            int hy = B + 104;
+            sb.Append($"  <text x=\"{L + 12}\" y=\"{hy}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#0891b2\">skills pulled (id under each {Esc(docLabel.Replace(".md", ""))} dot):</text>\n");
+            sb.Append("  <g font-size=\"9.5\" fill=\"#0891b2\">\n");
+            for (int i = 0; i < skillLegend.Count; i++)
+            {
+                var l = skillLegend[i];
+                sb.Append($"    <text x=\"{L + 20}\" y=\"{hy + 14 + i * 14}\">\u2022 <tspan font-weight=\"700\">{Esc(l.id)}</tspan> = {Esc(l.name)} (\u00d7{l.count})</text>\n");
+            }
+            sb.Append("  </g>\n");
+        }
+        sb.Append("</svg>\n");
         return sb.ToString();
     }
 
@@ -492,7 +513,7 @@ internal sealed class Liet
     // failure — digging happens either way), so the story is "grounding collapses archaeology to ~0".
     private static string BuildArchSvg(List<Rung> rungs, string unit, string model, string docLabel)
     {
-        const int W = 760, H = 460, L = 100, R = 664, T = 64, B = 380;
+        const int W = 760, H = 492, L = 100, R = 664, T = 64, B = 380;
         double maxArch = rungs.SelectMany(r => new[] { r.Base.Present ? r.Base.Arch : 0, r.Ag.Present ? r.Ag.Arch : 0 })
             .DefaultIfEmpty(1).Max();
         maxArch = Math.Max(maxArch, 1);
@@ -506,7 +527,8 @@ internal sealed class Liet
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
         sb.Append($"  <rect width=\"{W}\" height=\"{H}\" fill=\"#ffffff\"/>\n");
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"30\" text-anchor=\"middle\" font-size=\"17\" font-weight=\"700\" fill=\"#0f172a\">Archaeology — {Esc(unit)} ({Esc(model)})</text>\n");
-        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"49\" text-anchor=\"middle\" font-size=\"12\" fill=\"#64748b\">External digging (nuget cache + nuget.org + web tool calls) per rung — lower is better; grounding drives it toward 0.</text>\n");
+        var sc = Score(rungs);
+        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"49\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"700\" fill=\"#0f172a\">archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})  \u00b7  correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}</text>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{R}\" y2=\"{B}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         sb.Append($"  <line x1=\"{L}\" y1=\"{B}\" x2=\"{L}\" y2=\"{T}\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n");
         for (double gv = 0; gv <= maxArch + yStep * 0.01; gv += yStep)
@@ -522,30 +544,63 @@ internal sealed class Liet
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(ShortRung(rungs[i].Name))}</text>\n");
         sb.Append("  </g>\n");
         // series (every PRESENT arm, connected in rung order — archaeology is effort, not success)
-        sb.Append(ArchSeries(rungs, p => p.Base, "#dc2626", X, Y));
-        sb.Append(ArchSeries(rungs, p => p.Ag, "#2563eb", X, Y));
-        // arm legend + last-point labels
+        sb.Append(ArchSeries(rungs, p => p.Base, "#dc2626", false, X, Y));
+        sb.Append(ArchSeries(rungs, p => p.Ag, "#2563eb", true, X, Y));
+        // arm legend + marker key (open = failed the task, closed = passed; superscript = skills pulled)
         sb.Append("  <g font-size=\"11\" fill=\"#475569\">\n");
         sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 8}\" x2=\"{L + 34}\" y2=\"{T + 8}\" stroke=\"#dc2626\" stroke-width=\"2.5\"/><text x=\"{L + 40}\" y=\"{T + 12}\">baseline (archaeology only)</text>\n");
         sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 24}\" x2=\"{L + 34}\" y2=\"{T + 24}\" stroke=\"#2563eb\" stroke-width=\"2.5\"/><text x=\"{L + 40}\" y=\"{T + 28}\">{Esc(docLabel)}</text>\n");
+        sb.Append("  </g>\n");
+        sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
+        sb.Append($"    <circle cx=\"{L + 20}\" cy=\"{B + 62}\" r=\"3.8\" fill=\"#64748b\"/><text x=\"{L + 30}\" y=\"{B + 66}\">passed</text>\n");
+        sb.Append($"    <circle cx=\"{L + 96}\" cy=\"{B + 62}\" r=\"3.8\" fill=\"#ffffff\" stroke=\"#64748b\" stroke-width=\"2\"/><text x=\"{L + 106}\" y=\"{B + 66}\">failed</text>\n");
+        sb.Append($"    <text x=\"{L + 168}\" y=\"{B + 66}\"><tspan font-weight=\"700\" fill=\"#0891b2\">ⁿ</tspan> = skills pulled on the {Esc(docLabel.Replace(".md", ""))} line</text>\n");
         sb.Append("  </g>\n</svg>\n");
         return sb.ToString();
     }
 
-    private static string ArchSeries(List<Rung> rungs, Func<Rung, Point> sel, string color,
+    private static string ArchSeries(List<Rung> rungs, Func<Rung, Point> sel, string color, bool skilled,
         Func<int, double> X, Func<double, double> Y)
     {
-        var pts = rungs.Where(r => sel(r).Present).Select(r => (x: X(r.Index), y: Y(sel(r).Arch))).ToList();
-        if (pts.Count == 0) return "";
+        var pres = rungs.Where(r => sel(r).Present).ToList();
+        if (pres.Count == 0) return "";
         var sb = new StringBuilder();
-        sb.Append($"  <polyline points=\"{string.Join(" ", pts.Select(p => $"{N(p.x)},{N(p.y)}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2.5\"/>\n");
-        foreach (var p in pts) sb.Append($"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"3.5\" fill=\"{color}\"/>\n");
+        sb.Append($"  <polyline points=\"{string.Join(" ", pres.Select(r => $"{N(X(r.Index))},{N(Y(sel(r).Arch))}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2.5\"/>\n");
+        foreach (var r in pres)
+        {
+            double x = X(r.Index), y = Y(sel(r).Arch);
+            // open circle = this arm FAILED the task at this rung, closed = passed. Tells whether the
+            // digging paid off (baseline can dig a lot and still fail; SKILL can pass with ~0 digging).
+            sb.Append(sel(r).Passed
+                ? $"  <circle cx=\"{N(x)}\" cy=\"{N(y)}\" r=\"3.8\" fill=\"{color}\"/>\n"
+                : $"  <circle cx=\"{N(x)}\" cy=\"{N(y)}\" r=\"3.8\" fill=\"#ffffff\" stroke=\"{color}\" stroke-width=\"2\"/>\n");
+            // superscript on the SKILL line: how many skills it pulled here (how the grounded side wins).
+            if (skilled && r.Skills.Count > 0)
+                sb.Append($"  <text x=\"{N(x + 5)}\" y=\"{N(y - 5)}\" font-size=\"8\" font-weight=\"700\" fill=\"#0891b2\">{r.Skills.Count}</text>\n");
+        }
         return sb.ToString();
     }
 
     // ---- helpers --------------------------------------------------------------------------------
 
     private static string K(double v) => v >= 1000 ? $"{(v / 1000.0).ToString("0.#", Inv)}k" : v.ToString("0", Inv);
+    private static string PctStr(double from, double to)   // signed % change (− = fewer/cheaper)
+    {
+        if (from <= 0) return "n/a";
+        double p = (to - from) / from * 100;
+        if (Math.Round(p) == 0) return "0%";
+        return (p >= 0 ? "+" : "") + p.ToString("0", Inv) + "%";
+    }
+    // Headline score for a chart/table: correctness (baseline→grounded) + the chart's key metric.
+    private static (int baseCorrect, int agCorrect, int total, double baseArch, double agArch,
+        double sharedBaseIet, double sharedAgIet) Score(List<Rung> rungs)
+    {
+        var sh = rungs.Where(r => r.Base.Passed && r.Ag.Passed).ToList();
+        return (rungs.Count(r => r.Base.Passed), rungs.Count(r => r.Ag.Passed), rungs.Count,
+            rungs.Where(r => r.Base.Present).Sum(r => r.Base.Arch),
+            rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Arch),
+            sh.Sum(r => r.Base.Iet), sh.Sum(r => r.Ag.Iet));
+    }
     private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
     private static double NiceStep(double raw)                     // round axis step: 1/2/2.5/5 × 10ⁿ
     {
