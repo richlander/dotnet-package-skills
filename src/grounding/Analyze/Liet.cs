@@ -231,7 +231,49 @@ internal sealed class Liet
             + $"{K(fm.basePerCorrect)}→{K(fm.agPerCorrect)} (Δ {SignedK(fm.agPerCorrect - fm.basePerCorrect)}/answer) · "
             + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}){hit}.");
         EmitScalars(rungs, ds);
+        EmitInvestigate(rungs, ds);
         _o.WriteLine();
+    }
+
+    // Ranked worklist of rungs where the grounded arm is WORSE than baseline, so a skill author knows
+    // exactly where to look and in what order. Primary signal = archaeology (the skill was supposed to
+    // delete external digging; a positive delta means it dug MORE despite the skill). Correctness
+    // regressions (baseline ✓, grounded ✗) always surface, and per-rung IET Δ is shown for context.
+    private void EmitInvestigate(List<Rung> rungs, string ds)
+    {
+        var rows = rungs
+            .Select(r => new
+            {
+                r.Name,
+                ArchDelta = r.Ag.Arch - r.Base.Arch,          // + = grounded dug more (worse)
+                r.Base, r.Ag,
+                Regression = r.Base.Passed && !r.Ag.Passed,   // baseline answered, grounded did not
+                IetDelta = r.Base.Passed && r.Ag.Passed ? r.Ag.Iet - r.Base.Iet : (double?)null,
+            })
+            // Worth investigating: dug more than baseline, OR a correctness regression. Exclude
+            // UNLOCKS (baseline ✗, grounded ✓) — the skill answered where baseline couldn't, so a
+            // little extra digging there is the skill doing BETTER, not worse.
+            .Where(x => (x.ArchDelta > 0.05 || x.Regression) && !(!x.Base.Passed && x.Ag.Passed))
+            // Regressions first, then by how much MORE the grounded arm dug (largest gap on top).
+            .OrderByDescending(x => x.Regression)
+            .ThenByDescending(x => x.ArchDelta)
+            .ToList();
+        if (rows.Count == 0) return;
+
+        _o.WriteLine($"\n**Investigate** ({ds} worse than baseline — ranked by archaeology gap; regressions first):");
+        _o.WriteLine("\n| # | rung | correctness | archaeology (base→{0}) | Δ arch | Δ IET |".Replace("{0}", ds));
+        _o.WriteLine("| --- | --- | --- | ---: | ---: | ---: |");
+        int i = 1;
+        foreach (var x in rows)
+        {
+            var correctness = x.Regression ? "**regression** (base ✓, ✗)"
+                : !x.Ag.Passed ? "both ✗"
+                : !x.Base.Passed ? "unlock (base ✗, ✓)"
+                : "both ✓";
+            var idelta = x.IetDelta is { } id ? SignedK(id) : "—";
+            _o.WriteLine($"| {i++} | {x.Name} | {correctness} | {N(x.Base.Arch)}→{N(x.Ag.Arch)} "
+                + $"| {(x.ArchDelta > 0.05 ? "+" + N(x.ArchDelta) : "—")} | {idelta} |");
+        }
     }
 
     // Global skill-id map: `M` = base skill, domain skills alphabetical → 1..N over the union of ALL
