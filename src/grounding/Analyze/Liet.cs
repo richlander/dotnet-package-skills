@@ -215,8 +215,10 @@ internal sealed class Liet
                 + $"{legend.Count} distinct — all earn their place; a skill pulled ×0–1 is a deletion candidate._");
         }
         var scr = Score(rungs);
+        var fm = FloorMetric(rungs);
         _o.WriteLine($"\n**Score:** correct {scr.baseCorrect}→{scr.agCorrect}/{scr.total} · "
-            + $"shared-rung IET {PctStr(scr.sharedBaseIet, scr.sharedAgIet)} · "
+            + $"IET per baseline-correct answer (over floor {K(fm.floor)}, all 24 incl. waste) "
+            + $"{K(fm.basePerCorrect)}→{K(fm.agPerCorrect)} (Δ {SignedK(fm.agPerCorrect - fm.basePerCorrect)}/answer) · "
             + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}).");
         EmitScalars(rungs, ds);
         _o.WriteLine();
@@ -464,10 +466,11 @@ internal sealed class Liet
             metricsY = hy + 14 + skillLegend.Count * 14 + 6;
         }
         var sc = Score(rungs);
+        var fm = FloorMetric(rungs);
         var metrics = new[]
         {
             $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
-            $"shared-rung IET {PctStr(sc.sharedBaseIet, sc.sharedAgIet)}",
+            $"IET per baseline-correct answer (floor {K(fm.floor)}, all 24 incl. waste): {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
             $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})",
         };
         sb.Append($"  <text x=\"{L + 12}\" y=\"{metricsY}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#334155\">Metrics:</text>\n");
@@ -606,7 +609,7 @@ internal sealed class Liet
 
     // ---- helpers --------------------------------------------------------------------------------
 
-    private static string K(double v) => v >= 1000 ? $"{(v / 1000.0).ToString("0.#", Inv)}k" : v.ToString("0", Inv);
+    private static string K(double v) => Math.Abs(v) >= 1000 ? $"{(v / 1000.0).ToString("0.#", Inv)}k" : v.ToString("0", Inv);
     private static string PctStr(double from, double to)   // signed % change (− = fewer/cheaper)
     {
         if (from <= 0) return "n/a";
@@ -624,7 +627,26 @@ internal sealed class Liet
             rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Arch),
             sh.Sum(r => r.Base.Iet), sh.Sum(r => r.Ag.Iet));
     }
+    // Floor-anchored efficiency: one COMMON floor F = mean levelized IET of the baseline's CORRECT
+    // basics (CT01–06). Both arms are charged their total IET-over-F across ALL 24 tasks (including
+    // wasted IET on tasks they FAILED — this penalizes hedging), then normalized by a FIXED
+    // denominator = the baseline's correct count (so a skill can't dilute its cost by unlocking cheap
+    // tasks). Returns per-correct-baseline-answer premium for each arm. Precedent: cost-per-successful
+    // -outcome / cost-effectiveness ratio (cost per approved drug incl. failures; cost per acquisition).
+    private static bool IsBasic(Rung r) =>
+        int.TryParse(new string(r.Name.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray()),
+            out var n) && n >= 1 && n <= 6;
+    private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs)
+    {
+        var basePassedBasics = rungs.Where(r => IsBasic(r) && r.Base.Passed).Select(r => r.Base.Iet).ToList();
+        double f = basePassedBasics.Count > 0 ? basePassedBasics.Average() : 0;
+        int nBase = rungs.Count(r => r.Base.Passed);
+        double baseTotal = rungs.Where(r => r.Base.Present).Sum(r => r.Base.Iet - f);
+        double agTotal = rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Iet - f);
+        return (f, nBase, nBase > 0 ? baseTotal / nBase : 0, nBase > 0 ? agTotal / nBase : 0);
+    }
     private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
+    private static string SignedK(double v) => (v >= 0 ? "+" : "−") + K(Math.Abs(v));  // signed IET delta
     private static double NiceStep(double raw)                     // round axis step: 1/2/2.5/5 × 10ⁿ
     {
         if (raw <= 0 || double.IsNaN(raw)) return 1;
