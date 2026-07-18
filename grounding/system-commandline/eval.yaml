@@ -1,0 +1,630 @@
+config:
+  max_parallel_scenarios: 1
+
+# =============================================================================
+# System.CommandLine — CT-24. A grounding packet for the CURRENT GA / 3.x API
+# (System.CommandLine 3.0.0-preview.5, net10.0). The 2.0 GA release was a
+# breaking redesign that REMOVED the beta invocation/binding stack (SetHandler,
+# AddOption/AddCommand/AddGlobalOption, BinderBase<T>, IConsole, HelpBuilder,
+# getDefaultValue:, IsRequired, ExistingOnly). Training data and the open web are
+# dominated by that removed beta API, so an ungrounded agent tends to write code
+# that DOES NOT COMPILE against GA/3.x. HYPOTHESIS: grounding's value here is high
+# even for basic tasks (C01-C12) because the frontier's default reflexes are the
+# removed beta stack; the tail (C13-C24) adds real migrations, custom
+# parsers/validators/help, and the 3.x additions (CaptureRemainingTokens, the
+# AcceptOnlyFromAmong(StringComparer,...) overload, RootCommand.HelpName). Web is
+# blocked so the eval reads model + skill knowledge, not archaeology. Every API
+# shape, error message, and exit code below was verified by building and running
+# against System.CommandLine 3.0.0-preview.5.26302.115 on net10.0.
+# =============================================================================
+
+scenarios:
+  - name: "C01: parse an option and run an action"
+    prompt: |
+      In Program.cs, build a System.CommandLine app with a `--name` option. Wire an
+      action that reads the option value and prints `Hello, <name>!`. Parse the
+      incoming args and invoke. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c01-greeter/App.csproj }
+        - { path: Program.cs, source: fixtures/c01-greeter/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --name Ada"
+        expected_exit_code: 0
+        expected_std_output_matches: 'Hello, Ada!'
+        command_timeout: 120
+    rubric:
+      - "Uses SetAction (not the removed SetHandler) and reads the value via parseResult.GetValue(option)"
+      - "Runs via Parse(args).Invoke()/InvokeAsync() — not the removed Invoke(args) overload"
+    timeout: 900
+
+  - name: "C02: option with a default value"
+    prompt: |
+      In Program.cs, add a `--count` option that defaults to 3 when it is not supplied
+      on the command line, and print `count=<count>`. Running with no arguments must
+      print `count=3`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c02-default/App.csproj }
+        - { path: Program.cs, source: fixtures/c02-default/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'count=3'
+        command_timeout: 120
+    rubric:
+      - "Sets the default with DefaultValueFactory = _ => 3 (not the removed getDefaultValue: ctor arg or SetDefaultValue)"
+    timeout: 900
+
+  - name: "C03: a required option"
+    prompt: |
+      In Program.cs, add a required `--city` option. When `--city` is missing the app
+      must fail with a non-zero exit code and an error. When it is provided, print
+      `city=<city>`. Build and run to confirm both paths.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c03-required/App.csproj }
+        - { path: Program.cs, source: fixtures/c03-required/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --city Rome"
+        expected_exit_code: 0
+        expected_std_output_matches: 'city=Rome'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 1
+        expected_std_error_matches: 'is required'
+        command_timeout: 120
+    rubric:
+      - "Marks the option Required = true (not the removed IsRequired)"
+      - "Missing required input yields a non-zero exit code via the parser, not a thrown exception"
+    timeout: 900
+
+  - name: "C04: option alias and description"
+    prompt: |
+      In Program.cs, add an `--output` option with the alias `-o` and the help
+      description `Destination directory`. Print `out=<output>`. Both `--output` and
+      `-o` must work, and the description must appear in `--help`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c04-alias-desc/App.csproj }
+        - { path: Program.cs, source: fixtures/c04-alias-desc/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- -o dist"
+        expected_exit_code: 0
+        expected_std_output_matches: 'out=dist'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_contains: "Destination directory"
+        command_timeout: 120
+    rubric:
+      - "Puts the description in { Description = ... } — NOT as the 2nd positional ctor arg (which is an alias)"
+      - "Registers -o as a real alias so it resolves to the same option"
+    timeout: 900
+
+  - name: "C05: a positional argument"
+    prompt: |
+      In Program.cs, add a positional argument named `path` and print `path=<path>`.
+      Running with `foo.txt` should print `path=foo.txt`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c05-argument/App.csproj }
+        - { path: Program.cs, source: fixtures/c05-argument/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- foo.txt"
+        expected_exit_code: 0
+        expected_std_output_matches: 'path=foo\.txt'
+        command_timeout: 120
+    rubric:
+      - "Uses Argument<T> added via Arguments.Add and read by identity with parseResult.GetValue"
+    timeout: 900
+
+  - name: "C06: typed integer options"
+    prompt: |
+      In Program.cs, add integer options `--left` and `--right` and print
+      `sum=<left+right>`. Running `--left 2 --right 3` should print `sum=5`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c06-int-option/App.csproj }
+        - { path: Program.cs, source: fixtures/c06-int-option/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --left 2 --right 3"
+        expected_exit_code: 0
+        expected_std_output_matches: 'sum=5'
+        command_timeout: 120
+    rubric:
+      - "Uses Option<int> and reads the typed values by identity"
+    timeout: 900
+
+  - name: "C07: a subcommand"
+    prompt: |
+      In Program.cs, create a `greet` subcommand with a `--name` option whose action
+      prints `Hello <name>`. Running `greet --name Zoe` should print `Hello Zoe`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c07-subcommand/App.csproj }
+        - { path: Program.cs, source: fixtures/c07-subcommand/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- greet --name Zoe"
+        expected_exit_code: 0
+        expected_std_output_matches: 'Hello Zoe'
+        command_timeout: 120
+    rubric:
+      - "Adds the subcommand via Subcommands.Add (not the removed AddCommand)"
+      - "The subcommand carries its own SetAction"
+    timeout: 900
+
+  - name: "C08: two subcommands with distinct actions"
+    prompt: |
+      In Program.cs, create two subcommands: `add <item>` prints `added <item>`, and
+      `list` prints `listing`. Running `add 5` should print `added 5`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c08-two-subcommands/App.csproj }
+        - { path: Program.cs, source: fixtures/c08-two-subcommands/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- add 5"
+        expected_exit_code: 0
+        expected_std_output_matches: 'added 5'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- list"
+        expected_exit_code: 0
+        expected_std_output_matches: 'listing'
+        command_timeout: 120
+    rubric:
+      - "Each subcommand added via Subcommands.Add with its own action and argument"
+    timeout: 900
+
+  - name: "C09: a global (recursive) option"
+    prompt: |
+      In Program.cs, add a global boolean `--verbose` option on the root command that a
+      `run` subcommand can read. Running `run --verbose` should print `verbose=True`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c09-recursive-option/App.csproj }
+        - { path: Program.cs, source: fixtures/c09-recursive-option/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- run --verbose"
+        expected_exit_code: 0
+        expected_std_output_matches: 'verbose=True'
+        command_timeout: 120
+    rubric:
+      - "Sets option.Recursive = true then adds it once (replaces the removed AddGlobalOption)"
+      - "The descendant reads it from its own ParseResult by identity"
+    timeout: 900
+
+  - name: "C10: constrained option values"
+    prompt: |
+      In Program.cs, add a `--level` option constrained to exactly one of `debug`,
+      `info`, or `warn`. A valid value prints `level=<level>`; an invalid value must
+      fail with a non-zero exit code. Build and run to confirm both paths.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c10-constrained/App.csproj }
+        - { path: Program.cs, source: fixtures/c10-constrained/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --level info"
+        expected_exit_code: 0
+        expected_std_output_matches: 'level=info'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --level bogus"
+        expected_exit_code: 1
+        expected_std_error_matches: 'not recognized'
+        command_timeout: 120
+    rubric:
+      - "Uses AcceptOnlyFromAmong(\"debug\", \"info\", \"warn\")"
+      - "Invalid input fails at parse time with a non-zero exit code, not a thrown exception"
+    timeout: 900
+
+  - name: "C11: an option supplied multiple times"
+    prompt: |
+      In Program.cs, add a `--tag` option that may be supplied multiple times,
+      collecting all values. Running `--tag a --tag b` should print `tags=a,b`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c11-multiple-values/App.csproj }
+        - { path: Program.cs, source: fixtures/c11-multiple-values/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --tag a --tag b"
+        expected_exit_code: 0
+        expected_std_output_matches: 'tags=a,b'
+        command_timeout: 120
+    rubric:
+      - "Uses Option<string[]> (or List<string>) to collect repeated values"
+    timeout: 900
+
+  - name: "C12: an asynchronous action"
+    prompt: |
+      In Program.cs, wire an asynchronous action. Add a `--url` option, asynchronously
+      `fetch` it (await something), and print `fetched <url>`. Use the async action
+      signature and async invocation. Running `--url x` should print `fetched x`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c12-async/App.csproj }
+        - { path: Program.cs, source: fixtures/c12-async/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --url x"
+        expected_exit_code: 0
+        expected_std_output_matches: 'fetched x'
+        command_timeout: 120
+    rubric:
+      - "Uses SetAction(async (parseResult, cancellationToken) => ...) and Parse(args).InvokeAsync()"
+    timeout: 900
+
+  - name: "C13: migrate a beta greeter to GA/3.x"
+    prompt: |
+      Program.cs is a System.CommandLine 2.0.0-beta program that does NOT compile against
+      the current GA / 3.x API. Migrate it so it builds and runs, preserving behavior:
+      running `--name Ada` must print `Hello, Ada!`. Do not use the removed beta
+      invocation/binding stack. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c13-migrate-greeter/App.csproj }
+        - { path: Program.cs, source: fixtures/c13-migrate-greeter/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --name Ada"
+        expected_exit_code: 0
+        expected_std_output_matches: 'Hello, Ada!'
+        command_timeout: 120
+    rubric:
+      - "AddOption -> Options.Add; SetHandler -> SetAction; InvokeAsync(args) -> Parse(args).InvokeAsync()"
+      - "getDefaultValue: -> DefaultValueFactory; IsRequired -> Required; description ctor arg -> { Description = ... }"
+    timeout: 900
+
+  - name: "C14: a file argument that must exist"
+    prompt: |
+      In Program.cs, add a positional `FileInfo` argument named `path` that must be an
+      existing file. When it exists, print `read <name>` (the file's name). A missing
+      file must fail with a non-zero exit code. A file named `data.txt` is present.
+      Build and run to confirm both paths.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c14-file-arg/App.csproj }
+        - { path: Program.cs, source: fixtures/c14-file-arg/Program.cs }
+        - { path: data.txt, source: fixtures/c14-file-arg/data.txt }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- data.txt"
+        expected_exit_code: 0
+        expected_std_output_matches: 'read data\.txt'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- missing.txt"
+        expected_exit_code: 1
+        expected_std_error_matches: 'does not exist'
+        command_timeout: 120
+    rubric:
+      - "Uses AcceptExistingOnly() (not the removed ExistingOnly()) on the FileInfo argument"
+    timeout: 900
+
+  - name: "C15: a custom parser with error reporting"
+    prompt: |
+      In Program.cs, add a `--port` integer option with a custom parser that accepts
+      only values in 1..65535. A valid value prints `port=<port>`. An invalid value
+      (e.g. 99999) must report an error and exit with a non-zero code — do not throw.
+      Build and run to confirm both paths.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c15-custom-parser/App.csproj }
+        - { path: Program.cs, source: fixtures/c15-custom-parser/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --port 8080"
+        expected_exit_code: 0
+        expected_std_output_matches: 'port=8080'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --port 99999"
+        expected_exit_code: 1
+        command_timeout: 120
+    rubric:
+      - "Uses CustomParser and reports bad input with result.AddError(...) (does not throw)"
+    timeout: 900
+
+  - name: "C16: a cross-cutting validator"
+    prompt: |
+      In Program.cs, add integer options `--min` and `--max`. Use a validator so that if
+      `max` is less than or equal to `min` the app fails with a non-zero exit code and an
+      error mentioning `max`; otherwise print `range ok`. Build and run to confirm both paths.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c16-validator/App.csproj }
+        - { path: Program.cs, source: fixtures/c16-validator/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --min 1 --max 5"
+        expected_exit_code: 0
+        expected_std_output_matches: 'range ok'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --min 9 --max 2"
+        expected_exit_code: 1
+        expected_std_error_matches: 'max'
+        command_timeout: 120
+    rubric:
+      - "Adds validation via Validators.Add and reports with result.AddError(...)"
+    timeout: 900
+
+  - name: "C17: inspect parse errors before invoking"
+    prompt: |
+      In Program.cs, add a required `--name` option. Parse the args first; if there are
+      parse errors, print each error message to standard error and return 1 BEFORE
+      invoking. Otherwise print `hi <name>`. Build and run to confirm both paths.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c17-parse-errors/App.csproj }
+        - { path: Program.cs, source: fixtures/c17-parse-errors/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --name Al"
+        expected_exit_code: 0
+        expected_std_output_matches: 'hi Al'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 1
+        expected_std_error_matches: 'is required'
+        command_timeout: 120
+    rubric:
+      - "Calls Parse(args), checks ParseResult.Errors, prints Error.Message to stderr, returns 1 before InvokeAsync"
+    timeout: 900
+
+  - name: "C18: customize --help with a banner"
+    prompt: |
+      In Program.cs, customize `--help` so it prints the banner line `acme-tool` above
+      the default help output, while still showing the default help below the banner.
+      Swap the built-in help option's action. Running `--help` must show both `acme-tool`
+      and the usual usage text. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c18-custom-help/App.csproj }
+        - { path: Program.cs, source: fixtures/c18-custom-help/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_contains: "acme-tool"
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_contains: "Usage"
+        command_timeout: 120
+    rubric:
+      - "Replaces HelpOption.Action with a SynchronousCommandLineAction that prints the banner then calls the inner action"
+      - "Uses the correct namespaces (System.CommandLine.Invocation, System.CommandLine.Help)"
+    timeout: 900
+
+  - name: "C19: capture all remaining tokens (3.x)"
+    prompt: |
+      In Program.cs, create a `run` subcommand whose positional string-array argument
+      captures ALL remaining tokens, and print `forwarded=<comma-joined>`. Running
+      `run -- --any thing` should print `forwarded=--any,thing`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c19-capture-remaining/App.csproj }
+        - { path: Program.cs, source: fixtures/c19-capture-remaining/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- run -- --any thing"
+        expected_exit_code: 0
+        expected_std_output_matches: 'forwarded=--any,thing'
+        command_timeout: 120
+    rubric:
+      - "Uses Argument<string[]> { CaptureRemainingTokens = true } (a 3.x addition)"
+    timeout: 900
+
+  - name: "C20: case-insensitive constrained values (3.x)"
+    prompt: |
+      In Program.cs, add a `--level` option constrained to `debug`, `info`, or `warn`,
+      but matched CASE-INSENSITIVELY. Running `--level INFO` must be accepted and print
+      `level=INFO`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c20-ci-constrained/App.csproj }
+        - { path: Program.cs, source: fixtures/c20-ci-constrained/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --level INFO"
+        expected_exit_code: 0
+        expected_std_output_matches: 'level=INFO'
+        command_timeout: 120
+    rubric:
+      - "Uses AcceptOnlyFromAmong(StringComparer.OrdinalIgnoreCase, ...) — the 3.x comparer overload"
+    timeout: 900
+
+  - name: "C21: custom program name in help (3.x)"
+    prompt: |
+      In Program.cs, set the program name shown in the `--help` usage output to `acme`
+      (not the assembly name). Running `--help` should show `acme` in the Usage line.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c21-helpname/App.csproj }
+        - { path: Program.cs, source: fixtures/c21-helpname/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- --help"
+        expected_exit_code: 0
+        expected_std_output_matches: 'Usage:[\s\S]*\bacme\b'
+        command_timeout: 120
+    rubric:
+      - "Sets RootCommand.HelpName = \"acme\" (a 3.x addition)"
+    timeout: 900
+
+  - name: "C22: nested subcommands with a recursive option"
+    prompt: |
+      In Program.cs, build nested subcommands: root -> `db` -> `migrate`. Add a recursive
+      `--verbose` option on the root. Running `db migrate --verbose` should print
+      `migrate verbose=True`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c22-nested-recursive/App.csproj }
+        - { path: Program.cs, source: fixtures/c22-nested-recursive/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- db migrate --verbose"
+        expected_exit_code: 0
+        expected_std_output_matches: 'migrate verbose=True'
+        command_timeout: 120
+    rubric:
+      - "Nests commands with Subcommands.Add at two levels; --verbose is Recursive and read at the leaf"
+    timeout: 900
+
+  - name: "C23: migrate a beta subcommand program to GA/3.x"
+    prompt: |
+      Program.cs is a System.CommandLine 2.0.0-beta program (subcommands + a global
+      option) that does NOT compile against the current GA / 3.x API. Migrate it so it
+      builds and runs, preserving behavior: running `add 3` must print `added 3`. Remove
+      the beta invocation/binding stack. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c23-migrate-subcommands/App.csproj }
+        - { path: Program.cs, source: fixtures/c23-migrate-subcommands/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- add 3"
+        expected_exit_code: 0
+        expected_std_output_matches: 'added 3'
+        command_timeout: 120
+    rubric:
+      - "AddArgument -> Arguments.Add; AddCommand -> Subcommands.Add; AddGlobalOption -> Recursive = true + Options.Add"
+      - "SetHandler -> SetAction reading values by identity; InvokeAsync(args) -> Parse(args).InvokeAsync()"
+    timeout: 900
+
+  - name: "C24: capstone — a deploy command"
+    prompt: |
+      In Program.cs, build a `deploy` subcommand with: a required `--env` option
+      constrained to `dev` or `prod`; a `--replicas` integer option defaulting to 1; and
+      an asynchronous action that prints `deploy env=<env> replicas=<replicas>`. Running
+      `deploy --env prod --replicas 3` prints `deploy env=prod replicas=3`; running
+      `deploy` with no `--env` must fail with a non-zero exit code. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/c24-capstone/App.csproj }
+        - { path: Program.cs, source: fixtures/c24-capstone/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- deploy --env prod --replicas 3"
+        expected_exit_code: 0
+        expected_std_output_matches: 'deploy env=prod replicas=3'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- deploy --env prod"
+        expected_exit_code: 0
+        expected_std_output_matches: 'deploy env=prod replicas=1'
+        command_timeout: 120
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build -- deploy"
+        expected_exit_code: 1
+        expected_std_error_matches: 'is required'
+        command_timeout: 120
+    rubric:
+      - "Combines Required + AcceptOnlyFromAmong + DefaultValueFactory on a subcommand with an async action"
+      - "Uses only the current GA/3.x API (no SetHandler/AddOption/getDefaultValue:/IsRequired)"
+    timeout: 900

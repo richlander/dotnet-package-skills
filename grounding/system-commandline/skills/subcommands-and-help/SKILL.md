@@ -46,9 +46,14 @@ return await root.Parse(args).InvokeAsync();
 
 `HelpBuilder`/`IConsole` are gone. The help option exposes an `Action`; wrap or replace it with a
 `SynchronousCommandLineAction`. To augment (not replace) default help, capture the existing action and
-call it, then write extra content:
+call it, then write extra content. These help types live in **sub-namespaces**, so add the usings:
+`CommandLineAction`/`SynchronousCommandLineAction` are in `System.CommandLine.Invocation` and
+`HelpOption` is in `System.CommandLine.Help`.
 
 ```csharp
+using System.CommandLine.Invocation;   // CommandLineAction, SynchronousCommandLineAction
+using System.CommandLine.Help;         // HelpOption
+
 sealed class BannerHelpAction : SynchronousCommandLineAction
 {
     readonly CommandLineAction _inner;

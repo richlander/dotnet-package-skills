@@ -1,0 +1,1086 @@
+config:
+  max_parallel_scenarios: 1
+
+# =============================================================================
+# System.Text.Json — MM-12. A medium-major grounding packet covering the durable
+# STJ migration traps documented in AGENTS.md: case-sensitive deserialization,
+# ignored fields, comments/trailing commas, null omission, indentation, custom
+# names, naming policies, enum strings, reference cycles, and source-generation
+# for AOT-safe serialization. HYPOTHESIS: J1/J3-J11 are mostly model-resident
+# greenfield tasks where grounding should be neutral/no-harm; J2 and especially
+# J12 measure documented silent Newtonsoft->STJ breaks that compile cleanly but
+# produce wrong data unless the agent uses the grounding guidance. Web is blocked
+# so the eval reads model+repo grounding knowledge, not archaeology. All anchors
+# were verified against the net10.0 target with the login dotnet SDK.
+# =============================================================================
+
+scenarios:
+  - name: "J1: round-trip a record with System.Text.Json"
+    prompt: |
+      In Program.cs, create a `WeatherReport` record with `City` and `TemperatureF`,
+      serialize an instance for Seattle at 72F with System.Text.Json, deserialize it
+      back, and print `city=<City> temp=<TemperatureF>` from the deserialized value.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j1-roundtrip/App.csproj }
+        - { path: Program.cs, source: fixtures/j1-roundtrip/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'city=Seattle\s+temp=72'
+        command_timeout: 120
+    rubric:
+      - "Uses System.Text.Json.JsonSerializer.Serialize and Deserialize<T>"
+      - "Proves the round trip by printing values from the deserialized record"
+    timeout: 900
+
+  - name: "J2: deserialize camelCase JSON into PascalCase properties"
+    prompt: |
+      In Program.cs, deserialize this JSON into a `WorkItem` class with PascalCase
+      properties `Title` and `Priority`: `{"title":"Refactor","priority":5}`.
+      System.Text.Json is case-sensitive by default, so opt into case-insensitive
+      matching (or web defaults). Print `title=<Title> priority=<Priority>`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j2-case-insensitive/App.csproj }
+        - { path: Program.cs, source: fixtures/j2-case-insensitive/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'title=Refactor\s+priority=5'
+        command_timeout: 120
+    rubric:
+      - "Uses PropertyNameCaseInsensitive = true or JsonSerializerDefaults.Web"
+      - "Does not silently accept default/null values from case-sensitive deserialization"
+    timeout: 900
+
+  - name: "J3: write indented JSON"
+    prompt: |
+      In Program.cs, serialize a `Report` record with `Name = "Build"` and
+      `Passed = true` as human-readable indented JSON, then print the JSON.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j3-indented/App.csproj }
+        - { path: Program.cs, source: fixtures/j3-indented/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*\"Name\": \"Build\")(?=[\s\S]*\"Passed\": true)'
+        command_timeout: 120
+    rubric:
+      - "Configures JsonSerializerOptions.WriteIndented = true"
+      - "Serializes and prints JSON containing both Report properties"
+    timeout: 900
+
+  - name: "J4: omit null properties when writing JSON"
+    prompt: |
+      In Program.cs, serialize a person with `Name = "Ada"`, `Nickname = null`, and
+      `City = "London"`. Omit null-valued properties so the output contains Name and
+      City but not Nickname. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j4-omit-nulls/App.csproj }
+        - { path: Program.cs, source: fixtures/j4-omit-nulls/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '^(?![\s\S]*\"Nickname\")(?=[\s\S]*\"Name\":\s*\"Ada\")(?=[\s\S]*\"City\":\s*\"London\")[\s\S]*$'
+        command_timeout: 120
+    rubric:
+      - "Uses DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull"
+      - "Does not use obsolete IgnoreNullValues; output omits Nickname"
+    timeout: 900
+
+  - name: "J5: map custom JSON property names"
+    prompt: |
+      In Program.cs, define a `PackageInfo` record whose C# properties are
+      `PackageId` and `DownloadCount`, but whose JSON names are `package_id` and
+      `download_count`. Serialize the package `Serilog` with 1234 downloads, print the
+      JSON, then deserialize the same custom-name JSON and print
+      `id=<PackageId> downloads=<DownloadCount>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j5-property-name/App.csproj }
+        - { path: Program.cs, source: fixtures/j5-property-name/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*\{\"package_id\":\s*\"Serilog\",\s*\"download_count\":\s*1234\})(?=[\s\S]*id=Serilog\s+downloads=1234)'
+        command_timeout: 120
+    rubric:
+      - "Uses System.Text.Json.Serialization.JsonPropertyName attributes"
+      - "For record primary-constructor parameters, applies the attribute to the property target"
+    timeout: 900
+
+  - name: "J6: include public fields in System.Text.Json"
+    prompt: |
+      In Program.cs, create a `TelemetrySample` type whose data members are public
+      fields `Name` and `Count`. Deserialize `{"Name":"requests","Count":3}` using
+      System.Text.Json, print `name=<Name> count=<Count>`, then serialize the sample
+      back to JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j6-fields/App.csproj }
+        - { path: Program.cs, source: fixtures/j6-fields/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*name=requests\s+count=3)(?=[\s\S]*\{\"Name\":\"requests\",\"Count\":3\})'
+        command_timeout: 120
+    rubric:
+      - "Opts into field serialization with IncludeFields = true or JsonInclude"
+      - "Does not leave public fields at default/null values"
+    timeout: 900
+
+  - name: "J7: serialize enums as strings"
+    prompt: |
+      In Program.cs, define `enum JobStatus { Queued, Running, Complete }` and a
+      `Job` record. Configure System.Text.Json so a job with status `Complete`
+      serializes as the string `"Complete"` rather than a number. Print the JSON,
+      then deserialize JSON whose `Status` is the string `"Complete"` and print
+      `status=<Status>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j7-enum-strings/App.csproj }
+        - { path: Program.cs, source: fixtures/j7-enum-strings/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*\"Status\":\s*\"Complete\")(?=[\s\S]*status=Complete)'
+        command_timeout: 120
+    rubric:
+      - "Adds JsonStringEnumConverter (generic or non-generic) to JsonSerializerOptions"
+      - "Round-trips a string enum value instead of relying on numeric enum serialization"
+    timeout: 900
+
+  - name: "J8: read comments and trailing commas"
+    prompt: |
+      In Program.cs, read this JSON with System.Text.Json and print
+      `name=<Name> enabled=<Enabled>`:
+      ```jsonc
+      {
+        // comments are present in this config file
+        "Name": "demo",
+        "Enabled": true,
+      }
+      ```
+      Configure the serializer to skip comments and allow trailing commas.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j8-comments-trailing/App.csproj }
+        - { path: Program.cs, source: fixtures/j8-comments-trailing/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'name=demo\s+enabled=True'
+        command_timeout: 120
+    rubric:
+      - "Sets ReadCommentHandling = JsonCommentHandling.Skip"
+      - "Sets AllowTrailingCommas = true"
+    timeout: 900
+
+  - name: "J9: write camelCase property names"
+    prompt: |
+      In Program.cs, serialize a `UserProfile` record with PascalCase members
+      `DisplayName = "Ada"` and `LoginCount = 5`, but write camelCase JSON names
+      `displayName` and `loginCount`. Print the JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j9-camelcase-output/App.csproj }
+        - { path: Program.cs, source: fixtures/j9-camelcase-output/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*\"displayName\":\s*\"Ada\")(?=[\s\S]*\"loginCount\":\s*5)'
+        command_timeout: 120
+    rubric:
+      - "Sets JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase"
+      - "Does not rename the C# members just to affect JSON output"
+    timeout: 900
+
+  - name: "J10: ignore reference cycles"
+    prompt: |
+      In Program.cs, create a `Node` object with `Name = "root"` whose `Next` property
+      points back to itself. Serialize it with System.Text.Json without throwing a
+      cycle exception, print the JSON, then print `serialized self cycle`.
+      Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j10-ignore-cycles/App.csproj }
+        - { path: Program.cs, source: fixtures/j10-ignore-cycles/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*\{\"Name\":\"root\",\"Next\":null\})(?=[\s\S]*serialized self cycle)'
+        command_timeout: 120
+    rubric:
+      - "Configures JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles"
+      - "Serializes the self-referencing graph without removing the cycle from the object model"
+    timeout: 900
+
+  - name: "J11: use source-generation JsonSerializerContext"
+    prompt: |
+      In Program.cs, serialize and deserialize a `BuildRecord` using a partial
+      `JsonSerializerContext` source-generation type, not reflection-based generic
+      serializer calls. Configure the context for camelCase JSON and case-insensitive
+      reads. Serialize `new BuildRecord("agent", 2)`, deserialize
+      `{"name":"agent","attempts":2}` via the generated type info, and print the JSON
+      plus `context roundtrip: <Name>/<Attempts>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j11-source-generation/App.csproj }
+        - { path: Program.cs, source: fixtures/j11-source-generation/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*\{\"name\":\"agent\",\"attempts\":2\})(?=[\s\S]*context roundtrip:\s*agent/2)'
+        command_timeout: 120
+    rubric:
+      - "Defines a partial JsonSerializerContext with JsonSerializable for the root type"
+      - "Passes AppJsonContext.Default.BuildRecord (or equivalent generated type info/resolver) to JsonSerializer"
+      - "Uses JsonSourceGenerationOptions for camelCase/case-insensitive behavior"
+    timeout: 900
+
+  - name: "J12: migrate a Newtonsoft.Json program to System.Text.Json"
+    prompt: |
+      This project starts as a working Newtonsoft.Json program. Migrate Program.cs to
+      System.Text.Json and remove the Newtonsoft.Json package reference from App.csproj.
+      Preserve the exact behavior: `[JsonProperty]` names become STJ property-name
+      attributes, `NullValueHandling.Ignore` becomes the STJ null-ignore option,
+      `Formatting.Indented` becomes indented STJ output, the public `PackageId` field
+      must still be included, and the camelCase `ownerName` input must still populate
+      PascalCase `OwnerName` despite STJ's case-sensitive default. Build and run to
+      confirm the same printed output.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j12-newtonsoft-migration/App.csproj }
+        - { path: Program.cs, source: fixtures/j12-newtonsoft-migration/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '^(?![\s\S]*\"notes\")(?![\s\S]*\"downloadCount\")(?![\s\S]*\"OwnerName\")(?=[\s\S]*\"packageId\": \"System\.Text\.Json\")(?=[\s\S]*package=System\.Text\.Json\s+owner=runtime\s+downloads=12345)'
+        command_timeout: 120
+      - type: file_not_contains
+        path: "Program.cs"
+        value: "Newtonsoft.Json"
+      - type: file_not_contains
+        path: "Program.cs"
+        value: "JsonConvert"
+      - type: file_not_contains
+        path: "App.csproj"
+        value: "Newtonsoft.Json"
+    rubric:
+      - "Replaces JsonConvert.SerializeObject/DeserializeObject with System.Text.Json.JsonSerializer"
+      - "Maps JsonSerializerSettings to JsonSerializerOptions, including WriteIndented and WhenWritingNull"
+      - "Maps [JsonProperty] to [JsonPropertyName] and opts into public fields with IncludeFields or JsonInclude"
+      - "Handles STJ case sensitivity for camelCase ownerName input with PropertyNameCaseInsensitive or equivalent"
+      - "Removes the Newtonsoft.Json dependency"
+    timeout: 900
+
+  - name: "J13: custom converter"
+    prompt: |
+      In Program.cs, define a `Temperature` struct wrapping an int and a custom `JsonConverter<Temperature>` that writes it as a JSON string like "72F" and reads that form back. Serialize `Temperature(72)` and print the JSON, then deserialize "72F" and print `temp=<value>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j13-custom-converter/App.csproj }
+        - { path: Program.cs, source: fixtures/j13-custom-converter/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"72F")(?=[\s\S]*temp=72)'
+        command_timeout: 120
+    rubric:
+      - "Registers a JsonConverter<Temperature> via JsonSerializerOptions.Converters or [JsonConverter]"
+      - "Round-trips the custom string form"
+    timeout: 900
+
+  - name: "J14: polymorphic"
+    prompt: |
+      In Program.cs, define an abstract `Shape` annotated with `[JsonPolymorphic(TypeDiscriminatorPropertyName="kind")]` and `[JsonDerivedType(typeof(Circle),"circle")]`, where `Circle` has an int `R`. Serialize a `Circle{R=3}` declared as `Shape` and print the JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j14-polymorphic/App.csproj }
+        - { path: Program.cs, source: fixtures/j14-polymorphic/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"kind":\s*"circle")(?=[\s\S]*"R":\s*3)'
+        command_timeout: 120
+    rubric:
+      - "Uses [JsonPolymorphic]/[JsonDerivedType] with a type discriminator"
+      - "Emits the discriminator plus derived members"
+    timeout: 900
+
+  - name: "J15: extension data"
+    prompt: |
+      In Program.cs, define a `Bag` with a string `Name` and a `[JsonExtensionData]` `Dictionary<string,JsonElement>`. Deserialize `{"Name":"x","extra1":9}`, then re-serialize the object. Print `name=<Name> extra1=<extra1>` and the re-serialized JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j15-extension-data/App.csproj }
+        - { path: Program.cs, source: fixtures/j15-extension-data/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*name=x\s+extra1=9)(?=[\s\S]*"extra1":\s*9)'
+        command_timeout: 120
+    rubric:
+      - "Uses [JsonExtensionData] to capture unmapped members"
+      - "Round-trips the overflow data"
+    timeout: 900
+
+  - name: "J16: number from string"
+    prompt: |
+      In Program.cs, configure System.Text.Json with `NumberHandling = JsonNumberHandling.AllowReadingFromString` and deserialize `{"Count":"42"}` into a type with an int `Count`. Print `count=<Count>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j16-number-from-string/App.csproj }
+        - { path: Program.cs, source: fixtures/j16-number-from-string/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'count=42'
+        command_timeout: 120
+    rubric:
+      - "Sets JsonNumberHandling.AllowReadingFromString"
+      - "Reads the quoted number as an int"
+    timeout: 900
+
+  - name: "J17: sourcegen options"
+    prompt: |
+      In Program.cs, define a `Server` record with a `HostName` and a partial `JsonSerializerContext` annotated `[JsonSourceGenerationOptions(PropertyNamingPolicy=JsonKnownNamingPolicy.CamelCase)]` and `[JsonSerializable(typeof(Server))]`. Serialize `new Server("web01")` through the context and print the JSON (property must be camelCase). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j17-sourcegen-options/App.csproj }
+        - { path: Program.cs, source: fixtures/j17-sourcegen-options/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '"hostName":\s*"web01"'
+        command_timeout: 120
+    rubric:
+      - "Uses a source-generated JsonSerializerContext"
+      - "[JsonSourceGenerationOptions] sets camelCase naming"
+    timeout: 900
+
+  - name: "J18: record ctor"
+    prompt: |
+      In Program.cs, define a `Point` record with a primary constructor `(int X, int Y)` marked `[JsonConstructor]`. Deserialize `{"X":3,"Y":4}` and print `x=<X> y=<Y>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j18-record-ctor/App.csproj }
+        - { path: Program.cs, source: fixtures/j18-record-ctor/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'x=3\s+y=4'
+        command_timeout: 120
+    rubric:
+      - "Deserializes into a parameterized record constructor"
+      - "[JsonConstructor] selects the ctor"
+    timeout: 900
+
+  - name: "J19: int dict keys"
+    prompt: |
+      In Program.cs, serialize a `Dictionary<int,string>` equal to `{1:"a",2:"b"}` with System.Text.Json and print the JSON, then deserialize it back and print `one=<value for key 1>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j19-int-dict-keys/App.csproj }
+        - { path: Program.cs, source: fixtures/j19-int-dict-keys/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"1":\s*"a")(?=[\s\S]*one=a)'
+        command_timeout: 120
+    rubric:
+      - "Serializes non-string dictionary keys"
+      - "Round-trips the integer-keyed dictionary"
+    timeout: 900
+
+  - name: "J20: property order"
+    prompt: |
+      In Program.cs, define a type declaring `Apple=1` before `Zebra=2` but use `[JsonPropertyOrder]` so `Zebra` serializes BEFORE `Apple`. Serialize and print the JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j20-property-order/App.csproj }
+        - { path: Program.cs, source: fixtures/j20-property-order/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '"Zebra":\s*2[\s\S]*"Apple":\s*1'
+        command_timeout: 120
+    rubric:
+      - "Uses [JsonPropertyOrder] to override declaration order"
+      - "Zebra precedes Apple in output"
+    timeout: 900
+
+  - name: "J21: unmapped disallow"
+    prompt: |
+      In Program.cs, put `[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]` on a `Config` type that has only `Name`. Deserialize `{"Name":"a","Bogus":1}`, catch the resulting exception, and print `rejected=<true|false>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j21-unmapped-disallow/App.csproj }
+        - { path: Program.cs, source: fixtures/j21-unmapped-disallow/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'rejected=[Tt]rue'
+        command_timeout: 120
+    rubric:
+      - "Uses UnmappedMemberHandling.Disallow"
+      - "Deserializing an unmapped member throws and is caught"
+    timeout: 900
+
+  - name: "J22: generic enum converter"
+    prompt: |
+      In Program.cs, define `enum Level { Low, High }` and a `Log` with a `Level Sev` annotated `[JsonConverter(typeof(JsonStringEnumConverter<Level>))]` (the generic converter). Serialize `new Log{Sev=Level.High}` and print the JSON (Sev must be the string "High"). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j22-generic-enum-converter/App.csproj }
+        - { path: Program.cs, source: fixtures/j22-generic-enum-converter/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '"Sev":\s*"High"'
+        command_timeout: 120
+    rubric:
+      - "Uses the generic JsonStringEnumConverter<TEnum>"
+      - "Serializes the enum as its string name"
+    timeout: 900
+
+  - name: "J23: preserve refs"
+    prompt: |
+      In Program.cs, create a `Node` class with a `Self` reference set to itself (a cycle) and serialize it with `ReferenceHandler = ReferenceHandler.Preserve`. Print the JSON (it must contain a `$id`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j23-preserve-refs/App.csproj }
+        - { path: Program.cs, source: fixtures/j23-preserve-refs/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '\$id'
+        command_timeout: 120
+    rubric:
+      - "Uses ReferenceHandler.Preserve"
+      - "Emits $id/$ref reference metadata for the cycle"
+    timeout: 900
+
+  - name: "J24: required throws"
+    prompt: |
+      In Program.cs, define a `Registration` with a `required string Email`. Deserialize `{"Name":"a"}` (Email missing), catch the exception, and print `missing_required=<true|false>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j24-required-throws/App.csproj }
+        - { path: Program.cs, source: fixtures/j24-required-throws/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'missing_required=[Tt]rue'
+        command_timeout: 120
+    rubric:
+      - "Uses the C# required modifier (or [JsonRequired])"
+      - "Missing required member throws on deserialization"
+    timeout: 900
+
+  - name: "J25: ignore whenreading"
+    prompt: |
+      In Program.cs (targeting .NET 10), put `[JsonIgnore(Condition=JsonIgnoreCondition.WhenReading)]` on a `Hash` property of a `Doc{Name,Hash}` so Hash is WRITTEN to JSON but IGNORED when reading. Serialize `Doc{Name="cfg",Hash="abc"}` and print the JSON, then deserialize `{"Name":"cfg","Hash":"zzz"}` and print `hash=[<Hash>]`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j25-ignore-whenreading/App.csproj }
+        - { path: Program.cs, source: fixtures/j25-ignore-whenreading/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"Hash":\s*"abc")(?=[\s\S]*hash=\[\])'
+        command_timeout: 120
+    rubric:
+      - "Uses .NET 10 JsonIgnoreCondition.WhenReading"
+      - "Hash is serialized but not populated on read"
+    timeout: 900
+
+  - name: "J26: ignore whenwriting"
+    prompt: |
+      In Program.cs (targeting .NET 10), put `[JsonIgnore(Condition=JsonIgnoreCondition.WhenWriting)]` on a `Secret` property of a `Doc{Name,Secret}` so Secret is READ from input but NEVER written. Serialize `Doc{Name="cfg",Secret="shh"}` (Secret must be absent from JSON), then deserialize `{"Name":"cfg","Secret":"loaded"}` and print `secret=<Secret>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j26-ignore-whenwriting/App.csproj }
+        - { path: Program.cs, source: fixtures/j26-ignore-whenwriting/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*secret=loaded)(?![\s\S]*"Secret")'
+        command_timeout: 120
+    rubric:
+      - "Uses .NET 10 JsonIgnoreCondition.WhenWriting"
+      - "Secret is omitted from output but read from input"
+    timeout: 900
+
+  - name: "J27: strict preset"
+    prompt: |
+      In Program.cs (targeting .NET 10), use the `JsonSerializerOptions.Strict` preset to deserialize `{"Name":"a","Name":"b"}` (a duplicate property). Catch the exception and print `strict_rejected=<true|false>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j27-strict-preset/App.csproj }
+        - { path: Program.cs, source: fixtures/j27-strict-preset/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'strict_rejected=[Tt]rue'
+        command_timeout: 120
+    rubric:
+      - "Uses the .NET 10 JsonSerializerOptions.Strict preset"
+      - "Duplicate property is rejected under Strict"
+    timeout: 900
+
+  - name: "J28: allow duplicates"
+    prompt: |
+      In Program.cs (targeting .NET 10), set `AllowDuplicateProperties = true` on the options to OPT OUT of duplicate-property rejection, then deserialize `{"Name":"a","Name":"b"}` into a type with `Name` (last value wins). Print `name=<Name>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j28-allow-duplicates/App.csproj }
+        - { path: Program.cs, source: fixtures/j28-allow-duplicates/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'name=b'
+        command_timeout: 120
+    rubric:
+      - "Uses .NET 10 AllowDuplicateProperties = true"
+      - "Last duplicate value wins"
+    timeout: 900
+
+  - name: "J29: jsonelement parse"
+    prompt: |
+      In Program.cs (targeting .NET 10), use `JsonElement.Parse` (the new static, not JsonDocument) to parse `{"port":8080}` and print `port=<value>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j29-jsonelement-parse/App.csproj }
+        - { path: Program.cs, source: fixtures/j29-jsonelement-parse/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'port=8080'
+        command_timeout: 120
+    rubric:
+      - "Uses the .NET 10 JsonElement.Parse static"
+      - "Reads the value without managing a JsonDocument"
+    timeout: 900
+
+  - name: "J30: string segment"
+    prompt: |
+      In Program.cs (targeting .NET 10), use `Utf8JsonWriter.WriteStringValueSegment` to write ONE JSON string value in two chunks: "Hello, " (not final) then "world" (final). Print the resulting JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j30-string-segment/App.csproj }
+        - { path: Program.cs, source: fixtures/j30-string-segment/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '"Hello, world"'
+        command_timeout: 120
+    rubric:
+      - "Uses .NET 10 Utf8JsonWriter.WriteStringValueSegment"
+      - "Segments concatenate into a single JSON string"
+    timeout: 900
+
+  - name: "J31: pipe deserialize"
+    prompt: |
+      In Program.cs (targeting .NET 10), use `JsonSerializer.DeserializeAsyncEnumerable` reading from a `System.IO.Pipelines.PipeReader` to stream-deserialize `[10,20,30]`, summing the values. Print `sum=<total>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j31-pipe-deserialize/App.csproj }
+        - { path: Program.cs, source: fixtures/j31-pipe-deserialize/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'sum=60'
+        command_timeout: 120
+    rubric:
+      - "Uses the .NET 10 DeserializeAsyncEnumerable(PipeReader) overload"
+      - "Streams the array without buffering it whole"
+    timeout: 900
+
+  - name: "J32: base64 segment"
+    prompt: |
+      In Program.cs (targeting .NET 10), use `Utf8JsonWriter.WriteBase64StringSegment` to write the bytes [1,2,3] as a base64 JSON string in a single final segment. Print the resulting JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j32-base64-segment/App.csproj }
+        - { path: Program.cs, source: fixtures/j32-base64-segment/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '"AQID"'
+        command_timeout: 120
+    rubric:
+      - "Uses .NET 10 Utf8JsonWriter.WriteBase64StringSegment"
+      - "Emits the correct base64 string value"
+    timeout: 900
+
+  - name: "J33: tryget index"
+    prompt: |
+      In Program.cs (targeting .NET 10), parse `{"a":1,"b":2}` into a `JsonObject` and use the `TryGetPropertyValue` overload that also returns the property index to fetch `b`. Print `b=<value> idx=<index>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j33-tryget-index/App.csproj }
+        - { path: Program.cs, source: fixtures/j33-tryget-index/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'b=2\s+idx=1'
+        command_timeout: 120
+    rubric:
+      - "Uses the .NET 10 TryGetPropertyValue(out node, out index) overload"
+      - "Reports both value and ordinal index"
+    timeout: 900
+
+  - name: "J34: array removeall"
+    prompt: |
+      In Program.cs (targeting .NET 10), parse `[1,2,3,4]` into a `JsonArray` and use `RemoveAll` to drop every even number. Print the resulting JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j34-array-removeall/App.csproj }
+        - { path: Program.cs, source: fixtures/j34-array-removeall/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '\[\s*1\s*,\s*3\s*\]'
+        command_timeout: 120
+    rubric:
+      - "Uses the .NET 10 JsonArray.RemoveAll(predicate)"
+      - "Removes matching elements in place"
+    timeout: 900
+
+  - name: "J35: array removerange"
+    prompt: |
+      In Program.cs (targeting .NET 10), parse `[1,2,3,4,5]` into a `JsonArray` and use `RemoveRange(1,2)` to drop two elements starting at index 1. Print the resulting JSON. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j35-array-removerange/App.csproj }
+        - { path: Program.cs, source: fixtures/j35-array-removerange/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '\[\s*1\s*,\s*4\s*,\s*5\s*\]'
+        command_timeout: 120
+    rubric:
+      - "Uses the .NET 10 JsonArray.RemoveRange(index,count)"
+      - "Removes the correct contiguous span"
+    timeout: 900
+
+  - name: "J36: asymmetric both"
+    prompt: |
+      In Program.cs (targeting .NET 10), define a `Session{Name,Token,Csrf}` where `Token` uses `JsonIgnoreCondition.WhenReading` (write-only) and `Csrf` uses `JsonIgnoreCondition.WhenWriting` (read-only). Serialize `Session{Name="s",Token="t",Csrf="c"}` (JSON must contain Token but not Csrf), then deserialize `{"Name":"s","Token":"x","Csrf":"loaded"}` and print `token=[<Token>] csrf=<Csrf>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j36-asymmetric-both/App.csproj }
+        - { path: Program.cs, source: fixtures/j36-asymmetric-both/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"Token":\s*"t")(?![\s\S]*"Csrf")(?=[\s\S]*token=\[\]\s+csrf=loaded)'
+        command_timeout: 120
+    rubric:
+      - "Combines WhenReading and WhenWriting on one type"
+      - "Each field honors its asymmetric direction"
+    timeout: 900
+
+  - name: "J37: naming composite"
+    prompt: |
+      In Program.cs (targeting .NET 11), define an `Ev{EventName,Notes}` with global `PropertyNamingPolicy=JsonNamingPolicy.PascalCase`, a per-member `[JsonNamingPolicy(JsonKnownNamingPolicy.CamelCase)]` on `EventName`, and a type-level `[JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]`. Serialize `Ev{EventName="login",Notes=null}` and print the JSON (expect `{"eventName":"login"}`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j37-naming-composite/App.csproj }
+        - { path: Program.cs, source: fixtures/j37-naming-composite/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"eventName":\s*"login")(?![\s\S]*[Nn]otes)'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: combines PascalCase policy, per-member [JsonNamingPolicy], type-level [JsonIgnore]"
+      - "EventName is camelCase and null Notes is omitted"
+    timeout: 900
+
+  - name: "J38: member snakecase"
+    prompt: |
+      In Program.cs (targeting .NET 11), put a per-member `[JsonNamingPolicy(JsonKnownNamingPolicy.SnakeCaseLower)]` on a `RequestId` property of a `Payload`. Serialize `Payload{RequestId="abc"}` and print the JSON (expect `request_id`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j38-member-snakecase/App.csproj }
+        - { path: Program.cs, source: fixtures/j38-member-snakecase/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '"request_id":\s*"abc"'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: per-member [JsonNamingPolicy] override"
+      - "Only the annotated member is renamed"
+    timeout: 900
+
+  - name: "J39: typelevel ignorenull"
+    prompt: |
+      In Program.cs (targeting .NET 11), put a type-level `[JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]` on a `Cfg{A,B}` so ALL null properties are omitted without per-member attributes. Serialize `Cfg{A="x",B=null}` and print the JSON (expect `{"A":"x"}`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j39-typelevel-ignorenull/App.csproj }
+        - { path: Program.cs, source: fixtures/j39-typelevel-ignorenull/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"A":\s*"x")(?![\s\S]*"B")'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: type-level [JsonIgnore(Condition=WhenWritingNull)]"
+      - "All null members omitted with one attribute"
+    timeout: 900
+
+  - name: "J40: ireadonlyset"
+    prompt: |
+      In Program.cs (targeting .NET 11), serialize an `IReadOnlySet<int>` variable holding {1,2,3} with System.Text.Json and print the JSON (expect `[1,2,3]`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j40-ireadonlyset/App.csproj }
+        - { path: Program.cs, source: fixtures/j40-ireadonlyset/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '\[\s*1\s*,\s*2\s*,\s*3\s*\]'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: IReadOnlySet<T> serialization support"
+      - "Serializes the interface-typed set"
+    timeout: 900
+
+  - name: "J41: generic gettypeinfo"
+    prompt: |
+      In Program.cs (targeting .NET 11), define a class `Ev` and use the generic `JsonSerializerOptions.GetTypeInfo<Ev>()` (no cast) to retrieve `JsonTypeInfo<Ev>`, then print `kind=<Kind>` from it. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j41-generic-gettypeinfo/App.csproj }
+        - { path: Program.cs, source: fixtures/j41-generic-gettypeinfo/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'kind=Object'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: generic GetTypeInfo<T>() avoids the downcast"
+      - "Reads strongly-typed metadata"
+    timeout: 900
+
+  - name: "J42: serialize asyncenum"
+    prompt: |
+      In Program.cs (targeting .NET 11), use `JsonSerializer.SerializeAsyncEnumerable` to write an async sequence yielding 7 then 8 to a `MemoryStream`, then print the JSON text (expect `[7,8]`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j42-serialize-asyncenum/App.csproj }
+        - { path: Program.cs, source: fixtures/j42-serialize-asyncenum/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '\[\s*7\s*,\s*8\s*\]'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: SerializeAsyncEnumerable streaming write"
+      - "Produces a JSON array from IAsyncEnumerable"
+    timeout: 900
+
+  - name: "J43: writer reset"
+    prompt: |
+      In Program.cs (targeting .NET 11), write `{}` to a `Utf8JsonWriter` over one buffer, then use `Reset` to point the SAME writer at a second buffer and write the boolean `true`. Print the second buffer's text (expect `true`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j43-writer-reset/App.csproj }
+        - { path: Program.cs, source: fixtures/j43-writer-reset/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '\btrue\b'
+        command_timeout: 120
+    rubric:
+      - ".NET 11: Utf8JsonWriter.Reset reuses the writer"
+      - "Second buffer receives the new content"
+    timeout: 900
+
+  - name: "J44: migrate triple"
+    prompt: |
+      In Program.cs, migrate a Newtonsoft.Json setup to System.Text.Json that simultaneously (a) omits null-valued properties, (b) serializes enums as strings, and (c) uses camelCase property names. Serialize a `Job{Title="build", Status=JobStatus.Done, Notes=null}` where `enum JobStatus{Queued,Done}`. Print the JSON (expect `{"title":"build","status":"Done"}`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j44-migrate-triple/App.csproj }
+        - { path: Program.cs, source: fixtures/j44-migrate-triple/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"title":\s*"build")(?=[\s\S]*"status":\s*"Done")(?![\s\S]*[Nn]otes)'
+        command_timeout: 120
+    rubric:
+      - "Combines DefaultIgnoreCondition.WhenWritingNull + JsonStringEnumConverter + CamelCase policy"
+      - "All three behaviors hold at once"
+    timeout: 900
+
+  - name: "J45: migrate fields ci"
+    prompt: |
+      In Program.cs, migrate a Newtonsoft round-trip to System.Text.Json that needs BOTH case-insensitive property matching AND public field serialization. Deserialize `{"name":"demo","count":3}` into a type whose public FIELDS are `Name` and `Count` (PascalCase), then print `name=<Name> count=<Count>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j45-migrate-fields-ci/App.csproj }
+        - { path: Program.cs, source: fixtures/j45-migrate-fields-ci/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: 'name=demo\s+count=3'
+        command_timeout: 120
+    rubric:
+      - "Sets PropertyNameCaseInsensitive=true and IncludeFields=true (or [JsonInclude])"
+      - "Reads camelCase JSON into PascalCase public fields"
+    timeout: 900
+
+  - name: "J46: migrate names null"
+    prompt: |
+      In Program.cs, migrate Newtonsoft `[JsonProperty("user_id")]` + `NullValueHandling.Ignore` to System.Text.Json on a `User{UserId(string), Nickname(string?)}`. Serialize `User{UserId="u1", Nickname=null}` so the JSON has `user_id` and omits the null Nickname. Print the JSON (expect `{"user_id":"u1"}`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j46-migrate-names-null/App.csproj }
+        - { path: Program.cs, source: fixtures/j46-migrate-names-null/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"user_id":\s*"u1")(?![\s\S]*[Nn]ickname)'
+        command_timeout: 120
+    rubric:
+      - "Maps [JsonProperty] to [JsonPropertyName] and NullValueHandling.Ignore to WhenWritingNull"
+      - "Both the rename and the omission apply"
+    timeout: 900
+
+  - name: "J47: node pipeline"
+    prompt: |
+      In Program.cs, build a System.Text.Json pipeline: parse `{"userName":"ada","age":30,"temp":null}` into a `JsonObject`, remove the null `temp` property, add a `"active":true` property, and print the resulting JSON via `ToJsonString()` (expect it to contain `userName`, `age`, and `active` but not `temp`). Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j47-node-pipeline/App.csproj }
+        - { path: Program.cs, source: fixtures/j47-node-pipeline/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"userName":\s*"ada")(?=[\s\S]*"active":\s*true)(?![\s\S]*temp)'
+        command_timeout: 120
+    rubric:
+      - "Mutates a JsonObject (remove null, add property)"
+      - "Serializes the mutated node"
+    timeout: 900
+
+  - name: "J48: capstone migration"
+    prompt: |
+      In Program.cs, perform a capstone Newtonsoft.Json -> System.Text.Json migration of a settings serializer that uses FOUR behaviors together: camelCase names, string enums, omit-null, and case-insensitive reads. Round-trip a `Profile{DisplayName="Ada", Tier=Plan.Pro, Bio=null}` where `enum Plan{Free,Pro}`: serialize it (expect `{"displayName":"Ada","tier":"Pro"}`), then deserialize that JSON back and print `name=<DisplayName> tier=<Tier>`. Build and run to confirm.
+    setup:
+      files:
+        - { path: App.csproj, source: fixtures/j48-capstone-migration/App.csproj }
+        - { path: Program.cs, source: fixtures/j48-capstone-migration/Program.cs }
+    reject_tools: [web_search, web_fetch]
+    assertions:
+      - { type: run_command_and_assert, command_to_run: "dotnet", command_arguments: "build", expected_exit_code: 0, command_timeout: 600 }
+      - type: run_command_and_assert
+        command_to_run: "dotnet"
+        command_arguments: "run --no-build --"
+        expected_exit_code: 0
+        expected_std_output_matches: '(?=[\s\S]*"displayName":\s*"Ada")(?=[\s\S]*"tier":\s*"Pro")(?![\s\S]*[Bb]io)(?=[\s\S]*name=Ada\s+tier=Pro)'
+        command_timeout: 120
+    rubric:
+      - "Composes camelCase + string enums + WhenWritingNull + case-insensitive in one options object"
+      - "Round-trips cleanly with all four behaviors"
+    timeout: 900
