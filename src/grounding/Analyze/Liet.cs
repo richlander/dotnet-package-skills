@@ -450,7 +450,7 @@ internal sealed class Liet
         // bulleted Metrics block. Grow the canvas to fit both variable-length lists.
         int footerBullets = skillLegend.Count;
         var thh = TargetHit(rungs);
-        int metricsBullets = 3 + (thh.total > 0 ? 1 : 0);
+        int metricsBullets = 4 + (thh.total > 0 ? 1 : 0);
         int metricsHeadY = footerBullets > 0 ? B + 104 + 14 + footerBullets * 14 + 6 : B + 108;
         int H = metricsHeadY + 14 + metricsBullets * 14 + 12; // Metrics heading + bullets + bottom margin
         double maxIet = rungs.SelectMany(r => new[]
@@ -568,6 +568,7 @@ internal sealed class Liet
         var metrics = new List<string>
         {
             $"Correct answers: {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
+            $"Floor LIET: {K(fm.floor)}",
             $"LIET: {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
             $"Archaeology operations: {N(sc.baseArch)}\u2192{N(sc.agArch)} ({PctStr(sc.baseArch, sc.agArch)})",
         };
