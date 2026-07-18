@@ -107,6 +107,8 @@ internal sealed partial class Cards
     //      (archaeology, work IET, output). A doc can FAIL the gate yet still be BETTER on
     //      efficiency (e.g. haiku: more correct + cheaper, but not yet 100%) — the old single
     //      verdict hid this by withholding the efficiency label whenever the gate failed.
+    //      BUT a correctness REGRESSION (fewer tasks correct than baseline) forces WORSE: a cheaper
+    //      arm that answers fewer questions is a harm, never BETTER (correct answers trump tokens).
 
     // EFFICACY GATE: did the grounded arm answer 100% of its tier correctly?
     private static string GateLabel(ArmAgg b, ArmAgg g) => g.Succ >= g.N ? "PASS" : "FAIL";
@@ -114,6 +116,10 @@ internal sealed partial class Cards
     // EFFICIENCY: rank archaeology / work IET / output, independent of the gate.
     private static string EffLabel(ArmAgg b, ArmAgg g)
     {
+        // CORRECTNESS REGRESSION DOMINATES: if the grounded arm answers FEWER tasks correctly than
+        // baseline, it is WORSE no matter how much IET it saves — cheaper-but-wrong is never BETTER
+        // (dotnet/skills philosophy: correct answers trump tokens). An IET win cannot mask lost answers.
+        if (g.Succ - b.Succ < 0) return "WORSE";
         var iet = Pct(g.WorkIet, b.WorkIet);   // WORK IET — doc carrying-cost netted out (the agent's effort)
         var @out = Pct(g.Out, b.Out);
         // WORSE: real IET/output inflation (a harm signal).
@@ -191,7 +197,8 @@ internal sealed partial class Cards
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
         _o.WriteLine("\n_Two axes. **Gate** (correctness): **PASS** = 100% of tier correct, **FAIL** = below the gate. "
             + "**Efficiency** (independent of the gate): **BETTER** = more tasks correct / archaeology→0 / work IET cut ≥20%; "
-            + "**WORSE** = work IET or output inflated ≥20%; **NEUTRAL** = held. A doc can FAIL the gate yet be BETTER on efficiency._\n");
+            + "**WORSE** = fewer tasks correct than baseline, or work IET / output inflated ≥20%; **NEUTRAL** = held. "
+            + "A correctness regression forces WORSE (cheaper-but-wrong is never better); a doc can FAIL the gate yet be BETTER on efficiency._\n");
         _o.WriteLine("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
             + "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
             + "**lower bound** and grounding's advantage is understated.\n");
