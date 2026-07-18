@@ -67,6 +67,20 @@ internal sealed class Liet
         var primary = parsed.Where(p => !IsReadme(p.path)).ToList();
         if (primary.Count == 0) primary = parsed;   // all-readme input: fall back to plotting them
 
+        // Global skill-id map across ALL rendered datasets so an id means the SAME skill in every
+        // card (M = base skill; domain skills alphabetical → 1..N over the union of everything
+        // pulled). Render models together so opus and haiku legends are directly comparable.
+        var allSkills = new HashSet<string>(StringComparer.Ordinal);
+        string baseSkill = "";
+        foreach (var (_, d0) in primary)
+            foreach (var v0 in d0.Verdicts ?? new())
+            {
+                if (baseSkill.Length == 0) baseSkill = v0.SkillName ?? "";
+                foreach (var sc0 in v0.Scenarios ?? new())
+                    foreach (var s0 in Loader.DetectedSkillsOf(sc0, GroundArm)) allSkills.Add(s0);
+            }
+        var skillIds = BuildGlobalIds(allSkills, baseSkill);
+
         foreach (var (f, d) in primary.OrderBy(x => x.path, StringComparer.Ordinal))
         {
             var iet = IetModels.For(d.Model);
@@ -87,12 +101,12 @@ internal sealed class Liet
                 // Label the grounded arm from the dataset file name (same heuristic as the card's
                 // DocLabel): a "skill" dataset ships SKILL.md, otherwise AGENTS.md.
                 var docLabel = System.IO.Path.GetFileName(f).ToLowerInvariant().Contains("skill") ? "SKILL.md" : "AGENTS.md";
-                EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel, docLabel);
+                EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel, docLabel, skillIds);
                 if (svgPath is { Length: > 0 })
                 {
                     var multi = primary.Count > 1 || (d.Verdicts?.Count ?? 0) > 1;
                     var outPath = multi ? SvgVariant(svgPath, f, unit, d.Model, vi) : svgPath;
-                    File.WriteAllText(outPath, BuildSvg(rungs, unit, d.Model ?? "?", docLabel));
+                    File.WriteAllText(outPath, BuildSvg(rungs, unit, d.Model ?? "?", docLabel, skillIds));
                     _o.WriteLine($"\n_LIET curve written to `{outPath}`._");
                     // Companion archaeology chart: same levelized x-axis, external-digging on y.
                     var archPath = ArchVariant(outPath);
@@ -170,7 +184,8 @@ internal sealed class Liet
 
     // ---- table ----------------------------------------------------------------------------------
 
-    private void EmitTable(List<Rung> rungs, string unit, string model, string? judge, string docLabel)
+    private void EmitTable(List<Rung> rungs, string unit, string model, string? judge, string docLabel,
+        Dictionary<string, string> ids)
     {
         var ds = docLabel.Replace(".md", "");
         if (!NoTitle) _o.WriteLine($"### LIET curve — {unit} | `{model}`\n");
@@ -180,7 +195,7 @@ internal sealed class Liet
         bool hasReadme = rungs.Any(r => r.Readme.Present);
         var rHdr = hasReadme ? " `README.md` |" : "";
         var rSep = hasReadme ? " ---: |" : "";
-        var (ids, legend) = BuildSkillIds(rungs, unit);
+        var legend = CardLegend(rungs, ids);
         bool hasSkills = legend.Count > 0;
         var sHdr = hasSkills ? " skills |" : "";
         var sSep = hasSkills ? " --- |" : "";
@@ -203,26 +218,29 @@ internal sealed class Liet
         _o.WriteLine();
     }
 
-    // Stable skill ids for the LIET table/image: `M` = base skill, domain skills alphabetical → 1..N.
-    // Alphabetical (not by count) keeps the legend identical across models for side-by-side reading.
-    private static (Dictionary<string, string> ids, List<(string id, string name, int count)> legend)
-        BuildSkillIds(List<Rung> rungs, string baseName)
+    // Global skill-id map: `M` = base skill, domain skills alphabetical → 1..N over the union of ALL
+    // rendered datasets. Alphabetical (not by count) and shared across cards so an id means the same
+    // skill in every table/image — opus and haiku legends line up.
+    private static Dictionary<string, string> BuildGlobalIds(IEnumerable<string> allNames, string baseName)
+    {
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
+        var names = new HashSet<string>(allNames, StringComparer.Ordinal);
+        if (names.Remove(baseName) || !string.IsNullOrEmpty(baseName)) ids[baseName] = "M";
+        int n = 1;
+        foreach (var name in names.OrderBy(k => k, StringComparer.Ordinal)) ids[name] = (n++).ToString();
+        return ids;
+    }
+
+    // This card's legend: skills actually pulled in THESE rungs, with this card's own pull counts,
+    // ordered by the shared global id (M first, then 1..N).
+    private static List<(string id, string name, int count)> CardLegend(List<Rung> rungs, Dictionary<string, string> ids)
     {
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var r in rungs)
             foreach (var s in r.Skills)
                 counts[s] = counts.TryGetValue(s, out var c) ? c + 1 : 1;
-        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
-        var legend = new List<(string, string, int)>();
-        if (counts.TryGetValue(baseName, out var bc)) { ids[baseName] = "M"; legend.Add(("M", baseName, bc)); }
-        int n = 1;
-        foreach (var name in counts.Keys.Where(k => k != baseName).OrderBy(k => k, StringComparer.Ordinal))
-        {
-            var id = n++.ToString();
-            ids[name] = id;
-            legend.Add((id, name, counts[name]));
-        }
-        return (ids, legend);
+        return counts.Select(kv => (id: ids.TryGetValue(kv.Key, out var i) ? i : "?", name: kv.Key, count: kv.Value))
+            .OrderBy(t => t.id == "M" ? "" : t.id, StringComparer.Ordinal).ToList();
     }
 
     // Rung's pulled skills as id tokens (M first, then numeric), e.g. "M 3" or "—" if none pulled.
@@ -333,7 +351,8 @@ internal sealed class Liet
 
     // ---- SVG ------------------------------------------------------------------------------------
 
-    private static string BuildSvg(List<Rung> rungs, string unit, string model, string docLabel)
+    private static string BuildSvg(List<Rung> rungs, string unit, string model, string docLabel,
+        Dictionary<string, string> skillIds)
     {
         const int W = 760, H = 500, L = 100, R = 664, T = 64, B = 380; // plot box
         double maxIet = rungs.SelectMany(r => new[]
@@ -388,7 +407,7 @@ internal sealed class Liet
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(ShortRung(rungs[i].Name))}</text>\n");
         sb.Append("  </g>\n");
-        var (skillIds, skillLegend) = BuildSkillIds(rungs, unit);
+        var skillLegend = CardLegend(rungs, skillIds);
         // ceilings on rungs where AGENTS failed (max price of generalization): a dashed ceiling
         // line with a green "pays its way" zone under it and a red "ship SKILL.md" zone over it.
         foreach (var r in rungs.Where(r => !r.Ag.Passed && r.Ceiling is not null))
