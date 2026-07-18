@@ -208,6 +208,8 @@ internal static class Loader
                 a.ToolTurns += r.ToolTurns; a.AllTurns += r.AllTurns; a.ToolTurnPct += r.ToolTurnPct;
                 a.OutIetPct += r.OutIetPct;
                 a.Activated += ActivatedOf(sc, key) ? 1 : 0;
+                foreach (var s in DetectedSkillsOf(sc, key).Distinct())
+                    a.SkillCounts[s] = a.SkillCounts.TryGetValue(s, out var sc2) ? sc2 + 1 : 1;
             }
         }
         foreach (var (key, _) in Metrics.Arms)
@@ -238,6 +240,14 @@ internal static class Loader
         "skilledIsolated" => sc.SkillActivationIsolated?.Activated ?? false,
         "skilledPlugin" => sc.SkillActivationPlugin?.Activated ?? false,
         _ => false,
+    };
+
+    // Which skills the grounded arm pulled off the shelf (plugin = self-select from whole shelf).
+    public static IReadOnlyList<string> DetectedSkillsOf(Scenario sc, string key) => key switch
+    {
+        "skilledIsolated" => sc.SkillActivationIsolated?.DetectedSkills ?? new(),
+        "skilledPlugin" => sc.SkillActivationPlugin?.DetectedSkills ?? new(),
+        _ => new List<string>(),
     };
 
     public static ResultsFile Parse(string path)

@@ -35,6 +35,9 @@ public sealed class Scenario
 public sealed class SkillActivation
 {
     [JsonPropertyName("activated")] public bool Activated { get; set; }
+    [JsonPropertyName("detectedSkills")] public List<string>? DetectedSkills { get; set; }
+    [JsonPropertyName("extraTools")] public List<string>? ExtraTools { get; set; }
+    [JsonPropertyName("skillEventCount")] public int SkillEventCount { get; set; }
 }
 
 public sealed class Arm

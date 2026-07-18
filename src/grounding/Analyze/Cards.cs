@@ -73,6 +73,18 @@ internal sealed partial class Cards
     private static string RawDoc(ArmAgg a) => a.DocTok.ToString(Inv);
     private static string DiffDoc(ArmAgg n, ArmAgg o) => $"{o.DocTok}\u2192{n.DocTok}";
 
+    // Skill coverage (plugin self-select): how many distinct shelf skills the arm actually pulled.
+    // Baseline pulls none. A low count vs the shelf flags skills that earn no place (delete them).
+    private static string RawSkillsUsed(ArmAgg a) =>
+        a.SkillCounts.Count == 0 ? "\u2014" : a.SkillCounts.Count.ToString(Inv);
+    private static string DiffSkillsUsed(ArmAgg n, ArmAgg o) => $"{o.SkillCounts.Count}\u2192{n.SkillCounts.Count}";
+
+    // Per-skill pull breakdown for the note under the card: "markout×23 · conditional-composition×7 · …".
+    private static string SkillBreakdown(ArmAgg a) =>
+        a.SkillCounts.Count == 0 ? "none"
+        : string.Join(" \u00b7 ", a.SkillCounts.OrderByDescending(k => k.Value)
+            .ThenBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}\u00d7{k.Value}"));
+
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
         // Narrative headline (3 rows, same X/total format so the connection is obvious):
@@ -81,6 +93,7 @@ internal sealed partial class Cards
         ("tasks correct (+)",                  RawSuccess, DiffSuccess),
         ("relied on grounding: tasks (+)",     RawReadGrounding, DiffReadGrounding),
         ("relied on archaeology, fallback: cache / nuget.org (-)", RawCache,  DiffCache),
+        ("unique skills used (of shelf) (context)", RawSkillsUsed, DiffSkillsUsed),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("tool calls: web / bash / other (context)", RawToolSplit, DiffToolSplit),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
@@ -202,6 +215,10 @@ internal sealed partial class Cards
         _o.WriteLine("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
             + "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
             + "**lower bound** and grounding's advantage is understated.\n");
+        if (arms.Any(a => a.Agg[Arm].SkillCounts.Count > 0))
+            _o.WriteLine("> **Skills pulled** (self-select from shelf, ×scenarios): "
+                + string.Join(" \u2014 ", arms.Select(a => $"`{a.Model}` {SkillBreakdown(a.Agg[Arm])}"))
+                + ". A shelf skill pulled ×0\u20131 earns no place (delete it).\n");
     }
 
     public void ModelDiff(IReadOnlyList<string> files)

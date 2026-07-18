@@ -41,6 +41,7 @@ internal sealed class Liet
         public Point Base = new(), Ag = new(), Oracle = new(), Readme = new();
         public double? Ceiling;  // competitor envelope for AGENTS.md (min IET of other passing arms)
         public string Region = "";
+        public List<string> Skills = new();  // skills the grounded arm pulled for this rung (plugin self-select)
     }
 
     private static bool Correct(ArmRow? r) => r is { Ft: > 0 } && r.Fp == r.Ft;
@@ -129,6 +130,7 @@ internal sealed class Liet
                 Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0 },
             };
             if (readmeMap is not null && readmeMap.TryGetValue(r.Name, out var rm)) r.Readme = rm;
+            r.Skills = Loader.DetectedSkillsOf(sc, groundArm).Distinct().ToList();
             // Competitor envelope for AGENTS.md = min IET of baseline + oracle that passed. README is
             // PLOTTED as a reference series but kept OUT of the ceiling: where README≈AGENTS (common),
             // per-rung README-vs-AGENTS differences are n=1 noise and would flip win/harm spuriously.
@@ -168,16 +170,59 @@ internal sealed class Liet
         bool hasReadme = rungs.Any(r => r.Readme.Present);
         var rHdr = hasReadme ? " `README.md` |" : "";
         var rSep = hasReadme ? " ---: |" : "";
-        _o.WriteLine($"| rung | baseline |{rHdr} `{docLabel}` | oracle | ceiling | region |");
-        _o.WriteLine($"| --- | ---: |{rSep} ---: | ---: | ---: | --- |");
+        var (ids, legend) = BuildSkillIds(rungs, unit);
+        bool hasSkills = legend.Count > 0;
+        var sHdr = hasSkills ? " skills |" : "";
+        var sSep = hasSkills ? " --- |" : "";
+        _o.WriteLine($"| rung | baseline |{rHdr} `{docLabel}` | oracle | ceiling | region |{sHdr}");
+        _o.WriteLine($"| --- | ---: |{rSep} ---: | ---: | ---: | --- |{sSep}");
         foreach (var r in rungs)
         {
             var rCell = hasReadme ? $" {Cell(r.Readme)} |" : "";
+            var sCell = hasSkills ? $" {SkillCell(r, ids)} |" : "";
             _o.WriteLine($"| {r.Name} | {Cell(r.Base)} |{rCell} {AgCell(r)} | {Cell(r.Oracle)} "
-                + $"| {(r.Ceiling is { } c ? K(c) : "—")} | {RegionTag(r.Region, ds)} |");
+                + $"| {(r.Ceiling is { } c ? K(c) : "—")} | {RegionTag(r.Region, ds)} |{sCell}");
+        }
+        if (hasSkills)
+        {
+            var leg = string.Join(" · ", legend.Select(l => $"`{l.id}`={l.name} (×{l.count})"));
+            _o.WriteLine($"\n_Skills pulled (self-select from shelf): {leg}. "
+                + $"{legend.Count} distinct — all earn their place; a skill pulled ×0–1 is a deletion candidate._");
         }
         EmitScalars(rungs, ds);
         _o.WriteLine();
+    }
+
+    // Stable skill ids for the LIET table/image: `M` = base skill, domain skills alphabetical → 1..N.
+    // Alphabetical (not by count) keeps the legend identical across models for side-by-side reading.
+    private static (Dictionary<string, string> ids, List<(string id, string name, int count)> legend)
+        BuildSkillIds(List<Rung> rungs, string baseName)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var r in rungs)
+            foreach (var s in r.Skills)
+                counts[s] = counts.TryGetValue(s, out var c) ? c + 1 : 1;
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
+        var legend = new List<(string, string, int)>();
+        if (counts.TryGetValue(baseName, out var bc)) { ids[baseName] = "M"; legend.Add(("M", baseName, bc)); }
+        int n = 1;
+        foreach (var name in counts.Keys.Where(k => k != baseName).OrderBy(k => k, StringComparer.Ordinal))
+        {
+            var id = n++.ToString();
+            ids[name] = id;
+            legend.Add((id, name, counts[name]));
+        }
+        return (ids, legend);
+    }
+
+    // Rung's pulled skills as id tokens (M first, then numeric), e.g. "M 3" or "—" if none pulled.
+    private static string SkillCell(Rung r, Dictionary<string, string> ids)
+    {
+        if (r.Skills.Count == 0) return "—";
+        var tokens = r.Skills
+            .Select(s => ids.TryGetValue(s, out var id) ? id : "?")
+            .OrderBy(t => t == "M" ? "" : t, StringComparer.Ordinal);
+        return string.Join(" ", tokens);
     }
 
     private static string Cell(Point p) => !p.Present ? "—" : p.Passed ? K(p.Iet) : "✗";
@@ -280,7 +325,7 @@ internal sealed class Liet
 
     private static string BuildSvg(List<Rung> rungs, string unit, string model, string docLabel)
     {
-        const int W = 760, H = 480, L = 100, R = 664, T = 64, B = 380; // plot box
+        const int W = 760, H = 500, L = 100, R = 664, T = 64, B = 380; // plot box
         double maxIet = rungs.SelectMany(r => new[]
         {
             r.Base.Passed ? r.Base.Iet : 0, r.Ag.Passed ? r.Ag.Iet : 0,
@@ -310,7 +355,7 @@ internal sealed class Liet
             if (gv > 0) sb.Append($"  <line x1=\"{L}\" y1=\"{N(gy)}\" x2=\"{R}\" y2=\"{N(gy)}\" stroke=\"#e2e8f0\" stroke-width=\"1\"/>\n");
             sb.Append($"  <text x=\"{L - 8}\" y=\"{N(gy + 4)}\" text-anchor=\"end\" font-size=\"10.5\" fill=\"#64748b\">{K(gv)}</text>\n");
         }
-        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"430\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
+        sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"438\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
         sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">IET per correct answer (tokens) →</text>\n");
         // arms legend (top-left, inside plot): one line swatch per plotted arm so the baseline,
         // README and oracle curves are named, not just the AGENTS.md dots explained below.
@@ -333,6 +378,20 @@ internal sealed class Liet
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(rungs[i].Name)}</text>\n");
         sb.Append("  </g>\n");
+        // skill-id tick row: which skills the grounded arm pulled per rung (M = base, 1..N domain).
+        var (skillIds, skillLegend) = BuildSkillIds(rungs, unit);
+        if (skillLegend.Count > 0)
+        {
+            sb.Append("  <g font-size=\"9\" font-weight=\"700\" fill=\"#0891b2\" text-anchor=\"middle\">\n");
+            for (int i = 0; i < n; i++)
+            {
+                var cell = SkillCell(rungs[i], skillIds);
+                if (cell != "—") sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 31}\">{Esc(cell)}</text>\n");
+            }
+            sb.Append("  </g>\n");
+            var leg = string.Join("   ", skillLegend.Select(l => $"{l.id}={l.name}"));
+            sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"456\" text-anchor=\"middle\" font-size=\"9.5\" fill=\"#0891b2\">skills pulled — {Esc(leg)}</text>\n");
+        }
         // ceilings on rungs where AGENTS failed (max price of generalization): a dashed ceiling
         // line with a green "pays its way" zone under it and a red "ship SKILL.md" zone over it.
         foreach (var r in rungs.Where(r => !r.Ag.Passed && r.Ceiling is not null))
@@ -341,7 +400,7 @@ internal sealed class Liet
             sb.Append($"  <rect x=\"{N(x - hw)}\" y=\"{N(y)}\" width=\"{N(2 * hw)}\" height=\"{N(B - y)}\" fill=\"#bbf7d0\" opacity=\"0.4\"/>\n");
             sb.Append($"  <rect x=\"{N(x - hw)}\" y=\"{T}\" width=\"{N(2 * hw)}\" height=\"{N(y - T)}\" fill=\"#fecaca\" opacity=\"0.4\"/>\n");
             sb.Append($"  <line x1=\"{N(x - hw)}\" y1=\"{N(y)}\" x2=\"{N(x + hw)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
-            sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 32}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">{Esc(docLabel.Replace(".md", ""))} ✗</text>\n");
+            sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 44}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">{Esc(docLabel.Replace(".md", ""))} ✗</text>\n");
         }
         // series
         sb.Append(Series(rungs, p => p.Oracle, "#d97706", "SKILL.md (oracle)", X, Y, false));
@@ -350,9 +409,9 @@ internal sealed class Liet
         sb.Append(Series(rungs, p => p.Ag, "#2563eb", docLabel, X, Y, true));
         // legend
         sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
-        sb.Append($"    <circle cx=\"112\" cy=\"456\" r=\"4\" fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\"/><text x=\"122\" y=\"460\">{Esc(docLabel.Replace(".md", ""))} over ceiling (harm)</text>\n");
-        sb.Append($"    <circle cx=\"290\" cy=\"456\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"460\">{Esc(docLabel.Replace(".md", ""))} under ceiling (pays its way)</text>\n");
-        sb.Append($"    <text x=\"540\" y=\"460\" font-style=\"italic\">failed rungs not plotted</text>\n");
+        sb.Append($"    <circle cx=\"112\" cy=\"474\" r=\"4\" fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\"/><text x=\"122\" y=\"478\">{Esc(docLabel.Replace(".md", ""))} over ceiling (harm)</text>\n");
+        sb.Append($"    <circle cx=\"290\" cy=\"474\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"478\">{Esc(docLabel.Replace(".md", ""))} under ceiling (pays its way)</text>\n");
+        sb.Append($"    <text x=\"540\" y=\"478\" font-style=\"italic\">failed rungs not plotted</text>\n");
         sb.Append("  </g>\n</svg>\n");
         return sb.ToString();
     }
