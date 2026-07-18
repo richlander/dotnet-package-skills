@@ -43,6 +43,7 @@ internal sealed class Liet
         public double? Ceiling;  // competitor envelope for AGENTS.md (min IET of other passing arms)
         public string Region = "";
         public List<string> Skills = new();  // skills the grounded arm pulled for this rung (plugin self-select)
+        public string? Expected;             // methodology prior: the ONE target skill for this rung (eval.yaml)
     }
 
     private static bool Correct(ArmRow? r) => r is { Ft: > 0 } && r.Fp == r.Ft;
@@ -77,7 +78,12 @@ internal sealed class Liet
             {
                 if (baseSkill.Length == 0) baseSkill = v0.SkillName ?? "";
                 foreach (var sc0 in v0.Scenarios ?? new())
+                {
                     foreach (var s0 in Loader.DetectedSkillsOf(sc0, GroundArm)) allSkills.Add(s0);
+                    // Include the methodology target so an expected-but-never-pulled skill (an
+                    // under-fire gap) still gets a stable global id and shows in the legend.
+                    if (!string.IsNullOrWhiteSpace(sc0.ExpectedSkill)) allSkills.Add(sc0.ExpectedSkill.Trim());
+                }
             }
         var skillIds = BuildGlobalIds(allSkills, baseSkill);
 
@@ -155,6 +161,7 @@ internal sealed class Liet
             };
             if (readmeMap is not null && readmeMap.TryGetValue(r.Name, out var rm)) r.Readme = rm;
             r.Skills = Loader.DetectedSkillsOf(sc, groundArm).Distinct().ToList();
+            r.Expected = string.IsNullOrWhiteSpace(sc.ExpectedSkill) ? null : sc.ExpectedSkill.Trim();
             // Competitor envelope for AGENTS.md = min IET of baseline + oracle that passed. README is
             // PLOTTED as a reference series but kept OUT of the ceiling: where README≈AGENTS (common),
             // per-rung README-vs-AGENTS differences are n=1 noise and would flip win/harm spuriously.
@@ -210,16 +217,19 @@ internal sealed class Liet
         }
         if (hasSkills)
         {
-            var leg = string.Join(" · ", legend.Select(l => $"`{l.id}`={l.name} (×{l.count})"));
-            _o.WriteLine($"\n_Skills pulled (self-select from shelf): {leg}. "
-                + $"{legend.Count} distinct — all earn their place; a skill pulled ×0–1 is a deletion candidate._");
+            var leg = string.Join(" · ", legend.Select(l => $"`{l.id}`={l.name} ({LegendCount(l.id, l.expected, l.pulled)})"));
+            _o.WriteLine($"\n_Skills pulled (self-select from shelf) vs the methodology prior: {leg}. "
+                + $"`exp` = tasks that target the skill; `pull` = tasks that actually pulled it. "
+                + $"exp ×0 & pull ≤1 ⇒ deletion candidate; exp high & pull low ⇒ under-fire (discovery gap, keep)._");
         }
         var scr = Score(rungs);
         var fm = FloorMetric(rungs);
+        var th = TargetHit(rungs);
+        var hit = th.total > 0 ? $" · target-skill hit {th.hits}/{th.total}" : "";
         _o.WriteLine($"\n**Score:** correct {scr.baseCorrect}→{scr.agCorrect}/{scr.total} · "
             + $"IET per baseline-correct answer (over floor {K(fm.floor)}, all 24 incl. waste) "
             + $"{K(fm.basePerCorrect)}→{K(fm.agPerCorrect)} (Δ {SignedK(fm.agPerCorrect - fm.basePerCorrect)}/answer) · "
-            + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}).");
+            + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}){hit}.");
         EmitScalars(rungs, ds);
         _o.WriteLine();
     }
@@ -237,16 +247,48 @@ internal sealed class Liet
         return ids;
     }
 
-    // This card's legend: skills actually pulled in THESE rungs, with this card's own pull counts,
-    // ordered by the shared global id (M first, then 1..N).
-    private static List<(string id, string name, int count)> CardLegend(List<Rung> rungs, Dictionary<string, string> ids)
+    // This card's legend: every skill either PULLED in these rungs or EXPECTED by the methodology
+    // (union), with this card's pull count and the prior's expected count, ordered by the shared
+    // global id (M first, then 1..N). Expected-but-unpulled skills (pull ×0) surface under-fire gaps.
+    private static List<(string id, string name, int expected, int pulled)> CardLegend(List<Rung> rungs, Dictionary<string, string> ids)
     {
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var pulled = new Dictionary<string, int>(StringComparer.Ordinal);
+        var expected = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var r in rungs)
+        {
             foreach (var s in r.Skills)
-                counts[s] = counts.TryGetValue(s, out var c) ? c + 1 : 1;
-        return counts.Select(kv => (id: ids.TryGetValue(kv.Key, out var i) ? i : "?", name: kv.Key, count: kv.Value))
+                pulled[s] = pulled.TryGetValue(s, out var c) ? c + 1 : 1;
+            if (r.Expected is { Length: > 0 } e)
+                expected[e] = expected.TryGetValue(e, out var ec) ? ec + 1 : 1;
+        }
+        var keys = new HashSet<string>(pulled.Keys, StringComparer.Ordinal);
+        keys.UnionWith(expected.Keys);
+        return keys.Select(k => (
+                id: ids.TryGetValue(k, out var i) ? i : "?",
+                name: k,
+                expected: expected.TryGetValue(k, out var ec) ? ec : 0,
+                pulled: pulled.TryGetValue(k, out var pc) ? pc : 0))
             .OrderBy(t => t.id == "M" ? "" : t.id, StringComparer.Ordinal).ToList();
+    }
+
+    // Legend count suffix. M is the base skill (expected everywhere → show pull only). Domain skills
+    // show the prior's expected count next to the actual pull count so over/under-fire is visible.
+    private static string LegendCount(string id, int expected, int pulled) =>
+        id == "M" ? $"\u00d7{pulled}"
+        : expected > 0 ? $"exp \u00d7{expected} \u00b7 pull \u00d7{pulled}"
+        : $"pull \u00d7{pulled}";
+
+    // Target-skill hit rate: rungs whose ONE expected skill was among the pulled set. Basics target
+    // the base skill (M). Returns (hits, tasksWithAPrior); empty when no prior is plumbed.
+    private static (int hits, int total) TargetHit(List<Rung> rungs)
+    {
+        int hits = 0, total = 0;
+        foreach (var r in rungs.Where(r => r.Expected is { Length: > 0 }))
+        {
+            total++;
+            if (r.Skills.Contains(r.Expected!, StringComparer.Ordinal)) hits++;
+        }
+        return (hits, total);
     }
 
     // Rung's pulled skills as id tokens (M first, then numeric), e.g. "M 3" or "—" if none pulled.
@@ -365,8 +407,10 @@ internal sealed class Liet
         // Footer stacks under the plot: circle legend, then a vertical bulleted skill list, then a
         // bulleted Metrics block. Grow the canvas to fit both variable-length lists.
         int footerBullets = skillLegend.Count;
+        var thh = TargetHit(rungs);
+        int metricsBullets = 3 + (thh.total > 0 ? 1 : 0);
         int metricsHeadY = footerBullets > 0 ? B + 104 + 14 + footerBullets * 14 + 6 : B + 108;
-        int H = metricsHeadY + 14 + 3 * 14 + 12; // Metrics heading + 3 bullets + bottom margin
+        int H = metricsHeadY + 14 + metricsBullets * 14 + 12; // Metrics heading + bullets + bottom margin
         double maxIet = rungs.SelectMany(r => new[]
         {
             r.Base.Passed ? r.Base.Iet : 0, r.Ag.Passed ? r.Ag.Iet : 0,
@@ -460,22 +504,24 @@ internal sealed class Liet
             for (int i = 0; i < skillLegend.Count; i++)
             {
                 var l = skillLegend[i];
-                sb.Append($"    <text x=\"{L + 20}\" y=\"{hy + 14 + i * 14}\">\u2022 <tspan font-weight=\"700\">{Esc(l.id)}</tspan> = {Esc(l.name)} (\u00d7{l.count})</text>\n");
+                sb.Append($"    <text x=\"{L + 20}\" y=\"{hy + 14 + i * 14}\">\u2022 <tspan font-weight=\"700\">{Esc(l.id)}</tspan> = {Esc(l.name)} ({Esc(LegendCount(l.id, l.expected, l.pulled))})</text>\n");
             }
             sb.Append("  </g>\n");
             metricsY = hy + 14 + skillLegend.Count * 14 + 6;
         }
         var sc = Score(rungs);
         var fm = FloorMetric(rungs);
-        var metrics = new[]
+        var th = TargetHit(rungs);
+        var metrics = new List<string>
         {
             $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
             $"IET per baseline-correct answer (floor {K(fm.floor)}, all 24 incl. waste): {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
             $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})",
         };
+        if (th.total > 0) metrics.Add($"target-skill hit {th.hits}/{th.total} (expected skill was pulled)");
         sb.Append($"  <text x=\"{L + 12}\" y=\"{metricsY}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#334155\">Metrics:</text>\n");
         sb.Append("  <g font-size=\"9.5\" fill=\"#334155\">\n");
-        for (int i = 0; i < metrics.Length; i++)
+        for (int i = 0; i < metrics.Count; i++)
             sb.Append($"    <text x=\"{L + 20}\" y=\"{metricsY + 14 + i * 14}\">\u2022 {Esc(metrics[i])}</text>\n");
         sb.Append("  </g>\n");
         sb.Append("</svg>\n");

@@ -24,6 +24,7 @@ public sealed class Scenario
 {
     [JsonPropertyName("scenarioName")] public string? ScenarioName { get; set; }
     [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("expectedSkill")] public string? ExpectedSkill { get; set; }
     [JsonPropertyName("improvementScore")] public double? ImprovementScore { get; set; }
     [JsonPropertyName("baseline")] public Arm? Baseline { get; set; }
     [JsonPropertyName("skilledIsolated")] public Arm? SkilledIsolated { get; set; }
