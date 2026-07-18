@@ -483,6 +483,17 @@ internal sealed class Liet
         }
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"438\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
         sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">IET per correct answer (tokens) →</text>\n");
+        // Floor reference: the LIET metric's zero-point (mean levelized IET of the baseline's correct
+        // basics). A light dashed green line so each rung's cost reads as height OVER the floor.
+        {
+            double floorV = FloorMetric(rungs).floor;
+            if (floorV > 0)
+            {
+                double fY = Y(floorV);
+                sb.Append($"  <line x1=\"{L}\" y1=\"{N(fY)}\" x2=\"{R}\" y2=\"{N(fY)}\" stroke=\"#22c55e\" stroke-width=\"1.4\" stroke-dasharray=\"6 5\" opacity=\"0.7\"/>\n");
+                sb.Append($"  <text x=\"{L + 6}\" y=\"{N(fY - 4)}\" font-size=\"10\" fill=\"#16a34a\">floor {K(floorV)}</text>\n");
+            }
+        }
         // arms legend (top-left, inside plot): one line swatch per plotted arm so the baseline,
         // README and oracle curves are named, not just the AGENTS.md dots explained below.
         {
@@ -715,18 +726,20 @@ internal sealed class Liet
             rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Arch),
             sh.Sum(r => r.Base.Iet), sh.Sum(r => r.Ag.Iet));
     }
-    // Floor-anchored efficiency: one COMMON floor F = mean levelized IET of the baseline's CORRECT
-    // basics (CT01–06). Both arms are charged their total IET-over-F across ALL 24 tasks (including
-    // wasted IET on tasks they FAILED — this penalizes hedging), then normalized by a FIXED
-    // denominator = the baseline's correct count (so a skill can't dilute its cost by unlocking cheap
-    // tasks). Returns per-correct-baseline-answer premium for each arm. Precedent: cost-per-successful
-    // -outcome / cost-effectiveness ratio (cost per approved drug incl. failures; cost per acquisition).
-    private static bool IsBasic(Rung r) =>
-        int.TryParse(new string(r.Name.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray()),
-            out var n) && n >= 1 && n <= 6;
+    // Floor-anchored efficiency: one COMMON floor F = mean levelized IET of the 6 CHEAPEST
+    // baseline-correct rungs (the first 6 points on the LIET slope). Both arms are charged their
+    // total IET-over-F across ALL 24 tasks (including wasted IET on tasks they FAILED — this
+    // penalizes hedging), then normalized by a FIXED denominator = the baseline's correct count (so a
+    // skill can't dilute its cost by unlocking cheap tasks). The 6-cheapest anchor (vs nominal
+    // "basics") keeps the floor at the true bottom of the curve: a task that is nominally basic but
+    // expensive for baseline (archaeology tax) is not in the cheapest 6 and cannot inflate the zero-
+    // point. F cancels in the arm DELTA (both arms run all 24), so the anchor sets absolute scale, not
+    // the story. Returns per-correct-baseline-answer premium for each arm. Precedent: cost-per-
+    // successful-outcome / cost-effectiveness ratio (cost per approved drug incl. failures).
     private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs)
     {
-        var basePassedBasics = rungs.Where(r => IsBasic(r) && r.Base.Passed).Select(r => r.Base.Iet).ToList();
+        var basePassedBasics = rungs.Where(r => r.Base.Passed).OrderBy(r => r.Base.Iet)
+            .Take(6).Select(r => r.Base.Iet).ToList();
         double f = basePassedBasics.Count > 0 ? basePassedBasics.Average() : 0;
         int nBase = rungs.Count(r => r.Base.Passed);
         double baseTotal = rungs.Where(r => r.Base.Present).Sum(r => r.Base.Iet - f);
