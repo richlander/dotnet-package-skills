@@ -18,6 +18,11 @@ internal sealed class Liet
     private readonly TextWriter _o;
     public bool NoTitle;
     public bool OracleFromPlugin;   // opt-in: read skilledPlugin as the SKILL.md oracle
+    // The grounded arm to plot as the primary (blue) curve. Mirrors the card's GROUNDING_CARD_ARM so
+    // `--view liet` and `--view card` always describe the SAME arm. Default skilledIsolated (the clean
+    // single-skill content measure); set skilledPlugin for the realistic whole-shelf pull delivery.
+    public string GroundArm { get; init; } =
+        Environment.GetEnvironmentVariable("GROUNDING_CARD_ARM") is { Length: > 0 } v ? v : "skilledIsolated";
     public Liet(TextWriter o) => _o = o;
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -63,7 +68,7 @@ internal sealed class Liet
             int vi = 0;
             foreach (var v in d.Verdicts ?? new())
             {
-                var rungs = BuildRungs(v, iet, OracleFromPlugin, readmeMap);
+                var rungs = BuildRungs(v, iet, OracleFromPlugin, GroundArm, readmeMap);
                 if (rungs.Count == 0) { vi++; continue; }
                 // Levelize: order rungs by MEASURED difficulty (baseline IET) — the LCOE-faithful
                 // x-axis — not authored order. Rungs the baseline could not answer are the hardest
@@ -72,12 +77,15 @@ internal sealed class Liet
                              .ThenBy(r => r.Index).ToList();
                 for (int k = 0; k < rungs.Count; k++) rungs[k].Index = k;
                 var unit = v.SkillName ?? "?";
-                EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel);
+                // Label the grounded arm from the dataset file name (same heuristic as the card's
+                // DocLabel): a "skill" dataset ships SKILL.md, otherwise AGENTS.md.
+                var docLabel = System.IO.Path.GetFileName(f).ToLowerInvariant().Contains("skill") ? "SKILL.md" : "AGENTS.md";
+                EmitTable(rungs, unit, d.Model ?? "?", d.JudgeModel, docLabel);
                 if (svgPath is { Length: > 0 })
                 {
                     var multi = primary.Count > 1 || (d.Verdicts?.Count ?? 0) > 1;
                     var outPath = multi ? SvgVariant(svgPath, f, unit, d.Model, vi) : svgPath;
-                    File.WriteAllText(outPath, BuildSvg(rungs, unit, d.Model ?? "?"));
+                    File.WriteAllText(outPath, BuildSvg(rungs, unit, d.Model ?? "?", docLabel));
                     _o.WriteLine($"\n_LIET curve written to `{outPath}`._");
                 }
                 vi++;
@@ -99,7 +107,7 @@ internal sealed class Liet
         return map;
     }
 
-    private static List<Rung> BuildRungs(Verdict v, IetScheme iet, bool oracleFromPlugin,
+    private static List<Rung> BuildRungs(Verdict v, IetScheme iet, bool oracleFromPlugin, string groundArm,
         Dictionary<string, Point>? readmeMap = null)
     {
         var rungs = new List<Rung>();
@@ -107,12 +115,11 @@ internal sealed class Liet
         foreach (var sc in v.Scenarios ?? new())
         {
             var b = Loader.Row(Loader.ArmOf(sc, "baseline"), iet);
-            var a = Loader.Row(Loader.ArmOf(sc, "skilledIsolated"), iet);
-            // skilledPlugin is a DELIVERY variant of the same AGENTS.md (whole-shelf self-select),
-            // NOT a SKILL.md oracle — so it is read as the oracle ONLY when --oracle-from-plugin is
-            // set (the caller asserts that arm carried the fuller doc). Otherwise the ceiling is
-            // baseline alone: "grounding must beat the model knowing nothing".
-            var o = oracleFromPlugin ? Loader.Row(Loader.ArmOf(sc, "skilledPlugin"), iet) : null;
+            var a = Loader.Row(Loader.ArmOf(sc, groundArm), iet);
+            // skilledPlugin is a DELIVERY variant of the same grounding doc (whole-shelf self-select).
+            // It is read as the oracle ONLY when --oracle-from-plugin is set (and it is not already the
+            // primary arm). Otherwise the ceiling is baseline alone: "grounding must beat knowing nothing".
+            var o = oracleFromPlugin && groundArm != "skilledPlugin" ? Loader.Row(Loader.ArmOf(sc, "skilledPlugin"), iet) : null;
             var r = new Rung
             {
                 Name = (sc.ScenarioName ?? "").Split(':')[0].Trim(),
@@ -151,24 +158,25 @@ internal sealed class Liet
 
     // ---- table ----------------------------------------------------------------------------------
 
-    private void EmitTable(List<Rung> rungs, string unit, string model, string? judge)
+    private void EmitTable(List<Rung> rungs, string unit, string model, string? judge, string docLabel)
     {
+        var ds = docLabel.Replace(".md", "");
         if (!NoTitle) _o.WriteLine($"### LIET curve — {unit} | `{model}`\n");
         _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = measured baseline IET (levelized). `✗` = arm failed "
             + $"(not plotted, not extrapolated). Ceiling = min IET of passing competitors — the max price "
-            + $"`AGENTS.md` may pay. Judge `{judge ?? "?"}`. IET model {IetModels.CaptionFor(new[] { model })}._\n");
+            + $"`{docLabel}` may pay. Judge `{judge ?? "?"}`. IET model {IetModels.CaptionFor(new[] { model })}._\n");
         bool hasReadme = rungs.Any(r => r.Readme.Present);
         var rHdr = hasReadme ? " `README.md` |" : "";
         var rSep = hasReadme ? " ---: |" : "";
-        _o.WriteLine($"| rung | baseline |{rHdr} `AGENTS.md` | oracle | ceiling | region |");
+        _o.WriteLine($"| rung | baseline |{rHdr} `{docLabel}` | oracle | ceiling | region |");
         _o.WriteLine($"| --- | ---: |{rSep} ---: | ---: | ---: | --- |");
         foreach (var r in rungs)
         {
             var rCell = hasReadme ? $" {Cell(r.Readme)} |" : "";
             _o.WriteLine($"| {r.Name} | {Cell(r.Base)} |{rCell} {AgCell(r)} | {Cell(r.Oracle)} "
-                + $"| {(r.Ceiling is { } c ? K(c) : "—")} | {RegionTag(r.Region)} |");
+                + $"| {(r.Ceiling is { } c ? K(c) : "—")} | {RegionTag(r.Region, ds)} |");
         }
-        EmitScalars(rungs);
+        EmitScalars(rungs, ds);
         _o.WriteLine();
     }
 
@@ -182,53 +190,53 @@ internal sealed class Liet
         return K(r.Ag.Iet) + pays;
     }
 
-    private static string RegionTag(string region) => region switch
+    private static string RegionTag(string region, string ds) => region switch
     {
         "win" => "**win** (under ceiling)",
         "harm" => "harm (over ceiling)",
         "unlock" => "unlock (baseline ✗)",
         "regression" => "**regression** (harm veto)",
-        "ceiling" => "ceiling only (AGENTS ✗)",
+        "ceiling" => $"ceiling only ({ds} ✗)",
         "unreached" => "unreached",
         _ => region,
     };
 
     // Honest scalar reductions of the curve (all difficulty-aware; never a cross-difficulty mean).
-    private void EmitScalars(List<Rung> rungs)
+    private void EmitScalars(List<Rung> rungs, string ds)
     {
         var shared = rungs.Where(r => r.Base.Passed && r.Ag.Passed).ToList();
         var sb = new StringBuilder("\n");
 
-        // Value delivered on the shared region: baseline − AGENTS, summed and per-rung.
+        // Value delivered on the shared region: baseline − grounded, summed and per-rung.
         if (shared.Count > 0)
         {
             double val = shared.Sum(r => r.Base.Iet - r.Ag.Iet);
             double ratio = shared.Sum(r => r.Base.Iet) / Math.Max(1, shared.Sum(r => r.Ag.Iet));
-            sb.Append($"- **Value delivered** (shared region, {shared.Count} rung(s)): baseline − AGENTS = {K(val)} IET "
-                + $"(baseline {ratio.ToString("0.0", Inv)}× AGENTS).\n");
+            sb.Append($"- **Value delivered** (shared region, {shared.Count} rung(s)): baseline − {ds} = {K(val)} IET "
+                + $"(baseline {ratio.ToString("0.0", Inv)}× {ds}).\n");
             // Shared-region slope: mean per-rung step for each arm across the shared rungs (efficiency).
             if (shared.Count >= 2)
             {
                 double bs = Slope(shared.Select(r => r.Base.Iet)), as_ = Slope(shared.Select(r => r.Ag.Iet));
-                sb.Append($"- **Shared-region slope** (efficiency): baseline {Signed(bs)}/rung vs AGENTS {Signed(as_)}/rung.\n");
+                sb.Append($"- **Shared-region slope** (efficiency): baseline {Signed(bs)}/rung vs {ds} {Signed(as_)}/rung.\n");
             }
         }
 
-        // Unlock: rungs AGENTS answered that baseline did not.
+        // Unlock: rungs the grounded arm answered that baseline did not.
         var unlock = rungs.Where(r => r.Ag.Passed && !r.Base.Passed).Select(r => r.Name).ToList();
-        if (unlock.Count > 0) sb.Append($"- **Unlocked** (baseline ✗, AGENTS ✓): {string.Join(", ", unlock)}.\n");
+        if (unlock.Count > 0) sb.Append($"- **Unlocked** (baseline ✗, {ds} ✓): {string.Join(", ", unlock)}.\n");
 
         // Regressions (harm veto).
         var regr = rungs.Where(r => r.Region == "regression").Select(r => r.Name).ToList();
-        if (regr.Count > 0) sb.Append($"- **Regressions** (baseline ✓, AGENTS ✗ — harm veto): {string.Join(", ", regr)}.\n");
+        if (regr.Count > 0) sb.Append($"- **Regressions** (baseline ✓, {ds} ✗ — harm veto): {string.Join(", ", regr)}.\n");
 
-        // Harm region (AGENTS over the ceiling on rungs a competitor is cheaper).
+        // Harm region (grounded arm over the ceiling on rungs a competitor is cheaper).
         var harm = rungs.Where(r => r.Region == "harm").Select(r => r.Name).ToList();
-        if (harm.Count > 0) sb.Append($"- **Harm region** (AGENTS over ceiling): {string.Join(", ", harm)}.\n");
+        if (harm.Count > 0) sb.Append($"- **Harm region** ({ds} over ceiling): {string.Join(", ", harm)}.\n");
 
-        // Divergence rung (knee): the shared rung with the largest upward step in the AGENTS curve.
+        // Divergence rung (knee): the shared rung with the largest upward step in the grounded curve.
         var knee = Knee(rungs.Where(r => r.Ag.Passed).ToList());
-        if (knee is not null) sb.Append($"- **Divergence rung** (AGENTS knee): {knee}.\n");
+        if (knee is not null) sb.Append($"- **Divergence rung** ({ds} knee): {knee}.\n");
 
         // Handoff rung: where the binding ceiling switches from baseline to oracle.
         var handoff = Handoff(rungs);
@@ -270,7 +278,7 @@ internal sealed class Liet
 
     // ---- SVG ------------------------------------------------------------------------------------
 
-    private static string BuildSvg(List<Rung> rungs, string unit, string model)
+    private static string BuildSvg(List<Rung> rungs, string unit, string model, string docLabel)
     {
         const int W = 760, H = 480, L = 100, R = 664, T = 64, B = 380; // plot box
         double maxIet = rungs.SelectMany(r => new[]
@@ -317,7 +325,7 @@ internal sealed class Liet
             }
             Swatch("#dc2626", "baseline (archaeology only)");
             if (hasReadme) Swatch("#7c3aed", "README.md (packed)");
-            Swatch("#2563eb", "AGENTS.md");
+            Swatch("#2563eb", docLabel);
             if (hasOracle) Swatch("#d97706", "SKILL.md (oracle)");
             sb.Append("  </g>\n");
         }
@@ -333,17 +341,17 @@ internal sealed class Liet
             sb.Append($"  <rect x=\"{N(x - hw)}\" y=\"{N(y)}\" width=\"{N(2 * hw)}\" height=\"{N(B - y)}\" fill=\"#bbf7d0\" opacity=\"0.4\"/>\n");
             sb.Append($"  <rect x=\"{N(x - hw)}\" y=\"{T}\" width=\"{N(2 * hw)}\" height=\"{N(y - T)}\" fill=\"#fecaca\" opacity=\"0.4\"/>\n");
             sb.Append($"  <line x1=\"{N(x - hw)}\" y1=\"{N(y)}\" x2=\"{N(x + hw)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
-            sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 32}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">AGENTS ✗</text>\n");
+            sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 32}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">{Esc(docLabel.Replace(".md", ""))} ✗</text>\n");
         }
         // series
         sb.Append(Series(rungs, p => p.Oracle, "#d97706", "SKILL.md (oracle)", X, Y, false));
         sb.Append(Series(rungs, p => p.Base, "#dc2626", "baseline", X, Y, false));
         sb.Append(Series(rungs, p => p.Readme, "#7c3aed", "README.md", X, Y, false));
-        sb.Append(Series(rungs, p => p.Ag, "#2563eb", "AGENTS.md", X, Y, true));
+        sb.Append(Series(rungs, p => p.Ag, "#2563eb", docLabel, X, Y, true));
         // legend
         sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
-        sb.Append($"    <circle cx=\"112\" cy=\"456\" r=\"4\" fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\"/><text x=\"122\" y=\"460\">AGENTS over ceiling (harm)</text>\n");
-        sb.Append($"    <circle cx=\"290\" cy=\"456\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"460\">AGENTS under ceiling (pays its way)</text>\n");
+        sb.Append($"    <circle cx=\"112\" cy=\"456\" r=\"4\" fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\"/><text x=\"122\" y=\"460\">{Esc(docLabel.Replace(".md", ""))} over ceiling (harm)</text>\n");
+        sb.Append($"    <circle cx=\"290\" cy=\"456\" r=\"4\" fill=\"#2563eb\"/><text x=\"300\" y=\"460\">{Esc(docLabel.Replace(".md", ""))} under ceiling (pays its way)</text>\n");
         sb.Append($"    <text x=\"540\" y=\"460\" font-style=\"italic\">failed rungs not plotted</text>\n");
         sb.Append("  </g>\n</svg>\n");
         return sb.ToString();
