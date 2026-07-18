@@ -360,10 +360,11 @@ internal sealed class Liet
     {
         const int W = 760, L = 100, R = 664, T = 64, B = 380; // plot box
         var skillLegend = CardLegend(rungs, skillIds);
-        // Footer stacks under the plot: circle legend, then a vertical bulleted skill list. Grow the
-        // canvas to fit the list (variable count) instead of a single overflowing horizontal line.
+        // Footer stacks under the plot: circle legend, then a vertical bulleted skill list, then a
+        // bulleted Metrics block. Grow the canvas to fit both variable-length lists.
         int footerBullets = skillLegend.Count;
-        int H = (footerBullets > 0 ? 494 + footerBullets * 14 + 8 : 500) + 24; // +24 for the Metrics row
+        int metricsHeadY = footerBullets > 0 ? B + 104 + 14 + footerBullets * 14 + 6 : B + 108;
+        int H = metricsHeadY + 14 + 3 * 14 + 12; // Metrics heading + 3 bullets + bottom margin
         double maxIet = rungs.SelectMany(r => new[]
         {
             r.Base.Passed ? r.Base.Iet : 0, r.Ag.Passed ? r.Ag.Iet : 0,
@@ -463,8 +464,17 @@ internal sealed class Liet
             metricsY = hy + 14 + skillLegend.Count * 14 + 6;
         }
         var sc = Score(rungs);
-        sb.Append($"  <text x=\"{L + 12}\" y=\"{metricsY}\" font-size=\"10.5\" fill=\"#334155\"><tspan font-weight=\"700\">Metrics:</tspan> "
-            + $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}  \u00b7  shared-rung IET {PctStr(sc.sharedBaseIet, sc.sharedAgIet)}  \u00b7  archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})</text>\n");
+        var metrics = new[]
+        {
+            $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
+            $"shared-rung IET {PctStr(sc.sharedBaseIet, sc.sharedAgIet)}",
+            $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})",
+        };
+        sb.Append($"  <text x=\"{L + 12}\" y=\"{metricsY}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#334155\">Metrics:</text>\n");
+        sb.Append("  <g font-size=\"9.5\" fill=\"#334155\">\n");
+        for (int i = 0; i < metrics.Length; i++)
+            sb.Append($"    <text x=\"{L + 20}\" y=\"{metricsY + 14 + i * 14}\">\u2022 {Esc(metrics[i])}</text>\n");
+        sb.Append("  </g>\n");
         sb.Append("</svg>\n");
         return sb.ToString();
     }
@@ -516,7 +526,7 @@ internal sealed class Liet
     // failure — digging happens either way), so the story is "grounding collapses archaeology to ~0".
     private static string BuildArchSvg(List<Rung> rungs, string unit, string model, string docLabel)
     {
-        const int W = 760, H = 492, L = 100, R = 664, T = 64, B = 380;
+        const int W = 760, H = 520, L = 100, R = 664, T = 64, B = 380;
         double maxArch = rungs.SelectMany(r => new[] { r.Base.Present ? r.Base.Arch : 0, r.Ag.Present ? r.Ag.Arch : 0 })
             .DefaultIfEmpty(1).Max();
         maxArch = Math.Max(maxArch, 1);
@@ -558,8 +568,16 @@ internal sealed class Liet
         sb.Append($"    <text x=\"{L + 168}\" y=\"{B + 66}\"><tspan font-weight=\"700\" fill=\"#0891b2\">ⁿ</tspan> = skills pulled on the {Esc(docLabel.Replace(".md", ""))} line</text>\n");
         sb.Append("  </g>\n");
         var sc = Score(rungs);
-        sb.Append($"  <text x=\"{L + 20}\" y=\"{B + 86}\" font-size=\"10.5\" fill=\"#334155\"><tspan font-weight=\"700\">Metrics:</tspan> "
-            + $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})  \u00b7  correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}</text>\n");
+        var metrics = new[]
+        {
+            $"archaeology {N(sc.baseArch)}\u2192{N(sc.agArch)} calls ({PctStr(sc.baseArch, sc.agArch)})",
+            $"correct {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
+        };
+        sb.Append($"  <text x=\"{L + 20}\" y=\"{B + 86}\" font-size=\"9.5\" font-weight=\"700\" fill=\"#334155\">Metrics:</text>\n");
+        sb.Append("  <g font-size=\"9.5\" fill=\"#334155\">\n");
+        for (int i = 0; i < metrics.Length; i++)
+            sb.Append($"    <text x=\"{L + 28}\" y=\"{B + 100 + i * 14}\">\u2022 {Esc(metrics[i])}</text>\n");
+        sb.Append("  </g>\n");
         sb.Append("</svg>\n");
         return sb.ToString();
     }
