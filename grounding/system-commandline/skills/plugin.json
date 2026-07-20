@@ -1,0 +1,6 @@
+{
+  "name": "system-commandline",
+  "version": "2.0.0",
+  "description": "System.CommandLine workflow skills: a compact base skill pinning the current (GA/2.x-3.x) API plus domain skills (beta-to-ga-migration, options-and-arguments, actions-and-invocation, subcommands-and-help, net-3x-additions). Install all together so an agent can pull whichever a task needs.",
+  "skills": ["."]
+}

@@ -20,6 +20,10 @@ internal sealed class ArmAgg
     public double Activated;      // fraction of grounded scenarios that read the grounding (0..1)
     public bool Grounded;         // this arm was handed grounding (non-baseline)
     public int DocTok;   // grounding doc tokens loaded into THIS arm (0 for baseline)
+    // Per-skill pull counts (plugin self-select): distinct skills the grounded arm invoked, and
+    // how many scenarios each was pulled in. Empty for baseline. Reveals deletion candidates
+    // (a shelf skill pulled in ×0–1 scenarios earns no place).
+    public Dictionary<string, int> SkillCounts = new(StringComparer.Ordinal);
 
     // Tool-call composition. Web is external retrieval; nuget-cache is a subset of bash
     // (reading/decompiling the restored package). Other = everything else (view/edit/skill/...).

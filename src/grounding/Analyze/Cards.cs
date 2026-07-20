@@ -73,6 +73,18 @@ internal sealed partial class Cards
     private static string RawDoc(ArmAgg a) => a.DocTok.ToString(Inv);
     private static string DiffDoc(ArmAgg n, ArmAgg o) => $"{o.DocTok}\u2192{n.DocTok}";
 
+    // Skill coverage (plugin self-select): how many distinct shelf skills the arm actually pulled.
+    // Baseline pulls none. A low count vs the shelf flags skills that earn no place (delete them).
+    private static string RawSkillsUsed(ArmAgg a) =>
+        a.SkillCounts.Count == 0 ? "\u2014" : a.SkillCounts.Count.ToString(Inv);
+    private static string DiffSkillsUsed(ArmAgg n, ArmAgg o) => $"{o.SkillCounts.Count}\u2192{n.SkillCounts.Count}";
+
+    // Per-skill pull breakdown for the note under the card: "markout×23 · conditional-composition×7 · …".
+    private static string SkillBreakdown(ArmAgg a) =>
+        a.SkillCounts.Count == 0 ? "none"
+        : string.Join(" \u00b7 ", a.SkillCounts.OrderByDescending(k => k.Value)
+            .ThenBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}\u00d7{k.Value}"));
+
     private static readonly (string Label, Func<ArmAgg, string> Raw, Func<ArmAgg, ArmAgg, string> Diff)[] Spec =
     {
         // Narrative headline (3 rows, same X/total format so the connection is obvious):
@@ -81,6 +93,7 @@ internal sealed partial class Cards
         ("tasks correct (+)",                  RawSuccess, DiffSuccess),
         ("relied on grounding: tasks (+)",     RawReadGrounding, DiffReadGrounding),
         ("relied on archaeology, fallback: cache / nuget.org (-)", RawCache,  DiffCache),
+        ("unique skills used (of shelf) (context)", RawSkillsUsed, DiffSkillsUsed),
         ("func passed (assertions) (+)",       RawFunc,    DiffFunc),
         ("tool calls: web / bash / other (context)", RawToolSplit, DiffToolSplit),
         ("grounding load (tok) (context)",     RawDoc,     DiffDoc),
@@ -107,6 +120,8 @@ internal sealed partial class Cards
     //      (archaeology, work IET, output). A doc can FAIL the gate yet still be BETTER on
     //      efficiency (e.g. haiku: more correct + cheaper, but not yet 100%) — the old single
     //      verdict hid this by withholding the efficiency label whenever the gate failed.
+    //      BUT a correctness REGRESSION (fewer tasks correct than baseline) forces WORSE: a cheaper
+    //      arm that answers fewer questions is a harm, never BETTER (correct answers trump tokens).
 
     // EFFICACY GATE: did the grounded arm answer 100% of its tier correctly?
     private static string GateLabel(ArmAgg b, ArmAgg g) => g.Succ >= g.N ? "PASS" : "FAIL";
@@ -114,6 +129,10 @@ internal sealed partial class Cards
     // EFFICIENCY: rank archaeology / work IET / output, independent of the gate.
     private static string EffLabel(ArmAgg b, ArmAgg g)
     {
+        // CORRECTNESS REGRESSION DOMINATES: if the grounded arm answers FEWER tasks correctly than
+        // baseline, it is WORSE no matter how much IET it saves — cheaper-but-wrong is never BETTER
+        // (dotnet/skills philosophy: correct answers trump tokens). An IET win cannot mask lost answers.
+        if (g.Succ - b.Succ < 0) return "WORSE";
         var iet = Pct(g.WorkIet, b.WorkIet);   // WORK IET — doc carrying-cost netted out (the agent's effort)
         var @out = Pct(g.Out, b.Out);
         // WORSE: real IET/output inflation (a harm signal).
@@ -191,10 +210,15 @@ internal sealed partial class Cards
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
         _o.WriteLine("\n_Two axes. **Gate** (correctness): **PASS** = 100% of tier correct, **FAIL** = below the gate. "
             + "**Efficiency** (independent of the gate): **BETTER** = more tasks correct / archaeology→0 / work IET cut ≥20%; "
-            + "**WORSE** = work IET or output inflated ≥20%; **NEUTRAL** = held. A doc can FAIL the gate yet be BETTER on efficiency._\n");
+            + "**WORSE** = fewer tasks correct than baseline, or work IET / output inflated ≥20%; **NEUTRAL** = held. "
+            + "A correctness regression forces WORSE (cheaper-but-wrong is never better); a doc can FAIL the gate yet be BETTER on efficiency._\n");
         _o.WriteLine("> Note: even ungrounded, the baseline self-grounds from the restored NuGet cache "
             + "(README/AGENTS are packed in the nupkg) and the open web — so its resourcefulness count is a "
             + "**lower bound** and grounding's advantage is understated.\n");
+        if (arms.Any(a => a.Agg[Arm].SkillCounts.Count > 0))
+            _o.WriteLine("> **Skills pulled** (self-select from shelf, ×scenarios): "
+                + string.Join(" \u2014 ", arms.Select(a => $"`{a.Model}` {SkillBreakdown(a.Agg[Arm])}"))
+                + ". A shelf skill pulled ×0\u20131 earns no place (delete it).\n");
     }
 
     public void ModelDiff(IReadOnlyList<string> files)
@@ -500,6 +524,49 @@ internal sealed partial class Cards
         "scenario                     | arm      | qual | func |     tok |    iet | cost | secs \u2016 web | tools | turn | di | mcp | cache | bash";
     private const string Grp =
         "                                                 <<<<<<<<<< NORMATIVE METRICS         \u2016 INFORMATIVE SIGNALS >>>>>>>>>>";
+
+    // Smell test — a single-arm, unjudged "finger in the wind" over the self-selecting shelf
+    // (skilledPlugin). No baseline column, no judge, no verdict: just the objective behavioural
+    // signals a maintainer eyeballs after editing a shelf — did the skills activate, did the agent
+    // avoid archaeology (cache/web digging), and did it stay cheap (turns, IET). Works on any
+    // dataset, but is meant for the cheap `run --no-judge` output. Arm defaults to skilledPlugin
+    // (the whole-shelf self-select), overridable via GROUNDING_CARD_ARM.
+    public void SmellCard(IReadOnlyList<string> files)
+    {
+        var arm = Environment.GetEnvironmentVariable("GROUNDING_CARD_ARM") is { Length: > 0 } v ? v : "skilledPlugin";
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && a.Agg.ContainsKey(arm))
+            .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
+        if (arms.Count == 0)
+        {
+            _o.WriteLine($"smell needs at least one dataset carrying the `{arm}` arm."); return;
+        }
+        var sn = arms[0].SkillName;
+        var n = arms[0].Agg[arm].N;
+        if (!NoTitle) _o.WriteLine($"### Smell test — {sn} (unjudged)\n");
+        _o.WriteLine($"_Self-selecting shelf arm (`{arm}`) only — no baseline, no judge. IET model "
+            + $"{IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across {n} scenarios. Finger in the wind: "
+            + "did the shelf activate, avoid archaeology, and stay cheap?_\n");
+        _o.WriteLine("| Signal (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
+        _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
+        (string Label, Func<ArmAgg, string> Raw)[] smell =
+        {
+            ("tasks correct (+)",                                    RawSuccess),
+            ("relied on grounding: tasks (+)",                       RawReadGrounding),
+            ("archaeology: cache / nuget.org (-)",                   RawCache),
+            ("unique skills used (of shelf) (context)",              RawSkillsUsed),
+            ("tool calls: web / bash / other (context)",             RawToolSplit),
+            ("output tok (% of IET) (-)",                            RawOut),
+            ("tool-call turns (% of total) (-)",                     RawToolCallTurns),
+            ("session turns (-)",                                    RawSessionTurns),
+            ("Total IET (-)",                                        RawIet),
+        };
+        foreach (var (label, raw) in smell)
+            _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => raw(a.Agg[arm]))) + " |");
+        if (arms.Any(a => a.Agg[arm].SkillCounts.Count > 0))
+            _o.WriteLine("\n> **Skills pulled** (self-select from shelf, ×scenarios): "
+                + string.Join(" \u2014 ", arms.Select(a => $"`{a.Model}` {SkillBreakdown(a.Agg[arm])}"))
+                + ". A shelf skill pulled ×0\u20131 earns no place (delete it).\n");
+    }
 
     public void Table(IReadOnlyList<string> files)
     {

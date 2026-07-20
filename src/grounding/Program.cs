@@ -13,10 +13,10 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | doc-card | liet | h2h | model-diff | source-diff | skill-diff | tools-card | web-card",
+    Description = "table | card | smell | doc-card | liet | h2h | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "doc-card", "liet", "h2h", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "smell", "doc-card", "liet", "h2h", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
 var svgOpt = new Option<string?>("--svg")
 {
     Description = "For --view liet: also write the LIET curve as an SVG to this path.",
@@ -40,7 +40,7 @@ var ietModelOpt = new Option<string>("--iet-model")
 };
 ietModelOpt.AcceptOnlyFromAmong("auto", "anthropic", "claude", "openai", "gpt", "no-cache", "nocache", "gpt-pro", "gpt-5.5-pro");
 // View flags (aliases for --view): --card / --model-diff / etc.
-var legacy = new[] { "card", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card" }
+var legacy = new[] { "card", "smell", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card" }
     .ToDictionary(v => v, v => new Option<bool>($"--{v}") { Description = $"Alias for --view {v}." });
 
 var analyze = new Command("analyze", "Render metric cards / tables from results.json.")
@@ -61,6 +61,7 @@ analyze.SetAction(parse =>
     switch (view)
     {
         case "card": cards.Card(files); break;
+        case "smell": cards.SmellCard(files); break;
         case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
         case "h2h": cards.H2H(files); break;
         case "liet": new Liet(Console.Out) { NoTitle = parse.GetValue(noTitleOpt), OracleFromPlugin = parse.GetValue(oraclePluginOpt) }.Render(files, parse.GetValue(svgOpt)); break;
@@ -168,11 +169,14 @@ var rootOpt = new Option<string?>("--root") { Description = "Grounding root hold
 var baselineOutOpt = new Option<string?>("--baseline-out") { Description = "Shared-baseline flow: run and persist the ungrounded baseline to this path (a {model} token is substituted per model). Reuse it with --baseline-from so push/pull compare against one pinned baseline." };
 var baselineFromOpt = new Option<string?>("--baseline-from") { Description = "Shared-baseline flow: reuse a baseline persisted by --baseline-out (skips the baseline arm). Must match model/judge/prompts. {model} substituted per model." };
 var freshOpt = new Option<bool>("--fresh") { Description = "Regenerate even when a dataset with matching provenance (same corpus + doc content) already exists. Default reuses it (cheap re-runs)." };
+var evalModeOpt = new Option<string>("--eval-mode") { Description = "Evaluation lens: 'per-skill' (grade min(isolated, plugin) — one skill's standalone value) or 'holistic' (skip the isolated arm; grade the self-selecting plugin arm — the whole-shelf CT-24 benchmark).", DefaultValueFactory = _ => "per-skill" };
+evalModeOpt.AcceptOnlyFromAmong("per-skill", "holistic");
+var excludeSkillOpt = new Option<string[]>("--exclude-skill") { Description = "Leave-one-out ablation: omit the named skill from the plugin arm's shelf (forwarded to skill-validator). Repeatable. Datasets are tagged '<unit>-skill-minus-<X>' so shelf-minus-X sits beside the full-shelf dataset for marginal comparison.", AllowMultipleArgumentsPerToken = true };
 
 var run = new Command("run", "Run a grounding unit through skill-validator with a chosen source.")
 {
     unitArg, sourceOpt, deliveryOpt, modelOpt, runsOpt, judgeOpt, noJudgeOpt,
-    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt, baselineOutOpt, baselineFromOpt, freshOpt,
+    testsDirOpt, outOpt, readmeFileOpt, dryRunOpt, emitSkillOpt, rootOpt, baselineOutOpt, baselineFromOpt, freshOpt, evalModeOpt, excludeSkillOpt,
 };
 run.SetAction(parse =>
 {
@@ -198,10 +202,100 @@ run.SetAction(parse =>
         BaselineOut = parse.GetValue(baselineOutOpt),
         BaselineFrom = parse.GetValue(baselineFromOpt),
         Fresh = parse.GetValue(freshOpt),
+        EvalMode = parse.GetValue(evalModeOpt)!,
+        ExcludeSkills = (parse.GetValue(excludeSkillOpt) ?? Array.Empty<string>()).ToList(),
     };
     return Runner.Run(opts);
 });
 root.Subcommands.Add(run);
+
+// ---- smell --------------------------------------------------------------
+// Unjudged "finger in the wind" smell test. Runs the self-selecting shelf (pull) with --no-judge
+// in holistic mode (no isolated arm, no pairwise judge), then renders the compact single-arm
+// SmellCard: tasks correct, grounding reliance, archaeology (cache/web), skill pulls, tool/session
+// turns, output, and IET. Cheap signal after editing a shelf — did the skills activate, avoid
+// archaeology, and stay cheap — without paying for the judge.
+var smellUnitArg = new Argument<string>("unit") { Description = "Grounding unit (e.g. markout)." };
+var smellModelOpt = new Option<string[]>("--model", "-m") { Description = "Model(s) to run (space/repeat-separated).", AllowMultipleArgumentsPerToken = true };
+var smellRunsOpt = new Option<int>("--runs") { Description = "Runs per scenario.", DefaultValueFactory = _ => 3 };
+var smellRootOpt = new Option<string?>("--root") { Description = "Grounding root holding grounding/<unit> (a target package repo). Also GROUNDING_ROOT." };
+var smellTestsDirOpt = new Option<string?>("--tests-dir") { Description = "Tests directory (default: auto)." };
+var smellOutOpt = new Option<string?>("--out") { Description = "Output dataset dir (default cache <unit>-6q)." };
+var smellFreshOpt = new Option<bool>("--fresh") { Description = "Regenerate even when a provenance-matching dataset exists (default reuses it)." };
+var smell = new Command("smell", "Unjudged smell test: run the self-selecting shelf (no judge) and report IET, turns, archaeology, and skill pulls.")
+{
+    smellUnitArg, smellModelOpt, smellRunsOpt, smellRootOpt, smellTestsDirOpt, smellOutOpt, smellFreshOpt,
+};
+smell.SetAction(parse =>
+{
+    var models = (parse.GetValue(smellModelOpt) ?? Array.Empty<string>())
+        .SelectMany(s => s.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        .ToList();
+    if (models.Count == 0) models.Add("claude-haiku-4.5");
+    var opts = new RunOptions
+    {
+        Unit = parse.GetValue(smellUnitArg)!,
+        Source = "skill",
+        Delivery = "pull",
+        Models = models,
+        Runs = parse.GetValue(smellRunsOpt),
+        NoJudge = true,
+        EvalMode = "holistic",
+        Smell = true,
+        TestsDir = parse.GetValue(smellTestsDirOpt),
+        OutDir = parse.GetValue(smellOutOpt),
+        Root = parse.GetValue(smellRootOpt),
+        Fresh = parse.GetValue(smellFreshOpt),
+    };
+    return Runner.Run(opts);
+});
+root.Subcommands.Add(smell);
+
+// ---- ablate -------------------------------------------------------------
+// Leave-one-out skill ablation (composition-axis LIET). Runs the full shelf holistically, mines
+// which skills a scenario pulls consistently, then re-runs the shelf minus each such skill and
+// reports the per-(skill, scenario) marginal = full − (shelf−X). Negative marginals flag
+// destructive interference; ~0 flags a free rider.
+var ablUnitArg = new Argument<string>("unit") { Description = "Grounding unit (grounding/<unit>) whose shelf to ablate." };
+var ablModelOpt = new Option<string[]>("--model", "-m") { Description = "Model to run (first is used).", AllowMultipleArgumentsPerToken = true };
+var ablRunsOpt = new Option<int>("--runs") { Description = "Runs per scenario (≥5 recommended for consistency).", DefaultValueFactory = _ => 5 };
+var ablRootOpt = new Option<string?>("--root") { Description = "Skills root holding skills/ + grounding/<unit> (a target package repo). Also GROUNDING_ROOT." };
+var ablTestsDirOpt = new Option<string?>("--tests-dir") { Description = "Eval root (default 'grounding')." };
+var ablBaselineFromOpt = new Option<string?>("--baseline-from") { Description = "Reuse a persisted baseline so only the plugin arm re-runs per cell." };
+var ablSkillsOpt = new Option<string[]>("--skills") { Description = "Explicit skills to ablate (repeatable). Default: auto — every domain skill a scenario pulls consistently.", AllowMultipleArgumentsPerToken = true };
+var ablScenariosOpt = new Option<string[]>("--scenarios") { Description = "Restrict the eval to scenarios whose name starts with/contains these tokens (e.g. CT05). Cheapest for a focused first pass.", AllowMultipleArgumentsPerToken = true };
+var ablConsistencyOpt = new Option<double>("--consistency") { Description = "Pull-rate threshold to qualify a skill as consistently pulled (0.8 = 4/5).", DefaultValueFactory = _ => 0.8 };
+var ablOutOpt = new Option<string?>("--out") { Description = "Output dataset dir (default cache <unit>-6q)." };
+var ablDryRunOpt = new Option<bool>("--dry-run") { Description = "Plan the full-shelf run and print the intended ablation cells without running the shelf-minus arms." };
+var ablate = new Command("ablate", "Leave-one-out skill ablation: measure each skill's marginal contribution on the shelf.")
+{
+    ablUnitArg, ablModelOpt, ablRunsOpt, ablRootOpt, ablTestsDirOpt, ablBaselineFromOpt,
+    ablSkillsOpt, ablScenariosOpt, ablConsistencyOpt, ablOutOpt, ablDryRunOpt,
+};
+ablate.SetAction(parse =>
+{
+    var models = (parse.GetValue(ablModelOpt) ?? Array.Empty<string>())
+        .SelectMany(s => s.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToList();
+    if (models.Count == 0) models.Add("claude-haiku-4.5");
+    var skills = (parse.GetValue(ablSkillsOpt) ?? Array.Empty<string>()).ToList();
+    var scenarios = (parse.GetValue(ablScenariosOpt) ?? Array.Empty<string>()).ToList();
+    var opts = new Grounding.Ablate.AblateOptions
+    {
+        Unit = parse.GetValue(ablUnitArg)!,
+        Models = models,
+        Runs = parse.GetValue(ablRunsOpt),
+        Root = parse.GetValue(ablRootOpt),
+        TestsDir = parse.GetValue(ablTestsDirOpt),
+        BaselineFrom = parse.GetValue(ablBaselineFromOpt),
+        Skills = skills.Count > 0 ? skills : null,
+        Scenarios = scenarios.Count > 0 ? scenarios : null,
+        Consistency = parse.GetValue(ablConsistencyOpt),
+        OutDir = parse.GetValue(ablOutOpt),
+        DryRun = parse.GetValue(ablDryRunOpt),
+    };
+    return Grounding.Ablate.Ablate.Run(opts);
+});
+root.Subcommands.Add(ablate);
 
 // ---- provenance ---------------------------------------------------------
 // Inspect the pin key stamped into datasets. With one dataset: show it. With two+: report whether
