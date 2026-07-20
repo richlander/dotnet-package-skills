@@ -201,6 +201,7 @@ internal static class Loader
                 if (r.Ft > 0 && r.Fp == r.Ft)
                     a.Succ++;
                 a.Iet += r.Iet; a.Cost += r.Cost; a.Tok += r.Tok;
+                a.Secs += r.Secs;
                 a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache; a.NugetWeb += r.NugetWeb;
                 a.Bash += r.Bash; a.Tools += r.Tools ?? 0;
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
@@ -218,6 +219,7 @@ internal static class Loader
             var n = Math.Max(a.N, 1);
             a.Qual = quals[key].Count > 0 ? quals[key].Average() : null;
             a.Iet /= n; a.Cost /= n; a.Tok /= n; a.Out /= n;
+            a.Secs /= n;
             a.ToolTurnSecs /= n; a.ToolTurnSecsPct /= n;
             a.ToolTurnIet /= n; a.ToolTurnIetPct /= n;
             a.ToolTurns /= n; a.AllTurns /= n; a.ToolTurnPct /= n;

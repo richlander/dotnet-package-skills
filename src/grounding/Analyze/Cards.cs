@@ -36,6 +36,7 @@ internal sealed partial class Cards
     private static string RawToolSplit(ArmAgg a) => $"{F0(a.Web)}/{F0(a.Bash)}/{F0(a.Other)}";
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
+    private static string RawSessionSecs(ArmAgg a) => $"{F0(a.Secs)}s";
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
     private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * a.N)}/{a.N}";
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
@@ -55,6 +56,7 @@ internal sealed partial class Cards
     private static string RawWorkIet(ArmAgg a) => F0(a.WorkIet);
     private static string DiffWorkIet(ArmAgg n, ArmAgg o) => $"{K(o.WorkIet)}\u2192{K(n.WorkIet)} ({SignedPct(Pct(n.WorkIet, o.WorkIet))})";
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
+    private static string DiffSessionSecs(ArmAgg n, ArmAgg o) => $"{F0(o.Secs)}\u2192{F0(n.Secs)}s ({SignedPct(Pct(n.Secs, o.Secs))})";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
     private static string DiffReadGrounding(ArmAgg n, ArmAgg o) =>
         $"{F0(o.Activated * o.N)}/{o.N}\u2192{F0(n.Activated * n.N)}/{n.N}";
@@ -106,6 +108,7 @@ internal sealed partial class Cards
         // 216/216), so a separate cost row would just restate turns — dropped. `Session IET`
         // is the real token-weighted cost.
         ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
+        ("Session wall-clock (end-to-end) (-)", RawSessionSecs, DiffSessionSecs),
         ("Total IET (-)",                      RawIet,          DiffIet),
         ("↳ Grounding IET (doc) (-)",          RawGroundingIet, DiffGroundingIet),
         ("↳ Work IET (agent) (-)",             RawWorkIet,      DiffWorkIet),
