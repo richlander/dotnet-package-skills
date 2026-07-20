@@ -624,6 +624,10 @@ internal sealed class Liet
         if (pts.Count < 2) return "";
         var sb = new StringBuilder();
         sb.Append($"  <polyline points=\"{string.Join(" ", pts.Select(p => $"{N(p.x)},{N(p.y)}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\" opacity=\"0.85\"/>\n");
+        // subtle node dots so per-rung values read even across straight multi-rung runs (unfilled,
+        // small, muted — kept subordinate to the IET markers).
+        foreach (var p in pts)
+            sb.Append($"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"2\" fill=\"white\" stroke=\"{color}\" stroke-width=\"1.2\" opacity=\"0.85\"/>\n");
         var last = pts[^1];
         sb.Append($"  <text x=\"{N(last.x - 4)}\" y=\"{N(last.y - 6)}\" text-anchor=\"end\" font-size=\"10\" font-style=\"italic\" fill=\"{color}\">{Esc(label)}</text>\n");
         return sb.ToString();
