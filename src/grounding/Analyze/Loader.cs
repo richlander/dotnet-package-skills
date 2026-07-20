@@ -257,9 +257,30 @@ internal static class Loader
                ?? new ResultsFile();
     }
 
-    public static LoadedArm LoadArm(string path)
+    public static LoadedArm LoadArm(string path) => BuildLoadedArm(Parse(path), path);
+
+    // Route by extension: a sessions.db goes through the LLM-free deterministic reader (no judge,
+    // no results.json); a results.json goes through the normal parse. Lets `smell` render a run
+    // straight from persisted agent sessions.
+    public static LoadedArm LoadAny(string path) =>
+        path.EndsWith(".db", StringComparison.OrdinalIgnoreCase)
+            ? LoadArmFromSessions(path)
+            : LoadArm(path);
+
+    public static LoadedArm LoadArmFromSessions(string sessionsDb)
     {
-        var d = Parse(path);
+        var d = SmellSessions.BuildFromSessions(sessionsDb);
+        var sn = d.Verdicts is { Count: > 0 } ? d.Verdicts[0].SkillName ?? "skill" : "skill";
+        var ms = d.Model ?? "model";
+        // Synthetic filename so the arm's source flags (IsSkill) resolve; the directory is the db's
+        // so a sibling results.json/skill dir could still be found if present.
+        var dir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(sessionsDb)) ?? ".";
+        var synthetic = System.IO.Path.Combine(dir, $"{sn}-skill.{ms}.json");
+        return BuildLoadedArm(d, synthetic);
+    }
+
+    public static LoadedArm BuildLoadedArm(ResultsFile d, string path)
+    {
         var model = d.Model ?? "?";
         var iet = IetModels.For(model);
         var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : new Verdict();

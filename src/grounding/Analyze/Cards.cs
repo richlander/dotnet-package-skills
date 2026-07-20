@@ -534,7 +534,7 @@ internal sealed partial class Cards
     public void SmellCard(IReadOnlyList<string> files)
     {
         var arm = Environment.GetEnvironmentVariable("GROUNDING_CARD_ARM") is { Length: > 0 } v ? v : "skilledPlugin";
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && a.Agg.ContainsKey(arm))
+        var arms = files.Select(Loader.LoadAny).Where(a => !a.IsReadme && a.Agg.ContainsKey(arm))
             .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
         if (arms.Count == 0)
         {
