@@ -33,6 +33,7 @@ internal sealed class Liet
         public bool Passed;      // arm answered correctly (all functional assertions pass)
         public bool Present;     // arm exists in the dataset for this rung
         public double Arch;      // archaeology = external digging (nuget cache + nuget.org + web tool calls)
+        public double Secs;      // end-to-end wall-clock seconds (spent regardless of correctness)
     }
 
     private sealed class Rung
@@ -155,9 +156,9 @@ internal sealed class Liet
             {
                 Name = (sc.ScenarioName ?? "").Split(':')[0].Trim(),
                 Index = i++,
-                Base = new Point { Present = b is not null, Passed = Correct(b), Iet = b?.Iet ?? 0, Arch = Arch(b) },
-                Ag = new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0, Arch = Arch(a) },
-                Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0, Arch = Arch(o) },
+                Base = new Point { Present = b is not null, Passed = Correct(b), Iet = b?.Iet ?? 0, Arch = Arch(b), Secs = b?.Secs ?? 0 },
+                Ag = new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0, Arch = Arch(a), Secs = a?.Secs ?? 0 },
+                Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0, Arch = Arch(o), Secs = o?.Secs ?? 0 },
             };
             if (readmeMap is not null && readmeMap.TryGetValue(r.Name, out var rm)) r.Readme = rm;
             r.Skills = Loader.DetectedSkillsOf(sc, groundArm).Distinct().ToList();
@@ -465,6 +466,16 @@ internal sealed class Liet
         maxIet = Math.Ceiling(maxIet / yStep) * yStep;   // snap the top to a round gridline value
         double X(int i) => n <= 1 ? (L + R) / 2.0 : L + (R - L) * i / (n - 1);
         double Y(double v) => B - (B - T) * (v / maxIet);
+        // Secondary axis: end-to-end wall-clock seconds. Plotted for EVERY present rung (answered or
+        // not) — wall-time is spent regardless of correctness — so these lines span the full x-range,
+        // unlike the per-correct IET curves. Kept visually subordinate (thin, dashed, muted) against a
+        // right axis; where two axes cross is arbitrary, so correctness stays the story.
+        double maxSecs = rungs.SelectMany(r => new[] { r.Base.Present ? r.Base.Secs : 0, r.Ag.Present ? r.Ag.Secs : 0 })
+            .DefaultIfEmpty(1).Max();
+        maxSecs = Math.Max(maxSecs, 1);
+        double secStep = NiceStep(maxSecs / 4.0);
+        maxSecs = Math.Ceiling(maxSecs / secStep) * secStep;
+        double Ysec(double v) => B - (B - T) * (v / maxSecs);
 
         var sb = new StringBuilder();
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
@@ -483,6 +494,15 @@ internal sealed class Liet
         }
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"438\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
         sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">IET per correct answer (tokens) →</text>\n");
+        // right y-axis: wall-clock seconds (secondary, subordinate axis for the duration overlay).
+        sb.Append($"  <line x1=\"{R}\" y1=\"{B}\" x2=\"{R}\" y2=\"{T}\" stroke=\"#94a3b8\" stroke-width=\"1.2\"/>\n");
+        for (double gv = secStep; gv <= maxSecs + secStep * 0.01; gv += secStep)
+        {
+            double gy = Ysec(gv);
+            sb.Append($"  <line x1=\"{R}\" y1=\"{N(gy)}\" x2=\"{R + 4}\" y2=\"{N(gy)}\" stroke=\"#94a3b8\" stroke-width=\"1\"/>\n");
+            sb.Append($"  <text x=\"{R + 7}\" y=\"{N(gy + 4)}\" text-anchor=\"start\" font-size=\"10\" fill=\"#94a3b8\">{N(gv)}s</text>\n");
+        }
+        sb.Append($"  <text x=\"{R + 44}\" y=\"222\" text-anchor=\"middle\" font-size=\"10.5\" fill=\"#94a3b8\" transform=\"rotate(-90 {R + 44} 222)\">wall-clock per question (s), all rungs →</text>\n");
         // Floor reference: the LIET metric's zero-point (mean levelized IET of the baseline's correct
         // basics). A light dashed green line so each rung's cost reads as height OVER the floor.
         {
@@ -509,6 +529,14 @@ internal sealed class Liet
             if (hasReadme) Swatch("#7c3aed", "README.md (packed)");
             Swatch("#2563eb", docLabel);
             if (hasOracle) Swatch("#d97706", "SKILL.md (oracle)");
+            // duration overlay swatches (secondary right axis; dashed to match the muted lines)
+            void DashSwatch(string color, string label)
+            {
+                double y = ly + row++ * 16;
+                sb.Append($"    <line x1=\"{N(lx)}\" y1=\"{N(y)}\" x2=\"{N(lx + 22)}\" y2=\"{N(y)}\" stroke=\"{color}\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{N(lx + 28)}\" y=\"{N(y + 4)}\" font-style=\"italic\">{Esc(label)} · s, right axis</text>\n");
+            }
+            DashSwatch("#c4a484", "baseline time");
+            DashSwatch("#5eaaa8", "grounded time");
             sb.Append("  </g>\n");
         }
         // rung ticks
@@ -525,6 +553,10 @@ internal sealed class Liet
             sb.Append($"  <line x1=\"{N(x - hw)}\" y1=\"{N(y)}\" x2=\"{N(x + hw)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
             sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 44}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">{Esc(docLabel.Replace(".md", ""))} ✗</text>\n");
         }
+        // duration overlay (secondary axis): baseline + grounded wall-clock, muted/dashed, no dots,
+        // spanning every rung (including unanswered). Drawn UNDER the IET series so correctness leads.
+        sb.Append(DurSeries(rungs, r => r.Base, "#c4a484", "baseline time", X, Ysec));
+        sb.Append(DurSeries(rungs, r => r.Ag,   "#5eaaa8", docLabel.Replace(".md", "") + " time", X, Ysec));
         // series
         sb.Append(Series(rungs, p => p.Oracle, "#d97706", "SKILL.md (oracle)", X, Y, false));
         sb.Append(Series(rungs, p => p.Base, "#dc2626", "baseline", X, Y, false));
@@ -579,6 +611,21 @@ internal sealed class Liet
             sb.Append($"    <text x=\"{L + 20}\" y=\"{metricsY + 14 + i * 14}\">\u2022 {Esc(metrics[i])}</text>\n");
         sb.Append("  </g>\n");
         sb.Append("</svg>\n");
+        return sb.ToString();
+    }
+
+    // Duration overlay line for the secondary (wall-clock) axis: connects EVERY present rung in order
+    // (answered or not — wall-time is spent regardless), thin + dashed + muted, no markers. A
+    // subordinate companion to the per-correct IET curve.
+    private static string DurSeries(List<Rung> rungs, Func<Rung, Point> sel, string color, string label,
+        Func<int, double> X, Func<double, double> Ysec)
+    {
+        var pts = rungs.Where(r => sel(r).Present).Select(r => (x: X(r.Index), y: Ysec(sel(r).Secs))).ToList();
+        if (pts.Count < 2) return "";
+        var sb = new StringBuilder();
+        sb.Append($"  <polyline points=\"{string.Join(" ", pts.Select(p => $"{N(p.x)},{N(p.y)}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\" opacity=\"0.85\"/>\n");
+        var last = pts[^1];
+        sb.Append($"  <text x=\"{N(last.x - 4)}\" y=\"{N(last.y - 6)}\" text-anchor=\"end\" font-size=\"10\" font-style=\"italic\" fill=\"{color}\">{Esc(label)}</text>\n");
         return sb.ToString();
     }
 
