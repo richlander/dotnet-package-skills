@@ -18,6 +18,11 @@ Generic infrastructure for evaluating NuGet package **grounding**. Start at the 
   content): **push** (always-on `.agent.md` at t=0) vs **pull** (model-invoked `SKILL.md`). The
   push-advantage identity `≈ effect × (1 − pull activation)`, the shared-pinned-baseline procedure,
   and the anti-overclaim guardrails.
+- **[skill-shelf-methodology.md](./skill-shelf-methodology.md)** — the *holistic benchmark* and
+  *composition-axis LIET*: how we evaluate a whole **shelf** of skills (agent self-selects) and
+  attribute the shelf's score back to individual skills — the two paradigms (per-skill PR vs
+  holistic), the ascend-to-oracle polarity, the three interference regimes, and the attribution
+  protocol. The skill-shelf counterpart to `grounding-eval-methodology.md`.
 - **[scoring.md](./scoring.md)** — *grading and shipping*: the **BETTER / NEUTRAL / WORSE** grade model,
   the tier-aware ship gate, the cards, the PR contents + checklist, and the judge-floor finding.
 - **[eval-protocol.md](./eval-protocol.md)** — *measurement discipline*: the pre-registered rules that

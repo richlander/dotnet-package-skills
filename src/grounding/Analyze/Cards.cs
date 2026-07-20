@@ -525,6 +525,49 @@ internal sealed partial class Cards
     private const string Grp =
         "                                                 <<<<<<<<<< NORMATIVE METRICS         \u2016 INFORMATIVE SIGNALS >>>>>>>>>>";
 
+    // Smell test — a single-arm, unjudged "finger in the wind" over the self-selecting shelf
+    // (skilledPlugin). No baseline column, no judge, no verdict: just the objective behavioural
+    // signals a maintainer eyeballs after editing a shelf — did the skills activate, did the agent
+    // avoid archaeology (cache/web digging), and did it stay cheap (turns, IET). Works on any
+    // dataset, but is meant for the cheap `run --no-judge` output. Arm defaults to skilledPlugin
+    // (the whole-shelf self-select), overridable via GROUNDING_CARD_ARM.
+    public void SmellCard(IReadOnlyList<string> files)
+    {
+        var arm = Environment.GetEnvironmentVariable("GROUNDING_CARD_ARM") is { Length: > 0 } v ? v : "skilledPlugin";
+        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && a.Agg.ContainsKey(arm))
+            .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
+        if (arms.Count == 0)
+        {
+            _o.WriteLine($"smell needs at least one dataset carrying the `{arm}` arm."); return;
+        }
+        var sn = arms[0].SkillName;
+        var n = arms[0].Agg[arm].N;
+        if (!NoTitle) _o.WriteLine($"### Smell test — {sn} (unjudged)\n");
+        _o.WriteLine($"_Self-selecting shelf arm (`{arm}`) only — no baseline, no judge. IET model "
+            + $"{IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across {n} scenarios. Finger in the wind: "
+            + "did the shelf activate, avoid archaeology, and stay cheap?_\n");
+        _o.WriteLine("| Signal (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
+        _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
+        (string Label, Func<ArmAgg, string> Raw)[] smell =
+        {
+            ("tasks correct (+)",                                    RawSuccess),
+            ("relied on grounding: tasks (+)",                       RawReadGrounding),
+            ("archaeology: cache / nuget.org (-)",                   RawCache),
+            ("unique skills used (of shelf) (context)",              RawSkillsUsed),
+            ("tool calls: web / bash / other (context)",             RawToolSplit),
+            ("output tok (% of IET) (-)",                            RawOut),
+            ("tool-call turns (% of total) (-)",                     RawToolCallTurns),
+            ("session turns (-)",                                    RawSessionTurns),
+            ("Total IET (-)",                                        RawIet),
+        };
+        foreach (var (label, raw) in smell)
+            _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => raw(a.Agg[arm]))) + " |");
+        if (arms.Any(a => a.Agg[arm].SkillCounts.Count > 0))
+            _o.WriteLine("\n> **Skills pulled** (self-select from shelf, ×scenarios): "
+                + string.Join(" \u2014 ", arms.Select(a => $"`{a.Model}` {SkillBreakdown(a.Agg[arm])}"))
+                + ". A shelf skill pulled ×0\u20131 earns no place (delete it).\n");
+    }
+
     public void Table(IReadOnlyList<string> files)
     {
         foreach (var f in files.Distinct().OrderBy(x => x, StringComparer.Ordinal))

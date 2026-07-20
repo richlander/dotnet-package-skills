@@ -23,6 +23,16 @@ internal sealed class RunOptions
     public string? BaselineOut;           // --baseline-out: run + persist the baseline here
     public string? BaselineFrom;          // --baseline-from: reuse a persisted baseline (skip the baseline arm)
     public bool Fresh;                    // --fresh: regenerate even when a provenance-matching dataset exists
+    // Evaluation lens forwarded to skill-validator. "per-skill" grades min(isolated, plugin);
+    // "holistic" skips the isolated arm and grades the self-selecting plugin arm (the CT-24 lens).
+    public string EvalMode = "per-skill";
+    // Leave-one-out ablation: skills to omit from the plugin arm's shelf (forwarded as
+    // --exclude-skill). Encoded into the dataset tag so shelf-minus-X datasets sit beside
+    // the full-shelf one for marginal comparison.
+    public List<string> ExcludeSkills = new();
+    // Smell test: unjudged "finger in the wind" run. Forces --no-judge + holistic; renders the
+    // compact single-arm SmellCard (IET/turns/archaeology/skill-pulls) instead of the per-run Table.
+    public bool Smell;
 }
 
 internal static class Runner
@@ -172,6 +182,7 @@ internal static class Runner
         }
 
         var rc = 0;
+        var smellDests = o.Smell ? new List<string>() : null;
         try
         {
             foreach (var model in o.Models)
@@ -179,12 +190,16 @@ internal static class Runner
                 var ms = ShortModel(model);
                 // Delivery encodes into the tag so push/pull datasets sit side by side.
                 var dv = o.Delivery == "push" ? "-push" : "";
+                // Ablation encodes into the tag so shelf-minus-X datasets sit beside full-shelf.
+                var abl = o.ExcludeSkills.Count > 0
+                    ? "-minus-" + string.Join("-", o.ExcludeSkills.OrderBy(s => s, StringComparer.Ordinal))
+                    : "";
                 var tag = o.Source switch
                 {
-                    "skill" => $"{o.Unit}-skill{dv}.{ms}",
-                    "readme" => $"{o.Unit}-readme{dv}.{ms}",
-                    "none" => $"{o.Unit}-none{dv}.{ms}",
-                    _ => $"{o.Unit}{dv}.{ms}",
+                    "skill" => $"{o.Unit}-skill{dv}{abl}.{ms}",
+                    "readme" => $"{o.Unit}-readme{dv}{abl}.{ms}",
+                    "none" => $"{o.Unit}-none{dv}{abl}.{ms}",
+                    _ => $"{o.Unit}{dv}{abl}.{ms}",
                 };
                 var resultsDir = DataCache.ResultsDir(o.Unit, tag);
                 var cmd = BuildCommand(bin ?? "<skill-validator>", o, model, resultsDir, groundingArg);
@@ -207,7 +222,8 @@ internal static class Runner
                 {
                     Console.WriteLine($"    ↺ REUSED (provenance match: {prov.Source} doc {prov.DocContentHash ?? "—"}, "
                         + $"nuget {prov.NugetVersion ?? "?"}, fixtures {prov.FixtureHash ?? "?"}) — skipped generation.");
-                    new Analyze.Cards().Table(new[] { destPath });
+                    if (smellDests is not null) smellDests.Add(destPath);
+                    else new Analyze.Cards().Table(new[] { destPath });
                     continue;
                 }
                 if (cached is not null)
@@ -223,8 +239,9 @@ internal static class Runner
                 }
 
                 Directory.CreateDirectory(outDir);
-                rc |= RunOne(root, skillPath, skillText, bin, o, model, resultsDir, groundingArg, outDir, tag, prov);
+                rc |= RunOne(root, skillPath, skillText, bin, o, model, resultsDir, groundingArg, outDir, tag, prov, smellDests);
             }
+            if (smellDests is { Count: > 0 }) new Analyze.Cards().SmellCard(smellDests);
         }
         finally
         {
@@ -238,7 +255,8 @@ internal static class Runner
     // artifact: pull -> SKILL.md (model-invoked skill); push -> <unit>.agent.md (always-on
     // agent, selected as primary persona at t=0). skill-validator auto-discovers which.
     private static int RunOne(string root, string skillPath, string skillText, string bin,
-        RunOptions o, string model, string resultsDir, string groundingArg, string outDir, string tag, Provenance prov)
+        RunOptions o, string model, string resultsDir, string groundingArg, string outDir, string tag, Provenance prov,
+        List<string>? smellDests = null)
     {
         var unitDir = Path.GetDirectoryName(skillPath)!;
         var target = o.Delivery == "push" ? Path.Combine(unitDir, $"{o.Unit}.agent.md") : skillPath;
@@ -261,6 +279,8 @@ internal static class Runner
             if (o.NoJudge) psi.ArgumentList.Add("--no-judge");
             else { psi.ArgumentList.Add("--judge-model"); psi.ArgumentList.Add(o.JudgeModel); }
             psi.ArgumentList.Add("--runs"); psi.ArgumentList.Add(o.Runs.ToString());
+            if (o.EvalMode != "per-skill") { psi.ArgumentList.Add("--eval-mode"); psi.ArgumentList.Add(o.EvalMode); }
+            foreach (var x in o.ExcludeSkills) { psi.ArgumentList.Add("--exclude-skill"); psi.ArgumentList.Add(x); }
             psi.ArgumentList.Add("--keep-sessions");
             psi.ArgumentList.Add("--results-dir"); psi.ArgumentList.Add(resultsDir);
             // Shared-baseline flow: persist (--baseline-out) or reuse (--baseline-from) one pinned
@@ -319,7 +339,8 @@ internal static class Runner
             // future reuse decisions.
             Provenance.Stamp(dest, prov);
             Console.WriteLine($"   -> {dest}");
-            new Analyze.Cards().Table(new[] { dest });
+            if (smellDests is not null) smellDests.Add(dest);
+            else new Analyze.Cards().Table(new[] { dest });
             return 0;
         }
         finally
@@ -338,8 +359,10 @@ internal static class Runner
         var baseline = o.BaselineOut is { } bo ? $"--baseline-out {bo.Replace("{model}", ms)} "
                      : o.BaselineFrom is { } bf ? $"--baseline-from {bf.Replace("{model}", ms)} "
                      : "";
+        var evalMode = o.EvalMode != "per-skill" ? $"--eval-mode {o.EvalMode} " : "";
+        var exclude = o.ExcludeSkills.Count > 0 ? string.Concat(o.ExcludeSkills.Select(x => $"--exclude-skill {x} ")) : "";
         return $"{bin} evaluate --tests-dir {o.TestsDir} --model {model} {judge} " +
-               $"--runs {o.Runs} --keep-sessions --results-dir {resultsDir} {baseline}{groundingArg}";
+               $"--runs {o.Runs} --keep-sessions --results-dir {resultsDir} {evalMode}{exclude}{baseline}{groundingArg}";
     }
 
     private static string? FindSkillValidator(string root)

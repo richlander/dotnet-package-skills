@@ -26,6 +26,7 @@ public sealed class Scenario
     [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("expectedSkill")] public string? ExpectedSkill { get; set; }
     [JsonPropertyName("improvementScore")] public double? ImprovementScore { get; set; }
+    [JsonPropertyName("perRunScores")] public List<double>? PerRunScores { get; set; }
     [JsonPropertyName("baseline")] public Arm? Baseline { get; set; }
     [JsonPropertyName("skilledIsolated")] public Arm? SkilledIsolated { get; set; }
     [JsonPropertyName("skilledPlugin")] public Arm? SkilledPlugin { get; set; }
@@ -142,6 +143,7 @@ public sealed class EventRecord
 public sealed class EventData
 {
     [JsonPropertyName("toolName")] public string? ToolName { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("arguments")] public string? Arguments { get; set; }
     [JsonPropertyName("inputTokens")] public long? InputTokens { get; set; }
     [JsonPropertyName("cacheReadTokens")] public long? CacheReadTokens { get; set; }
