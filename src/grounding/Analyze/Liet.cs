@@ -596,12 +596,14 @@ internal sealed class Liet
         }
         var sc = Score(rungs);
         var fm = FloorMetric(rungs);
+        var dm = FloorMetric(rungs, p => p.Secs);   // identical levelization on wall-clock duration
         var th = TargetHit(rungs);
         var metrics = new List<string>
         {
             $"Correct answers: {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
             $"Floor LIET: {K(fm.floor)}",
             $"LIET: {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
+            $"Levelized duration: {Secs(dm.basePerCorrect)}\u2192{Secs(dm.agPerCorrect)} (\u0394 {SignedSecs(dm.agPerCorrect - dm.basePerCorrect)})",
             $"Archaeology operations: {N(sc.baseArch)}\u2192{N(sc.agArch)} ({PctStr(sc.baseArch, sc.agArch)})",
         };
         if (th.total > 0) metrics.Add($"Expected skill pulled: {th.hits}/{th.total}");
@@ -788,18 +790,24 @@ internal sealed class Liet
     // point. F cancels in the arm DELTA (both arms run all 24), so the anchor sets absolute scale, not
     // the story. Returns per-correct-baseline-answer premium for each arm. Precedent: cost-per-
     // successful-outcome / cost-effectiveness ratio (cost per approved drug incl. failures).
-    private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs)
+    private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs, Func<Point, double>? metric = null)
     {
-        var basePassedBasics = rungs.Where(r => r.Base.Passed).OrderBy(r => r.Base.Iet)
-            .Take(6).Select(r => r.Base.Iet).ToList();
+        // metric selector defaults to IET (LIET); pass p => p.Secs for the identical levelization on
+        // wall-clock duration ("levelized duration"). Floor = the 6 cheapest baseline-correct rungs
+        // BY THIS METRIC; the delta cancels the floor, so only the arm difference is the story.
+        var m = metric ?? (p => p.Iet);
+        var basePassedBasics = rungs.Where(r => r.Base.Passed).OrderBy(r => m(r.Base))
+            .Take(6).Select(r => m(r.Base)).ToList();
         double f = basePassedBasics.Count > 0 ? basePassedBasics.Average() : 0;
         int nBase = rungs.Count(r => r.Base.Passed);
-        double baseTotal = rungs.Where(r => r.Base.Present).Sum(r => r.Base.Iet - f);
-        double agTotal = rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Iet - f);
+        double baseTotal = rungs.Where(r => r.Base.Present).Sum(r => m(r.Base) - f);
+        double agTotal = rungs.Where(r => r.Ag.Present).Sum(r => m(r.Ag) - f);
         return (f, nBase, nBase > 0 ? baseTotal / nBase : 0, nBase > 0 ? agTotal / nBase : 0);
     }
     private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
     private static string SignedK(double v) => (v >= 0 ? "+" : "−") + K(Math.Abs(v));  // signed IET delta
+    private static string Secs(double v) => v.ToString("0.#", Inv) + "s";               // wall-clock seconds
+    private static string SignedSecs(double v) => (v >= 0 ? "+" : "−") + Secs(Math.Abs(v)); // signed duration delta
     private static double NiceStep(double raw)                     // round axis step: 1/2/2.5/5 × 10ⁿ
     {
         if (raw <= 0 || double.IsNaN(raw)) return 1;
