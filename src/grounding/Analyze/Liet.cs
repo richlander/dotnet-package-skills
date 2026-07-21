@@ -702,6 +702,9 @@ internal sealed class Liet
         double secStep = NiceStep(maxSecs / 4.0);
         maxSecs = Math.Ceiling(maxSecs / secStep) * secStep;
         double Ysec(double v) => B - (B - T) * (v / maxSecs);
+        // The wall-clock duration overlay on the arch chart is an opt-in diagnostic (does archaeology
+        // track duration?); default OFF so the published arch charts stay archaeology-only.
+        bool durOverlay = Environment.GetEnvironmentVariable("GROUNDING_ARCH_DURATION_OVERLAY") is { Length: > 0 };
 
         var sb = new StringBuilder();
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
@@ -718,21 +721,27 @@ internal sealed class Liet
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"430\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
         sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">archaeology tool calls →</text>\n");
         // right y-axis: wall-clock seconds (secondary, for the duration overlay).
-        sb.Append($"  <line x1=\"{R}\" y1=\"{B}\" x2=\"{R}\" y2=\"{T}\" stroke=\"#94a3b8\" stroke-width=\"1.2\"/>\n");
-        for (double gv = secStep; gv <= maxSecs + secStep * 0.01; gv += secStep)
+        if (durOverlay)
         {
-            double gy = Ysec(gv);
-            sb.Append($"  <line x1=\"{R}\" y1=\"{N(gy)}\" x2=\"{R + 4}\" y2=\"{N(gy)}\" stroke=\"#94a3b8\" stroke-width=\"1\"/>\n");
-            sb.Append($"  <text x=\"{R + 7}\" y=\"{N(gy + 4)}\" text-anchor=\"start\" font-size=\"10\" fill=\"#94a3b8\">{N(gv)}s</text>\n");
+            sb.Append($"  <line x1=\"{R}\" y1=\"{B}\" x2=\"{R}\" y2=\"{T}\" stroke=\"#94a3b8\" stroke-width=\"1.2\"/>\n");
+            for (double gv = secStep; gv <= maxSecs + secStep * 0.01; gv += secStep)
+            {
+                double gy = Ysec(gv);
+                sb.Append($"  <line x1=\"{R}\" y1=\"{N(gy)}\" x2=\"{R + 4}\" y2=\"{N(gy)}\" stroke=\"#94a3b8\" stroke-width=\"1\"/>\n");
+                sb.Append($"  <text x=\"{R + 7}\" y=\"{N(gy + 4)}\" text-anchor=\"start\" font-size=\"10\" fill=\"#94a3b8\">{N(gv)}s</text>\n");
+            }
+            sb.Append($"  <text x=\"{R + 44}\" y=\"222\" text-anchor=\"middle\" font-size=\"10.5\" fill=\"#94a3b8\" transform=\"rotate(-90 {R + 44} 222)\">wall-clock per question (s), all rungs →</text>\n");
         }
-        sb.Append($"  <text x=\"{R + 44}\" y=\"222\" text-anchor=\"middle\" font-size=\"10.5\" fill=\"#94a3b8\" transform=\"rotate(-90 {R + 44} 222)\">wall-clock per question (s), all rungs →</text>\n");
         // rung ticks
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(ShortRung(rungs[i].Name))}</text>\n");
         sb.Append("  </g>\n");
         // duration overlay (secondary axis), drawn UNDER the archaeology series so digging leads.
-        sb.Append(DurSeries(rungs, r => r.Base, "#c4a484", "baseline time", X, Ysec));
-        sb.Append(DurSeries(rungs, r => r.Ag,   "#5eaaa8", docLabel.Replace(".md", "") + " time", X, Ysec));
+        if (durOverlay)
+        {
+            sb.Append(DurSeries(rungs, r => r.Base, "#c4a484", "baseline time", X, Ysec));
+            sb.Append(DurSeries(rungs, r => r.Ag,   "#5eaaa8", docLabel.Replace(".md", "") + " time", X, Ysec));
+        }
         // series (every PRESENT arm, connected in rung order — archaeology is effort, not success)
         sb.Append(ArchSeries(rungs, p => p.Base, "#dc2626", false, X, Y));
         sb.Append(ArchSeries(rungs, p => p.Ag, "#2563eb", true, X, Y));
@@ -740,8 +749,11 @@ internal sealed class Liet
         sb.Append("  <g font-size=\"11\" fill=\"#475569\">\n");
         sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 8}\" x2=\"{L + 34}\" y2=\"{T + 8}\" stroke=\"#dc2626\" stroke-width=\"2.5\"/><text x=\"{L + 40}\" y=\"{T + 12}\">baseline (archaeology only)</text>\n");
         sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 24}\" x2=\"{L + 34}\" y2=\"{T + 24}\" stroke=\"#2563eb\" stroke-width=\"2.5\"/><text x=\"{L + 40}\" y=\"{T + 28}\">{Esc(docLabel)}</text>\n");
-        sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 40}\" x2=\"{L + 34}\" y2=\"{T + 40}\" stroke=\"#c4a484\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{L + 40}\" y=\"{T + 44}\" font-style=\"italic\">baseline time · s, right axis</text>\n");
-        sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 56}\" x2=\"{L + 34}\" y2=\"{T + 56}\" stroke=\"#5eaaa8\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{L + 40}\" y=\"{T + 60}\" font-style=\"italic\">grounded time · s, right axis</text>\n");
+        if (durOverlay)
+        {
+            sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 40}\" x2=\"{L + 34}\" y2=\"{T + 40}\" stroke=\"#c4a484\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{L + 40}\" y=\"{T + 44}\" font-style=\"italic\">baseline time · s, right axis</text>\n");
+            sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 56}\" x2=\"{L + 34}\" y2=\"{T + 56}\" stroke=\"#5eaaa8\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{L + 40}\" y=\"{T + 60}\" font-style=\"italic\">grounded time · s, right axis</text>\n");
+        }
         sb.Append("  </g>\n");
         sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
         sb.Append($"    <circle cx=\"{L + 20}\" cy=\"{B + 62}\" r=\"3.8\" fill=\"#64748b\"/><text x=\"{L + 30}\" y=\"{B + 66}\">passed</text>\n");
