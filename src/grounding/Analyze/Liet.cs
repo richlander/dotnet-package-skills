@@ -622,14 +622,17 @@ internal sealed class Liet
     private static string DurSeries(List<Rung> rungs, Func<Rung, Point> sel, string color, string label,
         Func<int, double> X, Func<double, double> Ysec)
     {
-        var pts = rungs.Where(r => sel(r).Present).Select(r => (x: X(r.Index), y: Ysec(sel(r).Secs))).ToList();
+        var pts = rungs.Where(r => sel(r).Present).Select(r => (x: X(r.Index), y: Ysec(sel(r).Secs), passed: sel(r).Passed)).ToList();
         if (pts.Count < 2) return "";
         var sb = new StringBuilder();
         sb.Append($"  <polyline points=\"{string.Join(" ", pts.Select(p => $"{N(p.x)},{N(p.y)}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\" opacity=\"0.85\"/>\n");
-        // subtle node dots so per-rung values read even across straight multi-rung runs (unfilled,
-        // small, muted — kept subordinate to the IET markers).
+        // node dots so per-rung values read even across straight multi-rung runs. Match the big
+        // markers' convention: filled = this arm PASSED the rung, open = failed (duration is spent
+        // either way). Small + muted so they stay subordinate to the IET/archaeology markers.
         foreach (var p in pts)
-            sb.Append($"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"2\" fill=\"white\" stroke=\"{color}\" stroke-width=\"1.2\" opacity=\"0.85\"/>\n");
+            sb.Append(p.passed
+                ? $"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"2\" fill=\"{color}\" opacity=\"0.85\"/>\n"
+                : $"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"2\" fill=\"white\" stroke=\"{color}\" stroke-width=\"1.2\" opacity=\"0.85\"/>\n");
         var last = pts[^1];
         sb.Append($"  <text x=\"{N(last.x - 4)}\" y=\"{N(last.y - 6)}\" text-anchor=\"end\" font-size=\"10\" font-style=\"italic\" fill=\"{color}\">{Esc(label)}</text>\n");
         return sb.ToString();
