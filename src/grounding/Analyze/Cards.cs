@@ -201,34 +201,51 @@ internal sealed partial class Cards
         _o.WriteLine($"_Each cell: baseline (no grounding) → `{docLabel}`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
-        foreach (var (label, raw, _) in Spec)
+
+        // Per-arm LIET summary (floor-anchored IET/duration per correct answer + target-skill hit),
+        // computed once and reused so the card and the SVG report the SAME numbers.
+        var ls = arms.ToDictionary(a => a, a => Liet.Summarize(a.Path, Arm));
+
+        // A grounded "base → grounded" cell built from an ArmAgg raw formatter.
+        string Pair(LoadedArm a, Func<ArmAgg, string> raw) => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}";
+
+        // Rows in NARRATIVE order — five acts, each cost act following the same total → decomposition
+        // → levelized shape, grouped by currency (tokens / turns / wall-clock):
+        //   ① OUTCOME    — did the grounding produce correct work?
+        //   ② MECHANISM  — did it lean on the grounding (skills) or fall back to digging (archaeology)?
+        //   ③ TOKEN COST — IET, the normative metric (total → doc/work split → levelized → components)
+        //   ④ TURNS      — billable requests (total → tool-call share)
+        //   ⑤ WALL-CLOCK — informative, machine-dependent (total → tool share → levelized)
+        var rows = new (string Label, Func<LoadedArm, string> Cell)[]
         {
-            // Total IET carries a per-arm % change (the bottom-line cost delta readers ask for first).
-            if (label.StartsWith("Total IET", StringComparison.Ordinal))
-                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a =>
-                    $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})")) + " |");
-            // Session wall-clock carries the same per-arm % change (the end-to-end time delta).
-            else if (label.StartsWith("Session wall-clock", StringComparison.Ordinal))
-                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a =>
-                    $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})")) + " |");
-            else
-                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
-        }
-        // LIET-family rows (superset of the SVG Metrics block): floor-anchored IET-per-correct, the
-        // identical levelization on wall-clock, and the target-skill hit rate. Computed from each
-        // arm's dataset via Liet.Summarize so the card and the chart report the SAME numbers.
-        var lsum = arms.Select(a => Liet.Summarize(a.Path, Arm)).ToList();
-        if (lsum.Any(s => s.HasData))
-        {
-            _o.WriteLine("| LIET, IET per correct answer over floor (-) | " + string.Join(" | ",
-                lsum.Select(s => s.HasData ? $"{s.BaseLiet} → {s.AgLiet} (Δ {s.LietDelta})" : "—")) + " |");
-            _o.WriteLine("| ↳ Floor LIET (context) | " + string.Join(" | ",
-                lsum.Select(s => s.HasData ? s.Floor : "—")) + " |");
-            _o.WriteLine("| Levelized duration per correct answer (-) | " + string.Join(" | ",
-                lsum.Select(s => s.HasData ? $"{s.BaseDur} → {s.AgDur} (Δ {s.DurDelta})" : "—")) + " |");
-            _o.WriteLine("| expected skill pulled (target) (context) | " + string.Join(" | ",
-                lsum.Select(s => s.HasData && s.TargetTotal > 0 ? $"{s.TargetHits}/{s.TargetTotal}" : "—")) + " |");
-        }
+            // ① OUTCOME
+            ("tasks correct (+)",                          a => Pair(a, RawSuccess)),
+            ("func passed (assertions) (+)",               a => Pair(a, RawFunc)),
+            // ② MECHANISM — grounding vs. archaeology
+            ("relied on grounding: tasks (+)",             a => Pair(a, RawReadGrounding)),
+            ("expected skill pulled (target) (context)",   a => ls[a].HasData && ls[a].TargetTotal > 0 ? $"{ls[a].TargetHits}/{ls[a].TargetTotal}" : "—"),
+            ("unique skills used (of shelf) (context)",    a => Pair(a, RawSkillsUsed)),
+            ("relied on archaeology, fallback: cache / nuget.org (-)", a => Pair(a, RawCache)),
+            ("tool calls: web / bash / other (context)",   a => Pair(a, RawToolSplit)),
+            // ③ TOKEN COST (IET)
+            ("Total IET (-)",                              a => $"{RawIet(a.Agg["baseline"])} → {RawIet(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})"),
+            ("↳ Grounding IET (doc) (-)",                  a => Pair(a, RawGroundingIet)),
+            ("↳ Work IET (agent) (-)",                     a => Pair(a, RawWorkIet)),
+            ("↳ grounding load (tok) (context)",           a => Pair(a, RawDoc)),
+            ("LIET, IET per correct answer over floor (-)", a => ls[a].HasData ? $"{ls[a].BaseLiet} → {ls[a].AgLiet} (Δ {ls[a].LietDelta})" : "—"),
+            ("↳ Floor LIET (context)",                     a => ls[a].HasData ? ls[a].Floor : "—"),
+            ("output tok (% of IET) (-)",                  a => Pair(a, RawOut)),
+            ("tool-turn IET (% of turn IET) (-)",          a => Pair(a, RawToolTurnIet)),
+            // ④ TURNS
+            ("Session turns (-)",                          a => Pair(a, RawSessionTurns)),
+            ("tool-call turns (% of total) (-)",           a => Pair(a, RawToolCallTurns)),
+            // ⑤ WALL-CLOCK
+            ("Session wall-clock (end-to-end) (-)",        a => $"{RawSessionSecs(a.Agg["baseline"])} → {RawSessionSecs(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})"),
+            ("tool-turn secs (% of turn time) (-)",        a => Pair(a, RawToolTurnSecs)),
+            ("Levelized duration per correct answer (-)",  a => ls[a].HasData ? $"{ls[a].BaseDur} → {ls[a].AgDur} (Δ {ls[a].DurDelta})" : "—"),
+        };
+        foreach (var (label, cell) in rows)
+            _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(cell)) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
         _o.WriteLine("\n_Two axes. **Gate** (correctness): **PASS** = 100% of tier correct, **FAIL** = below the gate. "
             + "**Efficiency** (independent of the gate): **BETTER** = more tasks correct / archaeology→0 / work IET cut ≥20%; "
