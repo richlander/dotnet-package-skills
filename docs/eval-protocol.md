@@ -62,7 +62,29 @@ at least one reasonable valid variant.
 - **Diagnostic tell:** if **every arm — including `baseline` — produces the same wrong output**, the
   fault is almost never the model or the doc; it is the *test* (assertion, prompt, or fixture). A real
   content gap shows up as *variation* across arms (the doc moves the needle); a phantom shows up as
-  *invariance*. When all arms agree and all fail, fix the instrument, not the document.
+  *invariance*. When all arms agree and all fail, fix the instrument, not the document — **unless** the
+  assertion is a *means* gate the prompt legitimately requires (see below), in which case invariance is
+  a real adoption finding, not a phantom.
+- **Means vs. ends — a prompt may constrain the *how*, not just the *what*.** "Accept every correct
+  solution" is bounded by what the *prompt* declares correct. When a library offers two valid ways to
+  reach the same output — a declarative lever (the serializer / attribute path) and an imperative one
+  (hand-built strings) — the prompt may legitimately require *one* of them. Then two assertion kinds
+  coexist: an **ends** assertion (the rendered output-match) verifies *what* was produced, and a
+  **means** assertion (a source-token `grep` for the required API) verifies *how*. A solution that
+  produces correct output via the disallowed means is **not** a correct solution for that scenario —
+  the means-grep is right to fail it, even when the ends-match passes.
+  - **Example (markout).** CT15 requires "use the serializer's tree shape rather than hand-built
+    indentation" and grep-asserts `UnicodeFormatter`; CT18 requires "choose sections at serialize time
+    (do not hand-write omitted sections)" and grep-asserts `IncludeSections`. Both grep the *canonical*
+    API the skill teaches. A model that hand-rolls the tree or the section omission can pass the
+    output-match yet fail the grep — a genuine *adherence* signal (the grounded arm didn't adopt the
+    lever), surfaced precisely because the assertion gates the means.
+  - **How to tell a legitimate means-gate from a brittle one:** the token must be a real, prompt-required
+    API path (not incidental phrasing), and the prompt must *explicitly* forbid the alternative. If the
+    prompt is indifferent to how the output is reached, drop the means-grep and gate on ends only — an
+    all-arms-fail there is the phantom of the tell above. If the prompt pins the means, keep it strict
+    and read invariance as "even the skilled arm under-adopts the lever," a finding to fix in the
+    doc/library, not the test.
 
 ### 5. No splicing — one dataset = one clean condition
 When the document changes, **re-run the whole suite** under identical harness conditions.
@@ -137,6 +159,8 @@ all — a phantom that looks like a content gap. Two recurring shapes, both from
 - [ ] Expected variance? Is `n` adequate, or do I report rates + intervals?
 - [ ] Success threshold stated.
 - [ ] Assertions reviewed for brittleness (pass the reference **and** a valid variant).
+- [ ] Each assertion classified: **ends** (output-match, must accept any correct output) vs
+      **means** (source-token grep — kept only where the prompt explicitly requires that API path).
 - [ ] One clean condition per dataset — no splice.
 - [ ] Turn budget + reasoning effort fixed across the arms being compared.
 
