@@ -47,6 +47,38 @@ internal sealed class Liet
         public string? Expected;             // methodology prior: the ONE target skill for this rung (eval.yaml)
     }
 
+    // The LIET-family scalars the SVG Metrics block reports (floor-anchored IET-per-correct, the
+    // identical levelization on wall-clock duration, and the target-skill hit rate), preformatted to
+    // match the chart text so the card can carry them verbatim — the card is a SUPERSET of the SVG.
+    internal readonly record struct LietSummary(
+        bool HasData,
+        string Floor,                                   // "24.9k"
+        string BaseLiet, string AgLiet, string LietDelta,  // "160.9k" / "110.3k" / "−50.6k"
+        string BaseDur, string AgDur, string DurDelta,     // "139.1s" / "83s" / "−56.1s"
+        int TargetHits, int TargetTotal);
+
+    // Compute the LIET Metrics summary for ONE dataset file + grounded arm, reusing the exact rung
+    // build + FloorMetric/TargetHit the SVG uses so the card and the chart never disagree. The rung
+    // sort is irrelevant here (FloorMetric/TargetHit are order-independent), so it is skipped.
+    public static LietSummary Summarize(string path, string groundArm)
+    {
+        ResultsFile d;
+        try { d = Loader.Parse(path); } catch { return default; }
+        var v = (d.Verdicts ?? new()).FirstOrDefault();
+        if (v is null) return default;
+        var iet = IetModels.For(d.Model);
+        var rungs = BuildRungs(v, iet, false, groundArm, null);
+        if (rungs.Count == 0) return default;
+        var fm = FloorMetric(rungs);
+        var dm = FloorMetric(rungs, p => p.Secs);   // identical levelization on wall-clock duration
+        var th = TargetHit(rungs);
+        return new LietSummary(true,
+            K(fm.floor),
+            K(fm.basePerCorrect), K(fm.agPerCorrect), SignedK(fm.agPerCorrect - fm.basePerCorrect),
+            Secs(dm.basePerCorrect), Secs(dm.agPerCorrect), SignedSecs(dm.agPerCorrect - dm.basePerCorrect),
+            th.hits, th.total);
+    }
+
     private static bool Correct(ArmRow? r) => r is { Ft: > 0 } && r.Fp == r.Ft;
 
     // Archaeology = "went outside the grounding": nuget-cache decompile + nuget.org + open-web tool

@@ -207,8 +207,27 @@ internal sealed partial class Cards
             if (label.StartsWith("Total IET", StringComparison.Ordinal))
                 _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a =>
                     $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})")) + " |");
+            // Session wall-clock carries the same per-arm % change (the end-to-end time delta).
+            else if (label.StartsWith("Session wall-clock", StringComparison.Ordinal))
+                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a =>
+                    $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})")) + " |");
             else
                 _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
+        }
+        // LIET-family rows (superset of the SVG Metrics block): floor-anchored IET-per-correct, the
+        // identical levelization on wall-clock, and the target-skill hit rate. Computed from each
+        // arm's dataset via Liet.Summarize so the card and the chart report the SAME numbers.
+        var lsum = arms.Select(a => Liet.Summarize(a.Path, Arm)).ToList();
+        if (lsum.Any(s => s.HasData))
+        {
+            _o.WriteLine("| LIET, IET per correct answer over floor (-) | " + string.Join(" | ",
+                lsum.Select(s => s.HasData ? $"{s.BaseLiet} → {s.AgLiet} (Δ {s.LietDelta})" : "—")) + " |");
+            _o.WriteLine("| ↳ Floor LIET (context) | " + string.Join(" | ",
+                lsum.Select(s => s.HasData ? s.Floor : "—")) + " |");
+            _o.WriteLine("| Levelized duration per correct answer (-) | " + string.Join(" | ",
+                lsum.Select(s => s.HasData ? $"{s.BaseDur} → {s.AgDur} (Δ {s.DurDelta})" : "—")) + " |");
+            _o.WriteLine("| expected skill pulled (target) (context) | " + string.Join(" | ",
+                lsum.Select(s => s.HasData && s.TargetTotal > 0 ? $"{s.TargetHits}/{s.TargetTotal}" : "—")) + " |");
         }
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
         _o.WriteLine("\n_Two axes. **Gate** (correctness): **PASS** = 100% of tier correct, **FAIL** = below the gate. "
