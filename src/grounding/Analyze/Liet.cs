@@ -98,11 +98,17 @@ internal sealed class Liet
             {
                 var rungs = BuildRungs(v, iet, OracleFromPlugin, GroundArm, readmeMap);
                 if (rungs.Count == 0) { vi++; continue; }
-                // Levelize: order rungs by MEASURED difficulty (baseline IET) — the LCOE-faithful
-                // x-axis — not authored order. Rungs the baseline could not answer are the hardest
-                // and sort to the end (their AGENTS/oracle 'unlock' points plot at the right).
-                rungs = rungs.OrderBy(r => r.Base.Passed ? r.Base.Iet : double.PositiveInfinity)
-                             .ThenBy(r => r.Index).ToList();
+                // Levelize: order rungs by MEASURED difficulty — the LCOE-faithful x-axis — not
+                // authored order. Baseline alone doesn't cover the whole range (it can't answer the
+                // hardest rungs), so we sort in three tiers so both curves read left-to-right easy→hard:
+                //   0. baseline-correct rungs, easiest first (by baseline IET)
+                //   1. grounded-only unlocks (baseline ✗, SKILL ✓), easiest first (by grounded IET)
+                //   2. rungs neither arm answers (SKILL ✗), lowest grounded IET first
+                // Within tiers 1–2 there is no baseline IET, so the grounded arm's IET defines difficulty.
+                rungs = rungs
+                    .OrderBy(r => r.Base.Passed ? 0 : (r.Ag.Passed ? 1 : 2))
+                    .ThenBy(r => r.Base.Passed ? r.Base.Iet : r.Ag.Iet)
+                    .ThenBy(r => r.Index).ToList();
                 for (int k = 0; k < rungs.Count; k++) rungs[k].Index = k;
                 var unit = v.SkillName ?? "?";
                 // Label the grounded arm from the dataset file name (same heuristic as the card's
@@ -197,7 +203,9 @@ internal sealed class Liet
     {
         var ds = docLabel.Replace(".md", "");
         if (!NoTitle) _o.WriteLine($"### LIET curve — {unit} | `{model}`\n");
-        _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = measured baseline IET (levelized). `✗` = arm failed "
+        _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = measured baseline IET where the baseline "
+            + $"answers, else grounded IET (three-tier: baseline-correct, then grounded-only unlocks, then neither). "
+            + $"`✗` = arm failed "
             + $"(not plotted, not extrapolated). Ceiling = min IET of passing competitors — the max price "
             + $"`{docLabel}` may pay. Judge `{judge ?? "?"}`. IET model {IetModels.CaptionFor(new[] { model })}._\n");
         bool hasReadme = rungs.Any(r => r.Readme.Present);
