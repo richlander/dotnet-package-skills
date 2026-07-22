@@ -211,38 +211,39 @@ internal sealed partial class Cards
 
         // Rows in NARRATIVE order — five acts, each cost act following the same total → decomposition
         // → levelized shape, grouped by currency (tokens / turns / wall-clock):
-        //   ① OUTCOME    — did the grounding produce correct work?
-        //   ② MECHANISM  — did it lean on the grounding (skills) or fall back to digging (archaeology)?
-        //   ③ TOKEN COST — IET, the normative metric (total → doc/work split → levelized → components)
+        //   ① OUTCOME    — did the skills produce correct work?
+        //   ② MECHANISM  — did it lean on the skills or fall back to digging (archaeology)?
+        //   ③ TOKEN COST — IET, the normative metric (total → doc/work split → skill load → components → levelized)
         //   ④ TURNS      — billable requests (total → tool-call share)
         //   ⑤ WALL-CLOCK — informative, machine-dependent (total → tool share → levelized)
+        // Parent rows carry a Session/Total; the `↳` children decompose or drive that parent.
         var rows = new (string Label, Func<LoadedArm, string> Cell)[]
         {
             // ① OUTCOME
             ("tasks correct (+)",                          a => Pair(a, RawSuccess)),
             ("func passed (assertions) (+)",               a => Pair(a, RawFunc)),
-            // ② MECHANISM — grounding vs. archaeology
-            ("relied on grounding: tasks (+)",             a => Pair(a, RawReadGrounding)),
-            ("expected skill pulled (target) (context)",   a => ls[a].HasData && ls[a].TargetTotal > 0 ? $"{ls[a].TargetHits}/{ls[a].TargetTotal}" : "—"),
-            ("unique skills used (of shelf) (context)",    a => Pair(a, RawSkillsUsed)),
+            // ② MECHANISM — skills vs. archaeology
+            ("relied on skills: tasks (+)",                a => Pair(a, RawReadGrounding)),
+            ("↳ expected skill pulled (target) (context)", a => ls[a].HasData && ls[a].TargetTotal > 0 ? $"{ls[a].TargetHits}/{ls[a].TargetTotal}" : "—"),
+            ("↳ unique skills used (of shelf) (context)",  a => Pair(a, RawSkillsUsed)),
             ("relied on archaeology, fallback: cache / nuget.org (-)", a => Pair(a, RawCache)),
-            ("tool calls: web / bash / other (context)",   a => Pair(a, RawToolSplit)),
+            ("↳ tool calls: web / bash / other (context)", a => Pair(a, RawToolSplit)),
             // ③ TOKEN COST (IET)
             ("Total IET (-)",                              a => $"{RawIet(a.Agg["baseline"])} → {RawIet(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})"),
             ("↳ Grounding IET (doc) (-)",                  a => Pair(a, RawGroundingIet)),
             ("↳ Work IET (agent) (-)",                     a => Pair(a, RawWorkIet)),
-            ("↳ grounding load (tok) (context)",           a => Pair(a, RawDoc)),
+            ("↳ skill load (tok) (context)",               a => Pair(a, RawDoc)),
+            ("↳ output tok (% of IET) (-)",                a => Pair(a, RawOut)),
+            ("↳ tool-turn IET (% of turn IET) (-)",        a => Pair(a, RawToolTurnIet)),
             ("LIET, IET per correct answer over floor (-)", a => ls[a].HasData ? $"{ls[a].BaseLiet} → {ls[a].AgLiet} (Δ {ls[a].LietDelta})" : "—"),
             ("↳ Floor LIET (context)",                     a => ls[a].HasData ? ls[a].Floor : "—"),
-            ("output tok (% of IET) (-)",                  a => Pair(a, RawOut)),
-            ("tool-turn IET (% of turn IET) (-)",          a => Pair(a, RawToolTurnIet)),
             // ④ TURNS
             ("Session turns (-)",                          a => Pair(a, RawSessionTurns)),
-            ("tool-call turns (% of total) (-)",           a => Pair(a, RawToolCallTurns)),
+            ("↳ tool-call turns (% of total) (-)",         a => Pair(a, RawToolCallTurns)),
             // ⑤ WALL-CLOCK
             ("Session wall-clock (end-to-end) (-)",        a => $"{RawSessionSecs(a.Agg["baseline"])} → {RawSessionSecs(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})"),
-            ("tool-turn secs (% of turn time) (-)",        a => Pair(a, RawToolTurnSecs)),
-            ("Levelized duration per correct answer (-)",  a => ls[a].HasData ? $"{ls[a].BaseDur} → {ls[a].AgDur} (Δ {ls[a].DurDelta})" : "—"),
+            ("↳ tool-turn secs (% of turn time) (-)",      a => Pair(a, RawToolTurnSecs)),
+            ("↳ Levelized duration per correct answer (-)", a => ls[a].HasData ? $"{ls[a].BaseDur} → {ls[a].AgDur} (Δ {ls[a].DurDelta})" : "—"),
         };
         foreach (var (label, cell) in rows)
             _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(cell)) + " |");
