@@ -34,7 +34,43 @@ return 0;
 
 internal static class EvalDocHelpers
 {
-    private const string MarkoutPackageVersion = "0.22.0";
+    // Fallback only — the real version is read from a fixture .csproj (the source of truth) via
+    // ResolveMarkoutVersion so eval.md never drifts from the fixtures again. Kept current anyway.
+    private const string MarkoutPackageVersionFallback = "0.23.0";
+
+    // Read the Markout package version from a fixture .csproj next to the eval.yaml (the same version
+    // the scenarios actually build against), so the rendered eval.md always matches the fixtures.
+    public static string ResolveMarkoutVersion(string inputPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Path.GetFullPath(inputPath)) ?? ".";
+            var fixturesDir = Path.Combine(dir, "fixtures");
+            if (Directory.Exists(fixturesDir))
+            {
+                var csproj = Directory
+                    .EnumerateFiles(fixturesDir, "*.csproj", SearchOption.AllDirectories)
+                    .OrderBy(p => p, StringComparer.Ordinal)
+                    .FirstOrDefault();
+                if (csproj is not null)
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(
+                        File.ReadAllText(csproj),
+                        "<PackageReference\\s+Include=\"Markout\"\\s+Version=\"(?<v>[^\"]+)\"");
+                    if (m.Success)
+                    {
+                        return m.Groups["v"].Value;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // fall through to the fallback constant
+        }
+
+        return MarkoutPackageVersionFallback;
+    }
 
     // Wrap API/code identifiers in inline-code backticks so reviewers can tell code from prose.
     // Ordered alternation: attribute forms (with optional args) first so [MarkoutX(...)] is guarded as
@@ -76,9 +112,10 @@ internal static class EvalDocHelpers
     public static string GetPackageLabel(string inputPath)
     {
         var name = Path.GetFileNameWithoutExtension(inputPath);
+        var version = ResolveMarkoutVersion(inputPath);
         return string.Equals(name, "eval", StringComparison.OrdinalIgnoreCase)
-            ? $"Markout {MarkoutPackageVersion}"
-            : $"{name} / Markout {MarkoutPackageVersion}";
+            ? $"Markout {version}"
+            : $"{name} / Markout {version}";
     }
 
     public static string FormatRejectTools(IReadOnlyList<string>? rejectTools)
@@ -212,7 +249,7 @@ public sealed class EvalMarkdownDocument
 
     public static EvalMarkdownDocument FromYaml(EvalYaml yaml, string inputPath)
     {
-        var scenarios = yaml.Scenarios ?? [];
+        var scenarios = (yaml.Scenarios ?? []).Where(s => !s.HeldOut).ToList();
         var package = EvalDocHelpers.GetPackageLabel(inputPath);
         return new EvalMarkdownDocument
         {
@@ -308,6 +345,11 @@ public sealed class EvalScenario
     public string? Name { get; set; }
 
     public string? ExpectedSkill { get; set; }
+
+    // Scenarios flagged `held_out: true` are authored but NOT part of the shipped benchmark (e.g.
+    // CT25/CT26 target a skill not on the shelf). They are excluded from the rendered eval.md so the
+    // doc always reflects the benchmark count, not the full authored set.
+    public bool HeldOut { get; set; }
 
     public string? Prompt { get; set; }
 
