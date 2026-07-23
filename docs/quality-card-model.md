@@ -35,6 +35,8 @@ Two guardrails ride alongside the claims, because "delivers value" is not the sa
 
 - **No capability loss (hard gate).** Any task the baseline solved that grounding *breaks*
   (`Kᵇ ≥ 1`, `Kᵍ = 0`) is a **capability regression** — it disqualifies regardless of wins elsewhere.
+  The gate trips on a **per-task** regression *or* on a **suite-level loss-mass band** (Axis 1), so
+  diffuse flaky losses that no single task can prove still count.
 - **No material cost regression.** Efficiency claims are **conditional on joint productivity**; a cost
   win bought by solving fewer things is not a win.
 
@@ -240,7 +242,14 @@ estimate, so a wide-band win is discounted toward its downside.
     true failure rate near ½). The honest band there is *wide*; Wald reports a point.
   - **Beta-binomial (primary) fixes the boundary:** a `5/5` under a uniform prior is `Beta(6,1)`
     (mean ≈ 0.86, still spread), so the band never collapses; propagate each task's posterior into
-    `Δpᵢ` and aggregate across tasks.
+    `Δpᵢ` and aggregate across tasks. **Predeclare the prior — uniform `Beta(1,1)` — *before* the
+    scoring run**, and report a **Jeffreys `Beta(½,½)` sensitivity** read alongside; if the verdict
+    flips between the two, the verdict is about the prior, not the data. We keep **48 independent
+    per-cell uniforms** rather than a **hierarchical partial-pooling** prior *on purpose*: the suite is
+    *deliberately* heterogeneous in difficulty, so tasks are **not exchangeable within an arm** (the
+    assumption pooling needs), and pooling would shrink a genuine grounded-only unlock (`pᵇ = 0`)
+    toward the arm's mean — **diluting the C1 capability signal**, the sharpest finding on the card.
+    The honest cure for small-`k` variance is **more data** (a higher-`k` pilot), not a stronger prior.
   - **Nested task→run bootstrap (cross-check).** Draw the 24 **tasks** with replacement (the dominant
     uncertainty for a general claim), then *within* each drawn task redraw its runs as **joint
     `(delivered, cost)` draws** from that task's fitted per-arm model — resampling from each task's
@@ -268,6 +277,16 @@ grounded on the same task, both at n=5**. A regression is a materially negative 
 "was-5/5-now-isn't" veto (which, when many tasks sit near the ceiling, fires on almost every suite from
 pure noise yet still misses real `4/5→0/5` collapses). Report positive/negative yield mass over **all**
 tasks: `Σ max(±Δpᵢ, 0)` — the regression/gain signal, distinct from the *coverage* crossing counts.
+
+**Aggregate loss-mass can also trip the hard gate.** Per-task `Δpᵢ` bands rarely exclude zero at
+`k = 5`, so three individually-inconclusive `2/5 → 0/5` losses — collectively strong evidence of harm —
+would each land in "flagged," and the hard gate never sees them. So put a **suite-level band on the
+loss mass** `Σ max(−Δpᵢ, 0)` (over baseline-only/regressed tasks) and let the gate **trip on it too**
+(`OR` with the per-task veto). Two cautions keep it honest: (1) `Σ max(−Δpᵢ, 0)` is
+**truncation-biased** — it is `≥ 0` and positive even under the null from noise alone, so calibrate the
+band against a **null-bootstrap** reference (resample at true `Δp = 0`), **not** against literal zero,
+or it over-trips; (2) **predeclare the materiality threshold** like every other margin. Erring toward
+disqualification is the safe way for a "do no harm" guard to be wrong.
 
 ## Axis 2 — Levelized cost / yield
 
