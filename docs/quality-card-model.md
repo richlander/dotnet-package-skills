@@ -311,9 +311,10 @@ harm gate should see slides too) and let the gate **trip on it too** (`OR` with 
 Two cautions keep it honest: (1) `Σ max(−Δpᵢ, 0)` is **truncation-biased** — it is `≥ 0` and positive
 even under the null from noise alone, so calibrate the band against a **null-bootstrap** reference
 (resample **both** arms of task `i` from a single pooled rate `p̃ᵢ = (Kᵢᵇ + Kᵢᵍ) / 2k`, giving `Δpᵢ = 0`
-in expectation), **not** against literal zero, or it over-trips; (2) **predeclare the materiality
-threshold** like every other margin. Erring toward disqualification is the safe way for a "do no harm"
-guard to be wrong.
+in expectation) — in the **finite-suite frame** (the 24 tasks held fixed, only runs redrawn), matching
+the confirmatory estimand — **not** against literal zero, or it over-trips; (2) **predeclare the
+materiality threshold** like every other margin. Erring toward disqualification is the safe way for a
+"do no harm" guard to be wrong.
 
 ## Axis 2 — Levelized cost / yield
 

@@ -101,7 +101,7 @@ Instead, compute where a failed arm *would have had to* land to remain worth cho
 Per rung, the hurdle is the **competitor envelope** — the lower boundary of every *other* participant's IET that answered correctly:
 
 ```
-hurdle(rung) = min( IET of each other arm that answered correctly at rung )
+hurdle(rung) = min( IET of each other arm that Delivered at rung )
 ```
 
 `AGENTS.md` **pays its way on a rung iff its IET there is below this envelope.** Where it sits under the line, it is the document worth shipping at that difficulty; where it pokes above, it is dominated *at that difficulty* by something cheaper that also works, and you can read by how much and decide whether to train it down or concede the rung.
