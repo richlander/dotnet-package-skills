@@ -6,8 +6,13 @@ suite of coding tasks. This document defines *what we measure and why*. It is **
 
 The model has a **reference visualization** — the Levelized-IET (LIET) chart (`analyze --view liet`,
 `docs/liet.md`) — which already embodies the sound methodology (per-task pairing, difficulty on the
-x-axis, coverage tiers). **The card is the tabular *superset* of that chart**; where the two ever
-disagree, the chart's methodology is canonical and the card is wrong.
+x-axis, coverage tiers). **The card is the tabular *superset* of that chart.** Canonicality is
+**scoped**: where the two disagree on the **methodology of comparison** (pairing, the difficulty axis,
+coverage tiers, the competitor-envelope construction), the chart is canonical and the card is wrong;
+but on **verdict and regression rules** *this model is canonical* — `liet.md` predates the ladder and
+still frames regression as a brittle per-rung veto, which the materiality-gated gate here supersedes.
+`liet.md` also draws a **third (oracle) series** the two-arm card omits; see spec Invariant 7 for that
+carve-out.
 
 Its **row-level companion** is `quality-card-spec.md` — the approachable Label·Equation·Example·Description
 table for each card row, which *derives from* this model.
@@ -52,7 +57,8 @@ The claims above are only as trustworthy as the requirements they grade. This mo
 the produced artifact by a deterministic test:
 
 - **Approach / API selection** — *use the markout serializer*, *use `System.Text.Json`* (verifiable:
-  the named surface is used; the hand-rolled equivalent is absent).
+  the graded behavior is produced **via** the named surface — on the execution path, not merely
+  referenced in source — and the hand-rolled equivalent is absent).
 - **Technical constraints** — *NAOT-compatible*, trim-safe, target framework (verifiable at the
   strongest level: publish, run, treat trim/reflection warnings as errors).
 - **Functional correctness** — the output is right (the existing assertions).
@@ -155,9 +161,12 @@ the skill supplies, the baseline loses on **information asymmetry about the grad
 prompt-subset it gates) plus an executable **test**. The suite is then audited by two judge passes,
 **at design time, once** — never per run:
 
-- `prompt → assertion` — **coverage**: is every graded behavior backed by a prompt clause? A gap means
-  the grading is silent on something the prompt asks, so the skill could supply it for free (the
-  *underspecification* leak).
+- `prompt → assertion` — **coverage**: is every **prompt clause gated by an assertion**? A gap does
+  *not* distort yield — neither arm is graded on the ungated clause — it leaks through the **cost
+  axis**: the grounded arm can shed the ungraded scope the skill deprioritizes while the baseline
+  dutifully attempts it, buying a cost advantage with **no grade penalty**. That is the real fairness
+  exposure of an ungated clause. Fix by gating the clause, or by narrowing the prompt so it no longer
+  asks for it.
 - `assertion → prompt` — **entailment**: is every assertion actually backed by the prompt? This pass
   returns a **three-way verdict** that *is* the conventions-vs-requirements adjudication:
   - **entailed** → a **requirement** → gate it at `Delivers`; a baseline that hand-rolls has
@@ -167,10 +176,12 @@ prompt-subset it gates) plus an executable **test**. The suite is then audited b
     reported at `Delivers`/C4 — honest grounding credit, not a rigged gate.
   - **contradicted / unrelated** → a **task bug** → fix the task.
 
-**The rung rule.** Whether "use the markout serializer" gates `Delivers` or only informs C4 is decided
+**The tier rule.** Whether "use the markout serializer" gates `Delivers` or only informs C4 is decided
 by the prompt's wording, not by taste: name it in the prompt and it is a **requirement** (gated at
 `Delivers`); leave it to the skill and it is a **convention** (`Satisfies` accepts hand-rolling, win
-reported at C4). Both are in scope — both verifiable — the prompt just sets the rung.
+reported at C4). Both are in scope — both verifiable — the prompt just sets the tier. *(We say* tier
+*here, not* rung*: `Satisfies`/`Delivers` are grade **tiers**; the LIET chart's difficulty **rungs**
+are a different ladder.)*
 
 **Why grading stays noise-free.** Because subjective quality is out of scope, every *gating* assertion
 is a **deterministic test** — so the certified path (`K`, `S`, `ΔP`, cost ratio) is graded without judge
@@ -202,6 +213,16 @@ set** (`Kᵢᵇ ≥ 1 & Kᵢᵍ ≥ 1`), i.e. "wins more consistently *on work b
 all-`N` `ΔP` is reported too, but as a **combined return** that mixes capability and reliability, not
 as the C2 certificate. (Consistent with the rows-not-nets rule: unlocks are counted as C1 coverage,
 not folded into the reliability margin.)
+
+**Band ΔP|both from the same bootstrap, both-productive set recomputed per iteration.** Membership in
+the both-productive set is itself a **noisy five-run outcome** (a `1/5` arm can draw `0/5` and drop the
+task), so `ΔP|both` must not be banded as if the set were fixed. It reads from the **one nested
+task→run bootstrap** below, with the both-productive set **recomputed each iteration** — exactly as the
+cost axis recomputes `S*` — so a task that draws `Kᵇ* = 0` or `Kᵍ* = 0` leaves the set that draw. Like
+Axis 2, `ΔP|both` is therefore **conditional on joint productivity**, and its two-sided exclusion is
+**load-bearing**: dropping *both* grounded-only unlocks *and* baseline-only losses is precisely what
+isolates the C2 quantity — the excluded tasks are owned by the C1 coverage row (unlocks) and the hard
+gate (losses), never double-counted here.
 
 **Risk = how much to trust it on only `k` runs** — the "n=5, will I see this again?" question. This
 "risk" is the **within-batch sampling uncertainty** of the yield (how firmly `k` runs pin `pᵢˣ`); a
@@ -250,6 +271,9 @@ estimate, so a wide-band win is discounted toward its downside.
     assumption pooling needs), and pooling would shrink a genuine grounded-only unlock (`pᵇ = 0`)
     toward the arm's mean — **diluting the C1 capability signal**, the sharpest finding on the card.
     The honest cure for small-`k` variance is **more data** (a higher-`k` pilot), not a stronger prior.
+    *Bank the prior's own conservative bias:* the uniform prior shrinks a `5/5` toward `0.5` **harder**
+    than a `3/5`, so when grounded is the high arm it **attenuates `ΔP`** — a bias that runs *against*
+    grounding, alongside the `K ≥ 1` winner's curse below. Any positive result has cleared it.
   - **Nested task→run bootstrap (cross-check).** Draw the 24 **tasks** with replacement (the dominant
     uncertainty for a general claim), then *within* each drawn task redraw its runs as **joint
     `(delivered, cost)` draws** from that task's fitted per-arm model — resampling from each task's
@@ -281,12 +305,15 @@ tasks: `Σ max(±Δpᵢ, 0)` — the regression/gain signal, distinct from the *
 **Aggregate loss-mass can also trip the hard gate.** Per-task `Δpᵢ` bands rarely exclude zero at
 `k = 5`, so three individually-inconclusive `2/5 → 0/5` losses — collectively strong evidence of harm —
 would each land in "flagged," and the hard gate never sees them. So put a **suite-level band on the
-loss mass** `Σ max(−Δpᵢ, 0)` (over baseline-only/regressed tasks) and let the gate **trip on it too**
-(`OR` with the per-task veto). Two cautions keep it honest: (1) `Σ max(−Δpᵢ, 0)` is
-**truncation-biased** — it is `≥ 0` and positive even under the null from noise alone, so calibrate the
-band against a **null-bootstrap** reference (resample at true `Δp = 0`), **not** against literal zero,
-or it over-trips; (2) **predeclare the materiality threshold** like every other margin. Erring toward
-disqualification is the safe way for a "do no harm" guard to be wrong.
+loss mass** `Σ max(−Δpᵢ, 0)` **over all `N` tasks** (the same all-tasks quantity Axis 1 already
+reports — so a both-productive `5/5 → 2/5` slide counts, not only cell-crossing regressions; a diffuse
+harm gate should see slides too) and let the gate **trip on it too** (`OR` with the per-task veto).
+Two cautions keep it honest: (1) `Σ max(−Δpᵢ, 0)` is **truncation-biased** — it is `≥ 0` and positive
+even under the null from noise alone, so calibrate the band against a **null-bootstrap** reference
+(resample **both** arms of task `i` from a single pooled rate `p̃ᵢ = (Kᵢᵇ + Kᵢᵍ) / 2k`, giving `Δpᵢ = 0`
+in expectation), **not** against literal zero, or it over-trips; (2) **predeclare the materiality
+threshold** like every other margin. Erring toward disqualification is the safe way for a "do no harm"
+guard to be wrong.
 
 ## Axis 2 — Levelized cost / yield
 
@@ -535,7 +562,11 @@ within-cell residual, estimated per arm) and their **ratio `σ_g/σ_b` with a ba
 (usually baseline) carries more non-delivered runs, inflating `σ_b` and pushing `σ_g/σ_b < 1`
 spuriously — which would credit C5 with steadiness that is really just C2's unreliability showing up in
 the cost tail. Restricting to Delivered runs keeps C5 measuring *cost* dispersion, not *yield*
-dispersion in disguise.
+dispersion in disguise. **Band the ratio *inside* the bootstrap, not analytically.** On Delivered runs
+each cell contributes only `Kᵢ − 1` degrees of freedom, so the flakier arm's `σ` is estimated on
+**fewer df** — `σ_b` is noisier exactly when baseline is flaky. Computing `σ_g/σ_b` within the same
+resampling procedure carries that unequal, `K`-dependent df automatically; an analytic band with
+symmetric-df assumptions would understate the ratio's uncertainty.
 
 At `k = 5` the yield band is coarse (steps of `1/5 = 0.2`, smallest detectable move ±1 run), so most
 near-margin tasks are carried by the finer **cost** axis.

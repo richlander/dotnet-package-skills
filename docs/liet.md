@@ -2,6 +2,14 @@
 
 *A shared cost axis for comparing grounding documents, and a name for the metric.*
 
+> **Ladder alignment (read first).** This doc predates the `Fails → Satisfies → Delivers` ladder and
+> speaks in binary "correct." Map it onto the ratified quality-card model: **"correct / answered" =
+> `Delivers`** (the full-price unit) for every *cost* read — a rung's plotted IET is the
+> **Delivered-run cost**; **chart presence** at a rung means the arm is **productive** there
+> (`K ≥ 1`); and each dot carries the task's **graded yield** `p = K/k`. The run budget is **`k = 5`**
+> (supersedes the older `n = 3`). Regression is **materiality-gated** per the model, **not** the
+> per-rung veto this doc's "Regressions" section still describes (see that section's note).
+
 ## What this fixes
 
 IET collapses many token kinds into one honest total per session. But a *single* IET number — or a mean IET across answered questions — throws away the one axis that carries the grounding story: **difficulty**. Worse, averaging across difficulty can invert the truth. Take a four-rung ladder:
@@ -82,7 +90,7 @@ A curve exists only where its arm answers correctly, so the ladder splits into t
 
 **Unlocked region (some arms failed) — the maximum price of generalization.** See below. This is where capability, not efficiency, is the story.
 
-**Regressions (baseline correct, `AGENTS.md` wrong) — harm.** Reported as its own outcome, never blended into an average that could hide it. This is the veto your Pareto rule exists to enforce.
+**Regressions (baseline `Delivers`, grounded does not) — harm.** Reported as its own outcome, never blended into an average that could hide it. *(Ladder note: adjudicated by the quality-card model's **materiality-gated** regression rule — a per-task band past the margin **or** the suite-level loss-mass trip — **not** the brittle per-rung "was-correct-now-isn't" veto, which fires on ceiling noise yet misses real `4/5 → 0/5` collapses.)*
 
 ## The maximum price of generalization
 
@@ -130,7 +138,7 @@ Total IET is an output of those two. As a standalone target it rewards doing les
 
 ## Recommended name
 
-Reclaim your own coinage, corrected: **Levelized IET (LIET)** — IET per correctly-answered task *at a given difficulty*. That is a faithful LCOE analog (cost per unit of capability delivered) and sits in the same family as FTE, CO2-equivalent, and LCOE already in the spec. The earlier problem with LIET was never the concept; it was collapsing it to a single cross-difficulty average, which is exactly the inversion above. Per rung, LIET is right. The rule:
+Reclaim your own coinage, corrected: **Levelized IET (LIET)** — IET per **Delivered unit** (a task answered *as asked*, per the ladder) *at a given difficulty*. That is a faithful LCOE analog (cost per unit of capability delivered) and sits in the same family as FTE, CO2-equivalent, and LCOE already in the spec. The earlier problem with LIET was never the concept; it was collapsing it to a single cross-difficulty average, which is exactly the inversion above. Per rung, LIET is right. The rule:
 
 > **LIET is reported as a curve across difficulty, never as one number averaged across difficulty.**
 
@@ -147,10 +155,10 @@ These are the honest scalar reduction of the curve. Every one is difficulty-awar
 
 ## Cautions
 
-- **Do not fit an equation.** `a·e^(b·rung)` overclaims at 24 rungs and n=3. Report the curve by robust features — flat-region cost, shared-region slope, divergence rung, oracle gap, envelope crossings — not a fitted coefficient.
+- **Do not fit an equation.** `a·e^(b·rung)` overclaims at 24 rungs and `k = 5`. Report the curve by robust features — flat-region cost, shared-region slope, divergence rung, oracle gap, envelope crossings — not a fitted coefficient.
 - **Do not extrapolate failed arms.** Use the envelope (a threshold on observed data), not a projection (a guess on censored data). If a projected point is ever wanted as a visual aid, draw it dotted and never feed it to a scalar.
 - **The curve is only as good as the ordering.** Everything leans on monotonic, emergent-observed difficulty. Run the self-audit before trusting any shape.
-- **Report dispersion.** The divergence rung and shared-region slope drive decisions and are exposed to stochasticity at n=3. Carry min/max or a band.
+- **Report dispersion.** The divergence rung and shared-region slope drive decisions and are exposed to stochasticity at `k = 5`. Carry min/max or a band.
 - **IET definition.** This metric inherits the corrected, netted IET from the main spec — `fresh input + 0.1·cache read + 1.25·cache write + 5·output`, where `fresh = input − cache read − cache write` — so cached tokens are priced once, at the cheap rate, not double-counted.
 
 ## One line for the spec
