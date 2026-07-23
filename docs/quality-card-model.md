@@ -12,6 +12,31 @@ disagree, the chart's methodology is canonical and the card is wrong.
 Its **row-level companion** is `quality-card-spec.md` — the approachable Label·Equation·Example·Description
 table for each card row, which *derives from* this model.
 
+## What grounding claims to deliver
+
+Grounding — putting the right skill docs on the shelf — is asserted to change agent behavior in five
+specific, **falsifiable** ways. The model exists to adjudicate each claim; every axis and row below
+traces back to one of them. A claim is only "delivered" if it clears its **predeclared margin** at the
+**suite level**, per model class.
+
+| # | Claim | What it means | Where the model tests it |
+| --- | --- | --- | --- |
+| **C1** | **Capability** — grounding unlocks work the baseline cannot do | Tasks the ungrounded agent never solves (`Kᵇ = 0`) become solvable (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio) |
+| **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band |
+| **C3** | **Efficiency** — a correct unit costs less to deliver | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` |
+| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | A unit is full-price only if it **ends *and* means** (correct output *and* the taught API) | The **unit definition** (clean-pass gate) that feeds every yield above |
+| **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance (the pooled `σ_within`) | **Memo** read alongside Axis 2 — a secondary, reported-not-gated signal |
+
+Two guardrails ride alongside the claims, because "delivers value" is not the same as "does no harm":
+
+- **No capability loss (hard gate).** Any task the baseline solved that grounding *breaks*
+  (`Kᵇ ≥ 1`, `Kᵍ = 0`) is a **capability regression** — it disqualifies regardless of wins elsewhere.
+- **No material cost regression.** Efficiency claims are **conditional on joint productivity**; a cost
+  win bought by solving fewer things is not a win.
+
+Everything downstream — the two axes, the coverage scoreboard, the graded verdict — is the apparatus
+for turning these five claims and two guardrails into a defensible yes/no per model class.
+
 ## Guiding principle — only expose comparable values
 
 Every number on the card must support a **meaningful, intuitive comparison**; we omit any figure that
@@ -27,9 +52,14 @@ We assess grounding the way you assess any investment: **return** (adjusted for 
 trust it) and **cost** (understood at depth, per unit delivered). Neither alone decides it.
 
 - **Axis 1 — Risk-adjusted return.** How much more does grounding *win*, and how much should I trust
-  that given only `k` runs? ("You say n=5 — will I see this again?")
+  that given only `k` runs? ("You say n=5 — will I see this again?") — adjudicates **C1 capability**
+  and **C2 reliability**.
 - **Axis 2 — Levelized cost / yield.** What does it cost to bring *one sellable win* to market —
-  retry tax and entry fee included — versus the alternative?
+  retry tax and entry fee included — versus the alternative? — adjudicates **C3 efficiency** (with
+  **C5 predictability** as a memo alongside).
+
+(**C4 fidelity** is not a separate axis — it is enforced in the **unit definition**: a run only counts
+toward any yield if it ends *and* means.)
 
 ## Setup, the unit, and graded yield
 
