@@ -197,10 +197,22 @@ lets one extreme task swing the number (the SPEC-benchmark result, *Fleming & Wa
 **symmetric under reciprocal** (halving and doubling cancel), each task's arbitrary baseline cancels,
 and every task carries equal weight in log-ratio space — consistent with our equal-weighting of tasks.
 
-**Two questions, two means.** *What did the whole run cost?* — costs share a unit (tokens), so they
-**add**: the arithmetic **Total IET**. *How much cheaper is a unit, typically?* — that asks for a
-typical multiplier, whose right summary is the **geometric mean** of `rᵢ` (an arithmetic average
-answers a different question). Totals are arithmetic; ratios are geometric.
+**Two questions, two means.** *What did the comparable work cost?* — costs share a unit (tokens), so
+they **add**: the **Total IET**, summed over the **shared set `S`** where both arms produced. To keep
+that total honest we take, per task/arm, the **median IET among that cell's correct runs** — one
+representative "what it costs when it works" number, robust to the run-to-run tail and to failed-run
+cost (which Axis 1 already accounts for; we do not double-charge failure here). *How much cheaper is a
+unit, typically?* — that asks for a typical multiplier, whose right summary is the **geometric mean**
+of `rᵢ` (an arithmetic average answers a different question). Totals are arithmetic **sums of
+representative runs on `S`**; ratios are geometric.
+
+**Total IET is partitioned, never a black box.** Median-of-correct makes the total truthful but only
+*comparable* where both arms produced, so Total IET is reported by productivity partition: the
+head-to-head **Total IET lives on the shared set `S`** (Σ median-correct IET per arm — apples to
+apples), while **grounded-only** spend (capability *investment*) and **baseline-only** spend appear as
+**memo lines**, never blended into the comparison. Everything comparable sits on `S`; everything off-`S`
+is capability-only. Even count of correct runs → **lower median** (a real observed run, no
+interpolation).
 
 Axis 2 carries its **own** paired uncertainty band; **resample at the task level** (whole
 `(baseline, grounded)` blocks) so every `Lᵢ` stays defined on the observed shared set — this also
@@ -219,9 +231,9 @@ never blended into the empirical verdict.
 the *same* unit — here the alternative is **baseline**, the other arm in this head-to-head. A
 **grounded-only** unit (`Kᵢᵇ = 0 < Kᵢᵍ`) has **no competitor by definition**, so there is no price to
 divide by: it is a **capability win** on Axis 1, and its cost is not a ratio at all. That cost is not
-hidden, though — it lands in the arithmetic **Total IET**, so an expensive unlock raises the run's
-top-line and the reader sees it. (A `0/5` baseline is *observed nonproduction this batch*, not proven
-impossibility.)
+hidden, though — it lands in the **grounded-only memo line** of Total IET (its own partition), so an
+expensive unlock is visible as capability *investment* without contaminating the shared-set comparison.
+(A `0/5` baseline is *observed nonproduction this batch*, not proven impossibility.)
 
 ## The coverage scoreboard
 
@@ -295,18 +307,35 @@ Predeclare, **before the scoring run**, the **primary currency** (IET), the per-
 separate *better / held / worse*, and the label for an **empty/thin shared set** ("economics not
 estimable").
 
-Each margin is **`max(practical floor, noise floor)`**, fixed ex ante per model class and never fit to
-the observed outcome:
+Each margin is a **practical floor** — the smallest move worth reporting — fixed ex ante per model
+class and never fit to the observed outcome (a `−1%` IET change is not a result even if it is
+"significant"). We deliberately do **not** add a separate "noise floor" into the margin: the
+**suite-level band already carries the sampling uncertainty**, so inflating the margin by a noise term
+would double-count it. The decision rule is simply *the suite band must clear the practical floor*
+(superiority: band lower bound `> +margin`; noninferiority: lower bound `> −margin`).
 
-- **Practical floor** — the smallest move worth reporting, chosen by judgment (a `−1%` IET change is
-  not a result even if it is "significant").
-- **Noise floor** — the measured run-to-run wobble: the within-arm spread of the `k` reruns
-  (e.g. the yield/cost CV), so a "move" must exceed the jitter the harness itself produces.
+**How noise informs the floor (the formalism).** Run-to-run noise is a **single model-level
+parameter**, not a per-task property — a per-cell CV from `k` reruns has only `k−1` degrees of freedom
+and is untrustworthy. Estimate it *pooled* on the **log scale** (cost is positive and multiplicative):
+decompose `log(cost)_{task,arm,run} = μ + task + arm + (task×arm) + ε`, and take the pooled
+within-cell residual **`σ_within`** across all cells — one number per model, well-identified (here 72
+cells × `(k−1)` ≈ 144 df). This `σ` lives on the same log scale as the geometric cost axis, so it drops
+straight into the cost band. Its only job is a **sanity check**: the practical floor must sit *above*
+the resolution the harness can achieve (roughly `σ_within · √(2/k) / √|S|` at the suite level), never
+*inside* it.
 
-Taking the larger makes a *better* verdict clear both bars at once — we care about it **and** it is not
-luck. At `k = 5` the yield band is coarse (steps of `1/5 = 0.2`, smallest detectable move ±1 run), so
-most near-margin tasks are carried by the finer **cost** axis; the noise floor is estimated from a
-one-time higher-`k` variance pilot on the highest-variance tasks, then the scoring run ships at `k = 5`.
+**Ad-hoc anchor (current numbers).** Mining the existing `sessions.db` (24 tasks, `k = 3`, all arms)
+gives pooled `σ_within ≈ 0.28` (Opus / frontier) and `≈ 0.72` (Haiku / mini) on the log scale — a
+~2.5× gap that is itself the evidence for **per-model-class margins**. That implies suite-level cost
+resolution of roughly **~5% IET (frontier)** and **~10% IET (mini)** at `k = 5`, `|S| ≈ 15`. These are
+**conservative (biased high)**: mined `σ` mixes failed-run cost into the tail, and the shipped estimator
+is the robust **median-of-correct** run (below). We adopt these as the ex-ante practical floors. A
+**targeted variance study** — higher `k` (~12), correct-runs only, log-variance-components with a CI —
+would replace them with a tighter, unbiased anchor; the ad-hoc method above is the reproducible way to
+re-anchor if the harness changes.
+
+At `k = 5` the yield band is coarse (steps of `1/5 = 0.2`, smallest detectable move ±1 run), so most
+near-margin tasks are carried by the finer **cost** axis.
 
 ## Visualization — the reference (LIET chart)
 

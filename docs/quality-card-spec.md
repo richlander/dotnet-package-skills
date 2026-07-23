@@ -62,7 +62,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `Total turns` | `Σᵢ,ᵣ turnsᵢˣ,ᵣ` | `343 → 246` | Total turns across the whole run. Lower better. |
+| `Total turns (shared set)` | `Σ_{i∈S} median_correct turnsᵢˣ` | `… → …` | Total turns on the **shared set `S`**, per arm — median-correct run per cell (see Total IET). Failure not re-charged. Lower better. |
 | `↳ tool-call turns (% of turns)` | `Σ tturns` ; share | `319 → 222 (93% → 90%)` | Tool-firing turns and their share. |
 | `Turns per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (turns) over `S` | `8.8 → 7.4` levels; ratio *(recompute)* | Levelized turns per full-price unit on the shared set. Summarize the per-task **ratio** by **geometric mean** (the right summary for a typical multiplier — see model doc); arm levels (geometric mean of `Lᵢˣ`, which compose with the ratio) shown for context. |
 
@@ -70,7 +70,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `Total duration` | `Σᵢ,ᵣ secᵢˣ,ᵣ` ; `%Δ` | `1719s → 1214s (−29%)` | Total wall-clock across the run (incl. failures). Lower better. |
+| `Total duration (shared set)` | `Σ_{i∈S} median_correct secᵢˣ` ; `%Δ` | `… → … (−…%)` | Total wall-clock on the **shared set `S`**, per arm — median-correct run per cell (see Total IET). Failure not re-charged. Lower better. |
 | `↳ tool-call turn secs (% of turn time)` | `Σ toolSec` ; share of `Total duration` | `1606s → 1100s (93% → 91%)` | Seconds in tool-firing turns + share. |
 | `Duration per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (sec) over `S` | `40.0s → 34.1s` levels; ratio *(recompute)* | Levelized wall-clock per full-price unit on the shared set; geometric mean of the per-task ratio. |
 
@@ -78,10 +78,11 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `Total IET` | `Σᵢ,ᵣ IETᵢˣ,ᵣ` ; `%Δ` | `2.05M → 1.59M (−22%)` | Total IET (weighted tokens) across the run (incl. failures). Lower better. |
-| `↳ Skill IET (doc)` | `SkillIET = Σᵢ DocTokᵢ·(w_write + w_read·(t̄ᵢ−1))` | `0 → 54.1k` | Carrying cost of the skill doc: written once, cache-read each later turn (`t̄ᵢ` = mean turns). The **toll** (reuse regime: fresh session per task). |
-| `↳ Work IET (agent)` | `Total − Skill IET` | `2.05M → 1.54M` | Everything else (thinking / output / tools). `Total = Skill + Work`. |
-| `↳ skill load (tok)` | `DocTok = g_tok · Σᵢ actᵢ` | `0 → 24.9k` | Total skill-doc tokens loaded (doc size × activations). Context. |
+| `Total IET (shared set)` | `Σ_{i∈S} median_correct IETᵢˣ` ; `%Δ` | `… → … (−…%)` | Total IET (weighted tokens) on the **shared set `S`**, per arm — apples to apples. Per task/arm we take the **median IET among that cell's correct runs** (even count → lower median): "what it costs when it works," robust to the tail. Failure is **not** re-charged here (Axis 1 owns it). Lower better. |
+| `↳ grounded-only / baseline-only (memo)` | `Σ median_correct IET` on each off-`S` partition | `… ; …` | Off-shared-set spend as **memo lines**, never compared: grounded-only = capability *investment*; baseline-only = lost coverage. |
+| `↳ Skill IET (doc)` | `SkillIET = Σ_{i∈S} DocTokᵢ·(w_write + w_read·(t̃ᵢ−1))` | `0 → …` | Carrying cost of the skill doc on `S`: written once, cache-read each later turn (`t̃ᵢ` = turns of the representative median-correct run). The **toll** (reuse regime: fresh session per task). |
+| `↳ Work IET (agent)` | `Total(S) − Skill IET` | `… → …` | Everything else (thinking / output / tools) on `S`. `Total = Skill + Work`. |
+| `↳ skill load (tok)` | `DocTok = g_tok · Σ_{i∈S} actᵢ` | `0 → …` | Total skill-doc tokens loaded on `S` (doc size × activations). Context. |
 | `↳ output (tok · IET share)` | tokens `Σᵢ outᵢ` ; IET share = output-IET / Total IET | `142k tok · 34% IET → 98.3k tok · 30% IET` | Output **tokens** (raw count) and output's **IET share** (weighted — output IET is priced above input, so its share of Total IET far exceeds its raw-token share). Two bases by design: the `142k` is tokens, the `34%` is weighted IET. |
 | `↳ tool-call turn IET (% of turn IET)` | share | `92% → 92%` | % of turn IET in tool-firing turns. |
 | `IET per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (IET) over `S` | `46.9k → 44.0k` levels; ratio *(recompute)* | Levelized IET per full-price unit on the shared set — the economic punchline. Geometric mean of the per-task **ratio** (symmetric under reciprocal — the typical multiplier); carries its own task-level band. |
@@ -90,7 +91,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `verdict` | tally of per-task grades + gate, **per model class** | `<strong·half·mixed·wash·regression·capability>` *(schematic — needs graded data)* | Each **both-productive** task is graded **strong win** (both axes better), **half win** (one axis better, other held), **mixed** (one better, other worse — a genuine trade), **wash** (both held), or **regression** (an axis worse with no compensating better). Grounded-only unlocks are **capability** wins (Axis 1 only — no cost axis), tallied separately. The aggregate *is* the tally (rows, no synthetic score). **Gate:** any material `baseline-only` loss disqualifies regardless of wins. **Bar is model-scoped:** frontier → cost-led wins; mini → capability unlocks; never pool classes. Primary currency IET; each margin = `max(practical floor, noise floor)`, predeclared ex ante per model class; thin `S` → "not estimable". |
+| `verdict` | tally of per-task grades + gate, **per model class** | `<strong·half·mixed·wash·regression·capability>` *(schematic — needs graded data)* | Each **both-productive** task is graded **strong win** (both axes better), **half win** (one axis better, other held), **mixed** (one better, other worse — a genuine trade), **wash** (both held), or **regression** (an axis worse with no compensating better). Grounded-only unlocks are **capability** wins (Axis 1 only — no cost axis), tallied separately. The aggregate *is* the tally (rows, no synthetic score). **Gate:** any material `baseline-only` loss disqualifies regardless of wins. **Bar is model-scoped:** frontier → cost-led wins; mini → capability unlocks; never pool classes. Primary currency IET; each margin is a **practical floor**, predeclared ex ante per model class (no separate noise floor — the suite band carries sampling uncertainty; noise is sized from pooled log-scale `σ_within`, currently ~5% IET frontier / ~10% mini, only to keep the floor above harness resolution); thin `S` → "not estimable". |
 
 ## Invariants
 
