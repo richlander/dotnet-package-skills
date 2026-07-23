@@ -28,7 +28,7 @@ evidential strength, never over-claimed as a certified band.
 | **C1** | **Capability** — grounding unlocks work the baseline did not produce | Tasks the ungrounded agent did not produce this batch (`Kᵇ = 0`) become productive under grounding (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio); reported as descriptive evidence, not a margin-certified band |
 | **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band — **margin-certified** |
 | **C3** | **Efficiency** — a **Delivered** unit costs less to produce | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` — **margin-certified** |
-| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | On the `Fails → Satisfies → Delivers` ladder, more working runs reach **Delivers** (did it as asked), not just **Satisfies** (workable but hand-rolled) | **Independently reported:** the `Delivers` rate among working (`Satisfies ∪ Delivers`) runs — isolates fidelity from function; `Delivers` is also the full-price gate feeding every yield. Not estimable when a task has zero working runs |
+| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | On the `Fails → Satisfies → Delivers` ladder, more working runs reach **Delivers** (did it as asked), not just **Satisfies** (workable but hand-rolled) | **Independently reported:** the **per-task** `Delivers`-among-working rate — `Kᵢᵈᵉˡ / #{Satisfies ∪ Delivers}ᵢ` — **averaged equal-weight over tasks with ≥ 1 working run** (a *run-pooled* rate mix-weights tasks by working-run count and breaks Invariant 1 — the same Simpson trap the cost axis avoids; the pooled figure is kept only as a memo). Isolates fidelity from function; `Delivers` is also the full-price gate feeding every yield. Not estimable for a task with zero working runs |
 | **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance under grounding: `σ_g < σ_b` (arm-specific log-cost SD) | **Memo** read alongside Axis 2 — the variance ratio `σ_g/σ_b` with its band; a reported-not-gated signal (pooled `σ_within` sizes the margin; the *arm-specific* pair tests C5) |
 
 Two guardrails ride alongside the claims, because "delivers value" is not the same as "does no harm":
@@ -93,10 +93,13 @@ fidelity signal.)
   its `k` reruns; the `Satisfies`/`Delivers` gates grade **within a single run** by bucketing its
   assertions into two **value tiers** (works vs. as-asked). A run that clears both tiers is full-price;
   one that clears only *satisfy* is a `Satisfies` "second" (right answer, wrong approach); zero is
-  scrap. The **fidelity claim C4** reads off exactly this split — the **`Delivers` rate among
-  {`Satisfies` ∪ `Delivers`} runs** ("when it worked, did it work as asked?") — isolating fidelity from
-  mere function. The two axes compose cleanly: bin each run into tiers **and** take yield over the
-  reruns. (We hold to **these two** tiers; further tier proliferation stays deferred.)
+  scrap. The **fidelity claim C4** reads off exactly this split — the **per-task `Delivers` rate among
+  {`Satisfies` ∪ `Delivers`} runs, averaged equal-weight over tasks with ≥ 1 working run** ("when it
+  worked, did it work as asked?") — isolating fidelity from mere function. (Averaging *per task*, not
+  pooling *over all runs*: a run-pooled rate would weight tasks by their working-run count and reopen
+  the Simpson trap Invariant 1 forbids; the pooled number is a memo only.) The two axes compose
+  cleanly: bin each run into tiers **and** take yield over the reruns. (We hold to **these two** tiers;
+  further tier proliferation stays deferred.)
 
 > **Capture (what the harness must persist).** The graded ladder needs, per `(task, arm, run)`, **two
 > outcome bits** — `satisfies` (output works) and `delivers` (works as asked / taught API) — **and**
@@ -117,8 +120,18 @@ Throughout Axis 1 the binomial **success** of a run is a **Delivers** (the full-
 
 ```
 Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
-ΔP = Pᵍ − Pᵇ                 # the return grounding delivers
+ΔP = Pᵍ − Pᵇ                 # the raw return grounding delivers, all N tasks
+ΔP|both = mean over both-productive tasks of (pᵢᵍ − pᵢᵇ)   # the certified C2 quantity
 ```
+
+**Two ΔPs, because C1 and C2 are different claims.** The raw `ΔP` over all `N` gives a grounded-only
+unlock (`pᵢᵇ = 0`) its full `pᵢᵍ`, so a **capability** win (C1, descriptive-only) would flow straight
+into the **margin-certified reliability band** — letting C1 silently carry C2. To keep the claims
+separate we **certify C2 on `ΔP|both`** — the paired yield gain restricted to the **both-productive
+set** (`Kᵢᵇ ≥ 1 & Kᵢᵍ ≥ 1`), i.e. "wins more consistently *on work both arms can already do*." The raw
+all-`N` `ΔP` is reported too, but as a **combined return** that mixes capability and reliability, not
+as the C2 certificate. (Consistent with the rows-not-nets rule: unlocks are counted as C1 coverage,
+not folded into the reliability margin.)
 
 **Risk = how much to trust it on only `k` runs** — the "n=5, will I see this again?" question. This
 "risk" is the **within-batch sampling uncertainty** of the yield (how firmly `k` runs pin `pᵢˣ`); a
@@ -206,6 +219,14 @@ unreliability raises the price automatically (`Lᵢˣ = c̄ / p`). A non-deliver
 but not as asked); both spent budget toward the eventual Delivered unit. (Statistically this is the
 *observed* batch cost, not an unbiased forecast of the deployment `c/p`; treat it as measured, not
 predicted.)
+
+**Selection into `S` runs *against* grounding (bank it).** A task enters the shared set on `Kᵢˣ ≥ 1`,
+so for a low-`p` arm the batches that qualify are the *lucky* ones: `K | K ≥ 1` is biased high versus
+`k·p`, which biases `Lᵢˣ = Σc/K` **low** for a flaky arm. Baseline is usually the flakier arm, so its
+levelized cost is the more downward-biased, making `rᵢ = Lᵢᵍ/Lᵢᵇ` biased **upward — against grounding**.
+This "winner's curse" is therefore **conservative**: any efficiency win we certify has cleared a
+selection effect tilted against it. (It also argues, again, for reporting cost only on `S` and never
+imputing a price to `K = 0`.)
 
 **The task is the boundary** (the line that keeps the metric honest):
 
@@ -319,7 +340,10 @@ not a decomposition of one by the other:
 - **Reliably delivered** (`K ≥ τ`, bar `τ = 3/5` — *can it produce dependably?*) drives the headline
   `tasks reliably delivered`.
 A `2/5 → 3/5` task moves the *reliably-delivered* count but is "both productive" on the scoreboard — the
-two views legitimately disagree, and both are reported.
+two views legitimately disagree, and both are reported. Because the headline is a **hard threshold on
+noisy binomials**, always print the **yield-mass movement `Σᵢ pᵢˣ`** (sum of posterior yields) beside
+the thresholded count: a lone boundary cell flipping `2/5 ↔ 3/5` can move the count ±1 with essentially
+no change in the certified quantity, and the mass keeps that from reading as real progress.
 
 ## The verdict (to be litigated)
 
@@ -363,7 +387,9 @@ Two rules keep the tally honest:
    model classes into one tally; compare like-for-like (the model-diff view), and set each class's
    bands/margins to its own regime.
 4. **Grades are descriptive; trust lives at the suite level.** A per-task grade classifies *point
-   estimates* (with shrinkage), it is **not** an independent significance test — grading 24 tasks each
+   estimates* (the **beta-binomial posterior means** for yield — the uniform-prior `Beta` posterior
+   introduced above, which shrinks each cell toward `0.5`), it is **not** an independent significance
+   test — grading 24 tasks each
    against a 95% band would manufacture roughly one false movement per suite from noise alone. The
    verdict's confidence comes from the **suite-level** bands: the paired `ΔP` (Axis 1) and the
    geometric-mean cost ratio (Axis 2). The tally *describes*; the suite bands *certify*.
@@ -417,7 +443,12 @@ anchor; the ad-hoc method above is the reproducible way to re-anchor if the harn
 (one harness-noise number). It cannot test **C5 predictability**, which asks whether *grounded* cost is
 steadier than *baseline* cost — that needs the **arm-specific** `σ_b` and `σ_g` (same log-scale
 within-cell residual, estimated per arm) and their **ratio `σ_g/σ_b` with a band**. `σ_g/σ_b < 1`
-(band excluding 1) is the C5 win. It is a **memo** read — reported, never gated.
+(band excluding 1) is the C5 win. It is a **memo** read — reported, never gated. **Estimate both σ on
+`Delivered` runs only.** Non-delivered cost contaminates the residual *asymmetrically*: the flakier arm
+(usually baseline) carries more non-delivered runs, inflating `σ_b` and pushing `σ_g/σ_b < 1`
+spuriously — which would credit C5 with steadiness that is really just C2's unreliability showing up in
+the cost tail. Restricting to Delivered runs keeps C5 measuring *cost* dispersion, not *yield*
+dispersion in disguise.
 
 At `k = 5` the yield band is coarse (steps of `1/5 = 0.2`, smallest detectable move ±1 run), so most
 near-margin tasks are carried by the finer **cost** axis.
