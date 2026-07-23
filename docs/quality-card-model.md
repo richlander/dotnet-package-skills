@@ -21,11 +21,11 @@ traces back to one of them. A claim is only "delivered" if it clears its **prede
 
 | # | Claim | What it means | Where the model tests it |
 | --- | --- | --- | --- |
-| **C1** | **Capability** — grounding unlocks work the baseline cannot do | Tasks the ungrounded agent never solves (`Kᵇ = 0`) become solvable (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio) |
+| **C1** | **Capability** — grounding unlocks work the baseline did not produce | Tasks the ungrounded agent did not produce this batch (`Kᵇ = 0`) become productive under grounding (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio); reported as descriptive evidence, not a margin-certified band |
 | **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band |
 | **C3** | **Efficiency** — a correct unit costs less to deliver | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` |
 | **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | A unit is full-price only if it **ends *and* means** (correct output *and* the taught API) | The **unit definition** (clean-pass gate) that feeds every yield above |
-| **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance (the pooled `σ_within`) | **Memo** read alongside Axis 2 — a secondary, reported-not-gated signal |
+| **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance under grounding: `σ_g < σ_b` (arm-specific log-cost SD) | **Memo** read alongside Axis 2 — the variance ratio `σ_g/σ_b` with its band; a reported-not-gated signal (pooled `σ_within` sizes the margin; the *arm-specific* pair tests C5) |
 
 Two guardrails ride alongside the claims, because "delivers value" is not the same as "does no harm":
 
@@ -146,19 +146,17 @@ estimate, so a wide-band win is discounted toward its downside.
     (mean ≈ 0.86, still spread), so the band never collapses; propagate each task's posterior into
     `Δpᵢ` and aggregate across tasks.
   - **Nested task→run bootstrap (cross-check).** Draw the 24 **tasks** with replacement (the dominant
-    uncertainty for a general claim), then *within* each drawn task redraw its runs — resampling from
-    each task's **posterior/parametric** yield, **not** its 5 raw outcomes, so a `5/5` or `0/5` still
-    carries spread (an empirical redraw of five identical outcomes is degenerate). The two arms stay
-    tied inside each drawn task (task-level pairing); on **Axis 2** the shared set `S*` is **recomputed
-    each iteration**, so a task that draws `K* = 0` drops out — its uncertainty correctly surfaces as an
-    Axis-1 capability gap rather than an undefined cost.
-  - **Beta-binomial** fixes the boundary: a `5/5` under a uniform prior is `Beta(6,1)` (mean ≈ 0.86,
-    still spread), so the band never collapses; propagate each task's posterior into `Δpᵢ`.
-  - **Paired bootstrap over `(task, replicate)` blocks** captures *two* nested sources of luck —
-    which **tasks** we happened to sample (redraw the 24 tasks; the dominant uncertainty for "does
-    grounding help *in general*?") and which **reruns** we happened to get (redraw the 5 outcomes).
-    Resampling whole task-blocks keeps the two arms tied together inside each drawn task, preserving
-    the pairing.
+    uncertainty for a general claim), then *within* each drawn task redraw its runs as **joint
+    `(passed, cost)` draws** from that task's fitted per-arm model — resampling from each task's
+    **posterior/parametric** yield paired with its log-cost distribution, **not** its 5 raw outcomes,
+    so a `5/5` or `0/5` still carries spread (an empirical redraw of five identical outcomes is
+    degenerate). This single pass regenerates `K*`, then `L* = Σcost*/K*`, then the shared set `S*` and
+    the geometric ratio, so **both axes read from one resampling procedure**. The two arms stay tied
+    inside each drawn task (task-level pairing); the shared set `S*` is **recomputed each iteration**,
+    so a task that draws `K* = 0` drops out — its uncertainty correctly surfaces as an Axis-1 capability
+    gap rather than an undefined cost. For the **confirmatory finite-suite** band, hold the 24 tasks
+    fixed (redraw only runs); add the outer task redraw **only** for the task-population sensitivity
+    read.
 
 > **What the risk band is *for*.** It is the **noise ruler** for the verdict: it sets how large a
 > `ΔP` (or cost gap) must clear to count as a result rather than luck. Two wins with the *same*
@@ -233,16 +231,20 @@ that total honest we take, per task/arm, the **median IET among that cell's corr
 representative "what it costs when it works" number, robust to the run-to-run tail and to failed-run
 cost (which Axis 1 already accounts for; we do not double-charge failure here). *How much cheaper is a
 unit, typically?* — that asks for a typical multiplier, whose right summary is the **geometric mean**
-of `rᵢ` (an arithmetic average answers a different question). Totals are arithmetic **sums of
-representative runs on `S`**; ratios are geometric.
+of the levelized ratios `rᵢ = Lᵢᵍ/Lᵢᵇ` (an arithmetic average answers a different question — and note
+`rᵢ` is the ratio of the *levelized* `Lᵢˣ = Σcost/Kᵢˣ`, not a ratio of the Total-IET median runs).
+Totals are arithmetic **sums of representative runs on `S`**; ratios are geometric.
 
 **Total IET is partitioned, never a black box.** Median-of-correct makes the total truthful but only
 *comparable* where both arms produced, so Total IET is reported by productivity partition: the
 head-to-head **Total IET lives on the shared set `S`** (Σ median-correct IET per arm — apples to
 apples), while **grounded-only** spend (capability *investment*) and **baseline-only** spend appear as
 **memo lines**, never blended into the comparison. Everything comparable sits on `S`; everything off-`S`
-is capability-only. Even count of correct runs → **lower median** (a real observed run, no
-interpolation).
+is capability-only. Even count of correct runs → **interpolated median** (mean of the two middle runs):
+this preserves the expected cost regardless of how many runs were correct, so a flaky low-`K` arm is
+not made to look artificially cheap than a reliable high-`K` arm (a "lower median" would bias toward
+whichever arm has fewer correct runs — usually baseline — and quietly work against the efficiency
+claim). Fractional turns from the two central runs feed `SkillIET` unchanged.
 
 Axis 2 carries its **own** paired uncertainty band; **resample at the task level** (whole
 `(baseline, grounded)` blocks) so every `Lᵢ` stays defined on the observed shared set — this also
@@ -315,7 +317,9 @@ Two rules keep the tally honest:
 
 1. **The capability gate is hard.** A material baseline-only regression disqualifies regardless of how
    many wins offset it — and because the scoreboard is rows, never a net, a lost task cannot hide
-   behind the wins.
+   behind the wins. *Predeclare "material":* a baseline-only loss counts when the paired `Δpᵢ` is
+   negative beyond the Axis-1 margin **and** its band excludes zero — a single `1/5 → 0/5` blip that
+   the band cannot separate from noise is flagged for inspection, not an automatic gate trip.
 2. **Grade the axis that exists.** Reliability is graded on every task; cost only where both arms are
    productive (the shared set). A grounded-only unlock is graded on Axis 1 alone — no baseline price is
    fabricated for it.
@@ -335,34 +339,54 @@ Two rules keep the tally honest:
 
 Predeclare, **before the scoring run**, the **primary currency** (IET), the per-axis **margins** that
 separate *better / held / worse*, and the label for an **empty/thin shared set** ("economics not
-estimable").
+estimable" — predeclare *thin* as `|S| < 8` tasks, i.e. fewer than a third of the suite produce jointly,
+so the geometric ratio's band is too wide to certify).
 
 Each margin is a **practical floor** — the smallest move worth reporting — fixed ex ante per model
 class and never fit to the observed outcome (a `−1%` IET change is not a result even if it is
 "significant"). We deliberately do **not** add a separate "noise floor" into the margin: the
 **suite-level band already carries the sampling uncertainty**, so inflating the margin by a noise term
-would double-count it. The decision rule is simply *the suite band must clear the practical floor*
-(superiority: band lower bound `> +margin`; noninferiority: lower bound `> −margin`).
+would double-count it. The decision rule is *the suite band must clear the practical floor*, applied on
+each axis in its **benefit direction** so the band bound faces the same way regardless of whether the
+raw statistic is "higher-better" or "lower-better":
+- **Axis 1 — yield (`ΔP`, higher-better):** superiority requires **lower bound `> +margin`**;
+  noninferiority requires **lower bound `> −margin`**.
+- **Axis 2 — cost ratio (`R = GM(rᵢ)`, lower-better):** work on the benefit scale `E = −ln R` (a
+  *cost reduction*, higher-better) and apply the **same** lower-bound rule; equivalently, keep `R` and
+  gate its **upper** bound — superiority `upper(R) < e^(−margin)`, noninferiority `upper(R) < e^(+margin)`.
+
+A naïve "lower bound `> +margin`" applied to `R` itself would certify cost *increases* — the benefit
+direction fixes that.
 
 **How noise informs the floor (the formalism).** Run-to-run noise is a **single model-level
 parameter**, not a per-task property — a per-cell CV from `k` reruns has only `k−1` degrees of freedom
 and is untrustworthy. Estimate it *pooled* on the **log scale** (cost is positive and multiplicative):
 decompose `log(cost)_{task,arm,run} = μ + task + arm + (task×arm) + ε`, and take the pooled
-within-cell residual **`σ_within`** across all cells — one number per model, well-identified (here 72
-cells × `(k−1)` ≈ 144 df). This `σ` lives on the same log scale as the geometric cost axis, so it drops
+within-cell residual **`σ_within`** across all cells — one number per model, well-identified (the mined
+`k = 3`, 3-arm snapshot gives `72 × (k−1) ≈ 144` df; the shipped 2-arm `k = 5` scoring run gives
+`48 × 4 = 192` df). This `σ` lives on the same log scale as the geometric cost axis, so it drops
 straight into the cost band. Its only job is a **sanity check**: the practical floor must sit *above*
-the resolution the harness can achieve (roughly `σ_within · √(2/k) / √|S|` at the suite level), never
-*inside* it.
+the resolution the harness can achieve — roughly `σ_within · √(2/k) / √|S|` at the suite level, which
+isolates the *continuous* compute variance and so acts as a **strict lower bound** (flaky-yield tasks
+inject extra binomial variance into `L = Σcost/K` via the retry tax, widening the true suite CI
+further). The floor must clear this **empirical suite band**, not the closed-form alone.
 
 **Ad-hoc anchor (current numbers).** Mining the existing `sessions.db` (24 tasks, `k = 3`, all arms)
 gives pooled `σ_within ≈ 0.28` (Opus / frontier) and `≈ 0.72` (Haiku / mini) on the log scale — a
-~2.5× gap that is itself the evidence for **per-model-class margins**. That implies suite-level cost
-resolution of roughly **~5% IET (frontier)** and **~10% IET (mini)** at `k = 5`, `|S| ≈ 15`. These are
-**conservative (biased high)**: mined `σ` mixes failed-run cost into the tail, and the shipped estimator
-is the robust **median-of-correct** run (below). We adopt these as the ex-ante practical floors. A
-**targeted variance study** — higher `k` (~12), correct-runs only, log-variance-components with a CI —
-would replace them with a tighter, unbiased anchor; the ad-hoc method above is the reproducible way to
-re-anchor if the harness changes.
+~2.5× gap that is itself the evidence for **per-model-class margins**. Through
+`σ_within · √(2/k) / √|S|` at `k = 5`, `|S| ≈ 15`, that is a suite-level cost resolution of ≈ **4.7%
+(frontier)** and ≈ **12.5% (mini)**. The floor must sit *above* that, so we set the ex-ante practical
+floors at **~5% IET (frontier)** and **~13% IET (mini)** — the mini floor deliberately rounded up past
+its resolution, not down. The mined `σ` is itself **biased high** (it mixes failed-run cost into the
+tail), so these are conservative anchors. A **targeted variance study** — higher `k` (~12),
+correct-runs only, log-variance-components with a CI — would replace them with a tighter, unbiased
+anchor; the ad-hoc method above is the reproducible way to re-anchor if the harness changes.
+
+**Pooled vs. arm-specific — two different jobs.** The *pooled* `σ_within` above sizes the **margin**
+(one harness-noise number). It cannot test **C5 predictability**, which asks whether *grounded* cost is
+steadier than *baseline* cost — that needs the **arm-specific** `σ_b` and `σ_g` (same log-scale
+within-cell residual, estimated per arm) and their **ratio `σ_g/σ_b` with a band**. `σ_g/σ_b < 1`
+(band excluding 1) is the C5 win. It is a **memo** read — reported, never gated.
 
 At `k = 5` the yield band is coarse (steps of `1/5 = 0.2`, smallest detectable move ±1 run), so most
 near-margin tasks are carried by the finer **cost** axis.
