@@ -118,3 +118,11 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 5. **Coverage is rows, not a net** — `baseline-only` (regressions) stays a visible gate.
 6. **Lead with totals**; the only per-unit rate is the shared-set paired cost.
 7. **Card ⊇ chart** — every value on the LIET SVG appears on the card; the card may add more.
+8. **Closed grading contract** — everything a run is graded on is inferable from the **prompt alone**;
+   the skill teaches *how*, never *what*. Each assertion pairs a **mini-prompt** (the prompt-subset it
+   gates) with an executable **test**; a design-time `assertion→prompt` audit classifies each as a
+   **requirement** (entailed → gate at `Delivers`) or a **convention** (consistent-only → `Satisfies`
+   accepts any working reading, win reported at C4). **Gradable scope is verifiable requirements only**
+   (API/approach choice, technical constraints, functional correctness); subjective quality (idiom,
+   elegance) is out of scope — so every gating assertion is a deterministic test and the certified path
+   carries no judge noise.

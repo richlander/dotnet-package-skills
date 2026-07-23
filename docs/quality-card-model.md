@@ -41,6 +41,34 @@ Two guardrails ride alongside the claims, because "delivers value" is not the sa
 Everything downstream — the two axes, the coverage scoreboard, the graded verdict — is the apparatus
 for turning these five claims and two guardrails into a defensible yes/no per model class.
 
+## What this measures — the gradable scope
+
+The claims above are only as trustworthy as the requirements they grade. This model measures one
+**specific class** of requirement, and deliberately excludes another.
+
+**In scope — objectively verifiable requirements.** Everything the ladder gates must be checkable from
+the produced artifact by a deterministic test:
+
+- **Approach / API selection** — *use the markout serializer*, *use `System.Text.Json`* (verifiable:
+  the named surface is used; the hand-rolled equivalent is absent).
+- **Technical constraints** — *NAOT-compatible*, trim-safe, target framework (verifiable at the
+  strongest level: publish, run, treat trim/reflection warnings as errors).
+- **Functional correctness** — the output is right (the existing assertions).
+
+**Out of scope — subjective quality.** Idiom, elegance, "best practice," readability. *"Use the
+serializer **in the idiomatic way**"* is a value judgment — not verifiable, judge-dependent, and the
+most contestable grade a card could carry. It is **not gated and not reported**.
+
+**The two are one rule seen twice.** A requirement is **in scope iff it can be both *stated in the
+prompt* and *reduced to a test*.** "Use the markout serializer" clears both; "be idiomatic" clears
+neither. This is the closed-contract invariant (next section) viewed from the requirement side — which
+is why the scope boundary and the grading contract reinforce each other.
+
+**A consequence, adopted deliberately: ugly-but-compliant *Delivers*.** A run that uses the serializer
+correctly but gracelessly still earns `Delivers` — we grade *approach and constraints honored*, never
+taste. This keeps every grade inspectable and un-attackable, at the cost of not rewarding elegance.
+Elegance is a non-goal here, by design.
+
 ## Guiding principle — only expose comparable values
 
 Every number on the card must support a **meaningful, intuitive comparison**; we omit any figure that
@@ -112,6 +140,46 @@ fidelity signal.)
 > standing in as a **proxy** for `Delivers` until the `delivers` bit is captured — marked *(graded)*
 > where they become richer once that capture lands.
 
+
+## The grading contract — a closed prompt↔assertion loop
+
+The two ladder gates (`satisfies`, `delivers`) are only fair if **everything a run is graded on is
+inferable from the task prompt alone**. The skill's legitimate job is teaching *how* to satisfy the
+contract efficiently — never *discovering what the contract is*. If a grade can be met only by content
+the skill supplies, the baseline loses on **information asymmetry about the grading**, not on capability
+— a non-comparable comparison the guiding principle forbids.
+
+**The contract, made structural.** An **assertion** is a pair: a **mini-prompt** (a re-statement of the
+prompt-subset it gates) plus an executable **test**. The suite is then audited by two judge passes,
+**at design time, once** — never per run:
+
+- `prompt → assertion` — **coverage**: is every graded behavior backed by a prompt clause? A gap means
+  the grading is silent on something the prompt asks, so the skill could supply it for free (the
+  *underspecification* leak).
+- `assertion → prompt` — **entailment**: is every assertion actually backed by the prompt? This pass
+  returns a **three-way verdict** that *is* the conventions-vs-requirements adjudication:
+  - **entailed** → a **requirement** → gate it at `Delivers`; a baseline that hand-rolls has
+    *truthfully* failed to deliver (a legitimate model-gap finding).
+  - **consistent-with but not entailed** → a **convention** → do **not** gate it at `Satisfies`; the
+    `Satisfies` assertion must accept *any* working reading (hand-rolled included), and the idiom win is
+    reported at `Delivers`/C4 — honest grounding credit, not a rigged gate.
+  - **contradicted / unrelated** → a **task bug** → fix the task.
+
+**The rung rule.** Whether "use the markout serializer" gates `Delivers` or only informs C4 is decided
+by the prompt's wording, not by taste: name it in the prompt and it is a **requirement** (gated at
+`Delivers`); leave it to the skill and it is a **convention** (`Satisfies` accepts hand-rolling, win
+reported at C4). Both are in scope — both verifiable — the prompt just sets the rung.
+
+**Why grading stays noise-free.** Because subjective quality is out of scope, every *gating* assertion
+is a **deterministic test** — so the certified path (`K`, `S`, `ΔP`, cost ratio) is graded without judge
+error, and the bootstrap's assumption that `delivers` is *observed without error* holds exactly. The
+judges do real work, but only on the **design-time contract audit** (admitting or flagging tasks); that
+audit's noise never enters `K`/`S`/`ΔP`. This is the deliberate resolution of the "judge noise outside
+the bootstrap" risk — we removed the noise from the certified path rather than modeling it in.
+
+**Two cheap standing audits** back the automated passes: a *competent-developer* read — holding only the
+prompt, is the assertion-checked behavior entailed? — and a *judge-symmetry* read — a reviewer holding
+only the prompt and two transcripts (no skill doc) must make the same `Delivers` calls, arm-symmetrically.
 
 **Return = reliable winning.** With `k` runs, "solved" is a *rate* (yield `pᵢˣ`), not a bit.
 Throughout Axis 1 the binomial **success** of a run is a **Delivers** (the full-price unit); a binomial
