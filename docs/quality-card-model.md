@@ -58,7 +58,15 @@ trust it) and **cost** (understood at depth, per unit delivered). Neither alone 
   of binning, so a full-price gate composes cleanly with tiers whenever they are added. The two axes
   compose: you could bin each run into tiers **and** take yield over the reruns.
 
-## Axis 1 — Risk-adjusted return
+> **Capture (what the harness must persist).** Graded yield needs a per-run pass/fail bit **and** the
+> per-run cost for every `(task, arm, run)`. Neither is recoverable from the current artifacts: the
+> results JSON aggregates each arm to one figure and keeps only the **last run's** assertions
+> (`n = 1`), and while `sessions.db` holds per-run cost it does **not** persist per-run assertions. So
+> graded yield requires (1) a harness change that writes per-run `{passed, iet, turns, sec}` arrays
+> into the **results JSON** (self-contained, not host-local db state), then (2) a re-run. The example
+> values below are therefore still the `n = 1` binary measurement, marked *(graded)* where they become
+> richer once that capture lands.
+
 
 **Return = reliable winning.** With `k` runs, "solved" is a *rate* (yield `pᵢˣ`), not a bit.
 
@@ -275,9 +283,21 @@ Two rules keep the tally honest:
    geometric-mean cost ratio (Axis 2). The tally *describes*; the suite bands *certify*.
 
 Predeclare, **before the scoring run**, the **primary currency** (IET), the per-axis **margins** that
-separate *better / held / worse* *(open — fixed ex ante per model class from pilot data + judgment,
-never fit to the observed outcome)*, and the label for an **empty/thin shared set** ("economics not
+separate *better / held / worse*, and the label for an **empty/thin shared set** ("economics not
 estimable").
+
+Each margin is **`max(practical floor, noise floor)`**, fixed ex ante per model class and never fit to
+the observed outcome:
+
+- **Practical floor** — the smallest move worth reporting, chosen by judgment (a `−1%` IET change is
+  not a result even if it is "significant").
+- **Noise floor** — the measured run-to-run wobble: the within-arm spread of the `k` reruns
+  (e.g. the yield/cost CV), so a "move" must exceed the jitter the harness itself produces.
+
+Taking the larger makes a *better* verdict clear both bars at once — we care about it **and** it is not
+luck. At `k = 5` the yield band is coarse (steps of `1/5 = 0.2`, smallest detectable move ±1 run), so
+most near-margin tasks are carried by the finer **cost** axis; the noise floor is estimated from a
+one-time higher-`k` variance pilot on the highest-variance tasks, then the scoring run ships at `k = 5`.
 
 ## Visualization — the reference (LIET chart)
 

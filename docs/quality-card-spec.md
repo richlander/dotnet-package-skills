@@ -7,7 +7,8 @@ The **row-level reference** for the quality card (`analyze --view card`): every 
 
 Example values are the markout CT-24 holistic run (`N = 24`, `claude-haiku-4.5`, `baseline → grounded`).
 They are the current **binary (last-run) measurement**; rows marked *(graded)* become richer once the
-harness captures per-run yield (`Kᵢˣ / k`) instead of one pass/fail bit.
+harness persists per-run yield (`Kᵢˣ / k`) and per-run cost into the results JSON — a change that needs
+a re-run, since neither is recoverable from existing artifacts (see the model doc's *Capture* note).
 
 ## Notation
 
@@ -77,7 +78,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `verdict` | tally of per-task grades + gate, **per model class** | `<strong·half·mixed·wash·regression>` *(schematic — needs graded data)* | Each **both-productive** task is graded **strong win** (both axes better), **half win** (one axis better, other held), **mixed** (one better, other worse), or **wash**; a lost task is a **regression**. Grounded-only unlocks are capability wins (Axis 1 only — no cost axis). The aggregate *is* the tally (rows, no synthetic score). **Gate:** any material `baseline-only` regression disqualifies. **Bar is model-scoped:** frontier → cost-led wins; mini → capability unlocks; never pool classes. Primary currency IET; margins predeclared *(open)*; thin `S` → "not estimable". |
+| `verdict` | tally of per-task grades + gate, **per model class** | `<strong·half·mixed·wash·regression>` *(schematic — needs graded data)* | Each **both-productive** task is graded **strong win** (both axes better), **half win** (one axis better, other held), **mixed** (one better, other worse), or **wash**; a lost task is a **regression**. Grounded-only unlocks are capability wins (Axis 1 only — no cost axis). The aggregate *is* the tally (rows, no synthetic score). **Gate:** any material `baseline-only` regression disqualifies. **Bar is model-scoped:** frontier → cost-led wins; mini → capability unlocks; never pool classes. Primary currency IET; each margin = `max(practical floor, noise floor)`, predeclared ex ante per model class; thin `S` → "not estimable". |
 
 ## Invariants
 
