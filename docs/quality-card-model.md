@@ -27,7 +27,7 @@ evidential strength, never over-claimed as a certified band.
 | --- | --- | --- | --- |
 | **C1** | **Capability** — grounding unlocks work the baseline did not produce | Tasks the ungrounded agent did not produce this batch (`Kᵇ = 0`) become productive under grounding (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio); reported as descriptive evidence, not a margin-certified band |
 | **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band — **margin-certified** |
-| **C3** | **Efficiency** — a correct unit costs less to deliver | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` — **margin-certified** |
+| **C3** | **Efficiency** — a **Delivered** unit costs less to produce | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` — **margin-certified** |
 | **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | On the `Fails → Satisfies → Delivers` ladder, more working runs reach **Delivers** (did it as asked), not just **Satisfies** (workable but hand-rolled) | **Independently reported:** the `Delivers` rate among working (`Satisfies ∪ Delivers`) runs — isolates fidelity from function; `Delivers` is also the full-price gate feeding every yield. Not estimable when a task has zero working runs |
 | **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance under grounding: `σ_g < σ_b` (arm-specific log-cost SD) | **Memo** read alongside Axis 2 — the variance ratio `σ_g/σ_b` with its band; a reported-not-gated signal (pooled `σ_within` sizes the margin; the *arm-specific* pair tests C5) |
 
@@ -110,6 +110,9 @@ fidelity signal.)
 
 
 **Return = reliable winning.** With `k` runs, "solved" is a *rate* (yield `pᵢˣ`), not a bit.
+Throughout Axis 1 the binomial **success** of a run is a **Delivers** (the full-price unit); a binomial
+**failure** is any **non-delivery** — a run that only **Satisfies** *or* **Fails**. So "0 failures in
+5" below means five Delivered runs, not merely five that ran.
 
 ```
 Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
@@ -158,7 +161,7 @@ estimate, so a wide-band win is discounted toward its downside.
     `Δpᵢ` and aggregate across tasks.
   - **Nested task→run bootstrap (cross-check).** Draw the 24 **tasks** with replacement (the dominant
     uncertainty for a general claim), then *within* each drawn task redraw its runs as **joint
-    `(passed, cost)` draws** from that task's fitted per-arm model — resampling from each task's
+    `(delivered, cost)` draws** from that task's fitted per-arm model — resampling from each task's
     **posterior/parametric** yield paired with its log-cost distribution, **not** its 5 raw outcomes,
     so a `5/5` or `0/5` still carries spread (an empirical redraw of five identical outcomes is
     degenerate). This single pass regenerates `K*`, then `L* = Σcost*/K*`, then the shared set `S*` and
@@ -265,11 +268,14 @@ components** (Skill, Work, output, tool IET) so `Total = Skill + Work` is preser
 recombine separately-averaged activation and turns.
 
 Axis 2 carries its **own** paired uncertainty band from the **same** nested bootstrap as Axis 1 (draw
-tasks, redraw each task's runs as joint `(passed, cost)` draws, recompute `K*`, `L*`, and the shared
+tasks, redraw each task's runs as joint `(delivered, cost)` draws, recompute `K*`, `L*`, and the shared
 set `S*` each iteration). The shared set is **recomputed per iteration**, not frozen on the observed
 `S`: a task that draws `K* = 0` for either arm simply leaves `S*` that iteration — its uncertainty
-surfaces as an Axis-1 capability gap, never an undefined `L`. If `S*` is empty/thin in an iteration,
-record it as a "not-estimable" draw (it widens the band); do not silently discard it. The Axis-2 band
+surfaces as an Axis-1 capability gap, never an undefined `L`. If `S*` is empty in an iteration (no
+shared productive task), that iteration produces **no** Axis-2 ratio: exclude it from the ratio
+quantiles but count it toward an **estimability rate**; if the non-estimable fraction exceeds a
+predeclared threshold (e.g. 5% of iterations), report Axis 2 as **not estimable** rather than banding a
+biased subset. The Axis-2 band
 cannot borrow the Axis-1 band. *(Binning by difficulty tier would later summarize this gap as a
 difficulty→cost curve — deferred.)*
 
@@ -300,8 +306,11 @@ number** (so `+14 wins, −2 losses` cannot masquerade as `+12`):
 | **baseline-only** | `Kᵢᵍ = 0 < Kᵢᵇ` — **regressions / lost coverage (a gate)** |
 | **neither** | both `0` — out of reach for both |
 
-These rows are the LIET chart's **three difficulty tiers, counted** (both-productive / grounded-only
-unlock / neither). Each cell may carry average yield (e.g. "grounded-only: 5 tasks, avg 4.2/5").
+These rows are the four cells of the LIET chart's **difficulty ordering, counted**. The ordering runs
+**both-productive → grounded-only unlock → baseline-only regression → neither**; the `baseline-only`
+group (grounded gapped where baseline produced) is a **visible regression tier**, drawn even when — as
+in the example run — its count is `0`. Each cell may carry average yield (e.g. "grounded-only: 5 tasks,
+avg 4.2/5").
 
 Note the scoreboard and the headline are **two different lenses on the same runs, at two thresholds**,
 not a decomposition of one by the other:
@@ -398,9 +407,9 @@ gives pooled `σ_within ≈ 0.28` (Opus / frontier) and `≈ 0.72` (Haiku / mini
 `σ_within · √(2/k) / √|S|` at `k = 5`, `|S| ≈ 15`, that is a suite-level cost resolution of ≈ **4.7%
 (frontier)** and ≈ **12.5% (mini)**. The floor must sit *above* that, so we set the ex-ante practical
 floors at **~5% IET (frontier)** and **~13% IET (mini)** — the mini floor deliberately rounded up past
-its resolution, not down. The mined `σ` is itself **biased high** (it mixes failed-run cost into the
-tail), so these are conservative anchors. A **targeted variance study** — higher `k` (~12),
-correct-runs only, log-variance-components with a CI — would replace them with a tighter, unbiased
+its resolution, not down. The mined `σ` is itself **biased high** (it mixes non-delivered-run cost into
+the tail), so these are conservative anchors. A **targeted variance study** — higher `k` (~12),
+**Delivered-runs only**, log-variance-components with a CI — would replace them with a tighter, unbiased
 anchor; the ad-hoc method above is the reproducible way to re-anchor if the harness changes.
 
 **Pooled vs. arm-specific — two different jobs.** The *pooled* `σ_within` above sizes the **margin**
@@ -425,8 +434,9 @@ The card derives from this chart; documenting it fixes the model's meaning in on
 - **Competitor envelope / ceiling** = min cost of the **other arms that also produced this unit** —
   the ceiling grounded must stay under to "pay its way." Absent on a **grounded-only** rung (no
   competitor there — the capability-win case).
-- **Three-tier ordering** (both-productive → grounded-only unlocks → neither) makes unlocks and
-  regressions visually obvious — the coverage scoreboard, drawn.
+- **Four-way ordering** (both-productive → grounded-only unlocks → baseline-only regressions → neither)
+  makes unlocks and regressions visually obvious — the coverage scoreboard, drawn. A `baseline-only`
+  rung shows the baseline series with the grounded series **gapped** (the visible regression).
 - **Graded-yield encoding:** encode reliability on each dot — fill/opacity/size ∝ `Kᵢˣ/k`
   (5/5 solid, 2/5 faint) with an error band from run-to-run agreement — and plot **low-yield
   productive tasks** at their Delivered-run cost. Only `K = 0` is absent.
