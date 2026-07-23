@@ -105,8 +105,9 @@ fidelity signal.)
 > holds per-run cost it does **not** persist per-run assertions. So the ladder requires (1) a harness
 > change that writes per-run `{satisfies, delivers, iet, turns, sec}` arrays into the **results JSON**
 > (self-contained, not host-local db state), then (2) a re-run. The example values below are therefore
-> still the `n = 1` binary measurement, marked *(graded)* where they become richer once that capture
-> lands.
+> still the `n = 1` binary measurement — a single **functional-pass** bit (the `satisfies` gate),
+> standing in as a **proxy** for `Delivers` until the `delivers` bit is captured — marked *(graded)*
+> where they become richer once that capture lands.
 
 
 **Return = reliable winning.** With `k` runs, "solved" is a *rate* (yield `pᵢˣ`), not a bit.

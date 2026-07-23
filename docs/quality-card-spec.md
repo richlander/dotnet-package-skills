@@ -38,10 +38,13 @@ a re-run, since neither is recoverable from existing artifacts (see the model do
 
 ## ① Outcome — the coverage scoreboard
 
-*Example values are the current **binary `k=1` lens** — a single run's pass bit, so `pᵢˣ ∈ {0,1}` and
-the `τ = 3/5` bar collapses to "passed" (reliably-delivered and productive coincide). The graded `τ = 3/5`
-threshold takes effect once per-run capture lands. `func passed` proves the **satisfies** gate; the
-`Delivers` bit (fidelity) needs the graded capture.*
+*Example values are the current **binary `k=1` lens** — a single run's **functional-pass bit** (the
+**satisfies** gate only: assertions pass), used as a **proxy** for `Delivers` because the harness does
+not yet persist the `delivers` bit. So today `pᵢˣ ∈ {0,1}` and the `τ = 3/5` bar collapses to
+"functionally passed" (reliably-delivered and productive coincide **only under this proxy**). The
+graded `τ = 3/5` threshold — and the true `Delivers`-counted `Kᵢˣ` — take effect once per-run capture
+lands; until then, read every `Delivers`/`Kᵢˣ` figure below as its functional-pass stand-in, not a
+confirmed fidelity signal.*
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
