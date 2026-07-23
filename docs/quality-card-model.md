@@ -24,7 +24,7 @@ traces back to one of them. A claim is only "delivered" if it clears its **prede
 | **C1** | **Capability** — grounding unlocks work the baseline did not produce | Tasks the ungrounded agent did not produce this batch (`Kᵇ = 0`) become productive under grounding (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio); reported as descriptive evidence, not a margin-certified band |
 | **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band |
 | **C3** | **Efficiency** — a correct unit costs less to deliver | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` |
-| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | A unit is full-price only if it **ends *and* means** (correct output *and* the taught API) | The **unit definition** (clean-pass gate) that feeds every yield above |
+| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | On the `Fails → Satisfies → Delivers` ladder, more working runs reach **Delivers** (did it as asked), not just **Satisfies** (workable but hand-rolled) | **Independently reported:** the `Delivers` rate among working (`Satisfies ∪ Delivers`) runs — isolates fidelity from function; `Delivers` is also the full-price gate feeding every yield |
 | **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance under grounding: `σ_g < σ_b` (arm-specific log-cost SD) | **Memo** read alongside Axis 2 — the variance ratio `σ_g/σ_b` with its band; a reported-not-gated signal (pooled `σ_within` sizes the margin; the *arm-specific* pair tests C5) |
 
 Two guardrails ride alongside the claims, because "delivers value" is not the same as "does no harm":
@@ -58,8 +58,9 @@ trust it) and **cost** (understood at depth, per unit delivered). Neither alone 
   retry tax and entry fee included — versus the alternative? — adjudicates **C3 efficiency** (with
   **C5 predictability** as a memo alongside).
 
-(**C4 fidelity** is not a separate axis — it is enforced in the **unit definition**: a run only counts
-toward any yield if it ends *and* means.)
+(**C4 fidelity** is not a separate axis — it lives in the **unit definition**: the `Fails → Satisfies →
+Delivers` ladder gates yield on `Delivers` and reports the `Satisfies`-vs-`Delivers` split as the
+fidelity signal.)
 
 ## Setup, the unit, and graded yield
 
@@ -67,35 +68,41 @@ toward any yield if it ends *and* means.)
 - Each `(task, arm)` is run `k` times as a **fixed batch** (here `k = 5`) — *not* "retry until first
   success then stop." Fixed-batch is what the harness does and makes reliability order-independent
   (only *how many* runs passed matters, not which).
-- **The unit = a full-price unit.** A single run yields a full-price unit iff it is a **clean pass**:
-  every functional assertion passes, **ends *and* means** (correct output *and* used the taught API,
-  not a hand-rolled equivalent). Anything else is scrap.
+- **The unit is graded on an ascending ladder — `Fails → Satisfies → Delivers`.** Each run is scored
+  against **two gates**: does it *satisfy* (the output works — every functional-correctness assertion
+  passes) and does it *deliver* (it did what was asked — used the taught API, not a hand-rolled
+  equivalent). A run's grade is the **highest gate it clears**:
+  - **Fails** — clears neither; the output does not work. Scrap.
+  - **Satisfies** — clears the *satisfy* gate only: a **workable** solution, but not built the way the
+    task asked. Credit for a working answer, but not the ask — a "second."
+  - **Delivers** — clears both gates: works **and** as asked. This is the **full-price unit.**
 - **Grading is graded yield, not binary.** For `(task i, arm x)`:
-  - `Kᵢˣ ∈ {0 … k}` = number of runs that produced a full-price unit; **yield** `pᵢˣ = Kᵢˣ / k`.
+  - `Kᵢˣ ∈ {0 … k}` = number of runs that **Deliver** (the full-price unit); **yield** `pᵢˣ = Kᵢˣ / k`.
+    Yield counts **Delivers only** — a `Satisfies` run is workable but is *not* a full-price unit.
   - **"Failed" means `Kᵢˣ = 0` only.** Any `Kᵢˣ ≥ 1` is a **productive** task at reliability `pᵢˣ`.
     A `2/5` task is *not* a failure — it produced two real units with real, measurable cost; it is a
     low-yield productive task. Collapsing `3/5` and `5/5` to one "passed" bit, or dropping `2/5` as
     "failed," throws away signal — so a task's outcome is its **yield**, not a bit.
   - Run cost `cᵢˣ,ᵣ` in the chosen currency. **IET (tokens) is primary**; turns and wall-clock are
     secondary views of the same shape.
-- **Binning is a *different* axis — the deferred richer grade.** Graded yield (above) grades a unit
-  across its `k` reruns against **one** full-price gate. *Binning* instead grades **within a single run**
-  by bucketing the functional assertions into **value tiers** (e.g. a "core-correctness" tier and a
-  "preferred-approach" tier). A run that passes all tiers is full-price; one that passes the core tier
-  but only partially satisfies a higher tier is a **second** (right answer, wrong approach); zero core
-  is scrap. So the grade is a function of *which* tiers are completely vs. partially true — not of how
-  many reruns passed. A single equal-weighted tier (all assertions count the same) is the one-tier case
-  of binning, so a full-price gate composes cleanly with tiers whenever they are added. The two axes
-  compose: you could bin each run into tiers **and** take yield over the reruns.
+- **This ladder *is* two-tier binning — now activated (claim C4).** Graded yield grades a unit across
+  its `k` reruns; the `Satisfies`/`Delivers` gates grade **within a single run** by bucketing its
+  assertions into two **value tiers** (works vs. as-asked). A run that clears both tiers is full-price;
+  one that clears only *satisfy* is a `Satisfies` "second" (right answer, wrong approach); zero is
+  scrap. The **fidelity claim C4** reads off exactly this split — the **`Delivers` rate among
+  {`Satisfies` ∪ `Delivers`} runs** ("when it worked, did it work as asked?") — isolating fidelity from
+  mere function. The two axes compose cleanly: bin each run into tiers **and** take yield over the
+  reruns. (We hold to **these two** tiers; further tier proliferation stays deferred.)
 
-> **Capture (what the harness must persist).** Graded yield needs a per-run pass/fail bit **and** the
-> per-run cost for every `(task, arm, run)`. Neither is recoverable from the current artifacts: the
-> results JSON aggregates each arm to one figure and keeps only the **last run's** assertions
-> (`n = 1`), and while `sessions.db` holds per-run cost it does **not** persist per-run assertions. So
-> graded yield requires (1) a harness change that writes per-run `{passed, iet, turns, sec}` arrays
-> into the **results JSON** (self-contained, not host-local db state), then (2) a re-run. The example
-> values below are therefore still the `n = 1` binary measurement, marked *(graded)* where they become
-> richer once that capture lands.
+> **Capture (what the harness must persist).** The graded ladder needs, per `(task, arm, run)`, **two
+> outcome bits** — `satisfies` (output works) and `delivers` (works as asked / taught API) — **and**
+> the per-run cost. None is recoverable from the current artifacts: the results JSON aggregates each
+> arm to one figure and keeps only the **last run's** assertions (`n = 1`), and while `sessions.db`
+> holds per-run cost it does **not** persist per-run assertions. So the ladder requires (1) a harness
+> change that writes per-run `{satisfies, delivers, iet, turns, sec}` arrays into the **results JSON**
+> (self-contained, not host-local db state), then (2) a re-run. The example values below are therefore
+> still the `n = 1` binary measurement, marked *(graded)* where they become richer once that capture
+> lands.
 
 
 **Return = reliable winning.** With `k` runs, "solved" is a *rate* (yield `pᵢˣ`), not a bit.

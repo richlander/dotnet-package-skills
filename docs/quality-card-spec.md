@@ -14,8 +14,11 @@ a re-run, since neither is recoverable from existing artifacts (see the model do
 
 - `N` tasks, `i = 1..N` (markout: `N = 24`); each `(task, arm)` run `k = 5` times (fixed batch).
 - Arms: `b` = baseline (ungrounded), `g` = grounded (arm under test, default `skilledPlugin`).
-- `Kᵢˣ ∈ {0..k}` = runs that produced a **full-price unit** (clean pass: all functional assertions,
-  ends *and* means). Yield `pᵢˣ = Kᵢˣ / k`. **Productive** = `Kᵢˣ ≥ 1`; **failed** = `Kᵢˣ = 0` only.
+- `Kᵢˣ ∈ {0..k}` = runs that **Deliver** — the **full-price unit** on the `Fails → Satisfies →
+  Delivers` ladder (clears both gates: **satisfies** = all functional assertions pass, **delivers** =
+  did it as asked / taught API, not a hand-rolled equivalent). Yield `pᵢˣ = Kᵢˣ / k` counts `Delivers`
+  only. **Productive** = `Kᵢˣ ≥ 1`; **failed** = `Kᵢˣ = 0` only. A run that *satisfies* but does not
+  *deliver* is a workable "second," reported (C4) but **not** a full-price unit.
 - Per-run cost in three currencies — **IET** (levelized tokens, primary; see `iet-model.md`),
   **turns**, **sec** — written `cᵢˣ,ᵣ` (i.e. `IETᵢˣ,ᵣ`, `turnsᵢˣ,ᵣ`, `secᵢˣ,ᵣ`).
 - **Levelized cost per unit** `Lᵢˣ = (Σᵣ cᵢˣ,ᵣ) / Kᵢˣ` — a task's whole batch cost (the failed runs of a
@@ -44,6 +47,7 @@ threshold takes effect once per-run capture lands.*
 | `↳ both / grounded-only / baseline-only / neither` | four-way paired split of `(Kᵢᵇ≥1, Kᵢᵍ≥1)` | `9 / 12 / 0 / 3` | **Productive** view (*can it ever produce?*, `K≥1`). **`baseline-only` = capability loss (the hard gate)**; `grounded-only` = new capability wins; shown as counts, never netted. |
 | `↳ coverage gained / lost` | `#grounded-only / #baseline-only` | `+12 / −0` | New wins vs lost coverage. *(graded: unlock/loss yield mass `Σ₍grounded-only₎ pᵢᵍ` / `Σ₍baseline-only₎ pᵢᵇ` — restricted to the crossing tasks, not all-task yield movement.)* |
 | `↳ func passed` | `Σᵢ fpᵢ / Σᵢ ftᵢ` | `103/126 → 123/126` | Functional assertions passed / total, summed. The assertion-level proof behind `tasks correct`. |
+| `↳ fidelity (Delivers \| works)` | `#Delivers / #(Satisfies ∪ Delivers)` over all runs | *(graded — needs `delivers` bit)* | **C4**: among runs that *work*, the share that also did it **as asked** (taught API, not hand-rolled). Isolates fidelity from mere function; the complement is the workable-but-off-spec "second" rate. Higher better. |
 | `↳ reliability` | posterior/CI uncertainty of the yield `pᵢˣ` | *(graded)* | How trustworthy each result is on `n=5` — the noise ruler for the verdict. Binary today; graded when per-run capture lands. |
 
 ## ② Mechanism — skills vs. archaeology
