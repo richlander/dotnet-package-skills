@@ -52,8 +52,9 @@ internal sealed class Liet
     // match the chart text so the card can carry them verbatim — the card is a SUPERSET of the SVG.
     internal readonly record struct LietSummary(
         bool HasData,
-        string Floor,                                   // "24.9k"
+        string Floor,                                   // IET floor "24.9k"
         string BaseLiet, string AgLiet, string LietDelta,  // "160.9k" / "110.3k" / "−50.6k"
+        string FloorDur,                                // duration floor "18.2s"
         string BaseDur, string AgDur, string DurDelta,     // "139.1s" / "83s" / "−56.1s"
         int TargetHits, int TargetTotal);
 
@@ -75,6 +76,7 @@ internal sealed class Liet
         return new LietSummary(true,
             K(fm.floor),
             K(fm.basePerCorrect), K(fm.agPerCorrect), SignedK(fm.agPerCorrect - fm.basePerCorrect),
+            Secs(dm.floor),
             Secs(dm.basePerCorrect), Secs(dm.agPerCorrect), SignedSecs(dm.agPerCorrect - dm.basePerCorrect),
             th.hits, th.total);
     }
@@ -268,7 +270,7 @@ internal sealed class Liet
         var th = TargetHit(rungs);
         var hit = th.total > 0 ? $" · target-skill hit {th.hits}/{th.total}" : "";
         _o.WriteLine($"\n**Score:** correct {scr.baseCorrect}→{scr.agCorrect}/{scr.total} · "
-            + $"IET per baseline-correct answer (over floor {K(fm.floor)}, all 24 incl. waste) "
+            + $"IET per baseline-correct answer (over floor {K(fm.floor)}, shared baseline-correct set) "
             + $"{K(fm.basePerCorrect)}→{K(fm.agPerCorrect)} (Δ {SignedK(fm.agPerCorrect - fm.basePerCorrect)}/answer) · "
             + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}){hit}.");
         EmitScalars(rungs, ds);
@@ -857,16 +859,17 @@ internal sealed class Liet
             rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Arch),
             sh.Sum(r => r.Base.Iet), sh.Sum(r => r.Ag.Iet));
     }
-    // Floor-anchored efficiency: one COMMON floor F = mean levelized IET of the 6 CHEAPEST
-    // baseline-correct rungs (the first 6 points on the LIET slope). Both arms are charged their
-    // total IET-over-F across ALL 24 tasks (including wasted IET on tasks they FAILED — this
-    // penalizes hedging), then normalized by a FIXED denominator = the baseline's correct count (so a
-    // skill can't dilute its cost by unlocking cheap tasks). The 6-cheapest anchor (vs nominal
-    // "basics") keeps the floor at the true bottom of the curve: a task that is nominally basic but
-    // expensive for baseline (archaeology tax) is not in the cheapest 6 and cannot inflate the zero-
-    // point. F cancels in the arm DELTA (both arms run all 24), so the anchor sets absolute scale, not
-    // the story. Returns per-correct-baseline-answer premium for each arm. Precedent: cost-per-
-    // successful-outcome / cost-effectiveness ratio (cost per approved drug incl. failures).
+    // Floor-anchored EFFICIENCY — a LEVELIZED head-to-head, so difficulty must be SHARED: both arms are
+    // scored on the IDENTICAL task set (the baseline-CORRECT tasks), never on each arm's own set. That
+    // shared-difficulty basis is what makes it levelized at all; comparing arms across DIFFERENT sets
+    // (e.g. cost-per-own-correct-answer) is NOT levelized — it confounds cost with difficulty and would
+    // rank 1 cheap answer above 24 hard-won ones. Floor F = mean levelized IET of the 6 CHEAPEST
+    // baseline-correct rungs, removing the shared base difficulty (the minimum any arm must pay); the
+    // premium-over-F that remains is the excess. Both premiums are normalized by nBase, a symmetric
+    // arm-independent denominator, so coverage/volume can't leak in (that signal lives in the correct-
+    // answer count). F cancels in the arm DELTA — the anchor sets absolute scale, not the story.
+    // Returns per-baseline-correct-answer premium for each arm; pair with the (symmetric /24) Total IET
+    // row for the raw-spend view.
     private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs, Func<Point, double>? metric = null)
     {
         // metric selector defaults to IET (LIET); pass p => p.Secs for the identical levelization on
@@ -877,13 +880,16 @@ internal sealed class Liet
             .Take(6).Select(r => m(r.Base)).ToList();
         double f = basePassedBasics.Count > 0 ? basePassedBasics.Average() : 0;
         int nBase = rungs.Count(r => r.Base.Passed);
-        double baseTotal = rungs.Where(r => r.Base.Present).Sum(r => m(r.Base) - f);
-        double agTotal = rungs.Where(r => r.Ag.Present).Sum(r => m(r.Ag) - f);
+        // Shared-difficulty basis: score BOTH arms on the SAME set (baseline-correct tasks). This is
+        // what levelizes the H2H — identical tasks, identical difficulty, only cost differs.
+        var pop = rungs.Where(r => r.Base.Passed).ToList();
+        double baseTotal = pop.Sum(r => m(r.Base) - f);
+        double agTotal = pop.Where(r => r.Ag.Present).Sum(r => m(r.Ag) - f);
         return (f, nBase, nBase > 0 ? baseTotal / nBase : 0, nBase > 0 ? agTotal / nBase : 0);
     }
     private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
     private static string SignedK(double v) => (v >= 0 ? "+" : "−") + K(Math.Abs(v));  // signed IET delta
-    private static string Secs(double v) => v.ToString("0.#", Inv) + "s";               // wall-clock seconds
+    private static string Secs(double v) => (Math.Abs(v) < 0.05 ? 0.0 : v).ToString("0.#", Inv) + "s"; // wall-clock seconds (clamp -0)
     private static string SignedSecs(double v) => (v >= 0 ? "+" : "−") + Secs(Math.Abs(v)); // signed duration delta
     private static double NiceStep(double raw)                     // round axis step: 1/2/2.5/5 × 10ⁿ
     {

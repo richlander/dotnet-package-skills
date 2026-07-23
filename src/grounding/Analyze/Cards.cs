@@ -214,9 +214,11 @@ internal sealed partial class Cards
         //   ① OUTCOME    — did the skills produce correct work? (tasks correct ← func passed proves it)
         //   ② MECHANISM  — did it lean on the skills or fall back to digging (archaeology)?
         //   ③ TURNS      — billable requests (total → tool-call share)
-        //   ④ WALL-CLOCK — informative, machine-dependent (total → tool share → levelized)
-        //   ⑤ TOKEN COST — IET, the normative metric and the punchline; total → doc/work split →
-        //                   skill load → components → levelized. Last, because it's what we're selling.
+        //   ④ WALL-CLOCK — duration; SYMMETRIC with ⑤: a raw Total (+ tool share) then a floor-anchored
+        //                   per-correct-answer hero (+ efficiency detail + Floor). Machine-dependent.
+        //   ⑤ TOKEN COST — IET, the normative metric and the punchline; SYMMETRIC with ④: a raw Total
+        //                   (+ doc/work/skill-load/output/tool decomposition) then the floor-anchored
+        //                   per-correct-answer hero (+ efficiency detail + Floor). Last: it's what we sell.
         // Parent rows carry a Session/Total; the `↳` children decompose, drive, or prove that parent.
         var rows = new (string Label, Func<LoadedArm, string> Cell)[]
         {
@@ -232,10 +234,13 @@ internal sealed partial class Cards
             // ③ TURNS
             ("Session turns (-)",                          a => Pair(a, RawSessionTurns)),
             ("↳ tool-call turns (% of total) (-)",         a => Pair(a, RawToolCallTurns)),
-            // ④ WALL-CLOCK
-            ("Session wall-clock (end-to-end) (-)",        a => $"{RawSessionSecs(a.Agg["baseline"])} → {RawSessionSecs(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})"),
+            // ④ WALL-CLOCK (duration) — mirrors the IET section: a raw Total with a decomposition, then
+            //    a floor-anchored per-correct-answer hero with its efficiency detail + Floor.
+            ("Total duration (-)",                         a => $"{RawSessionSecs(a.Agg["baseline"])} → {RawSessionSecs(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})"),
             ("↳ tool-turn secs (% of turn time) (-)",      a => Pair(a, RawToolTurnSecs)),
-            ("↳ Levelized duration per correct answer (-)", a => ls[a].HasData ? $"{ls[a].BaseDur} → {ls[a].AgDur} (Δ {ls[a].DurDelta})" : "—"),
+            ("Duration per correct answer (-)",            a => ls[a].HasData ? ls[a].DurDelta : "—"),
+            ("↳ efficiency: baseline-doable (-)",          a => ls[a].HasData ? $"{ls[a].BaseDur} → {ls[a].AgDur} (Δ {ls[a].DurDelta})" : "—"),
+            ("↳ Floor (context)",                          a => ls[a].HasData ? ls[a].FloorDur : "—"),
             // ⑤ TOKEN COST (IET) — the punchline
             ("Total IET (-)",                              a => $"{RawIet(a.Agg["baseline"])} → {RawIet(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})"),
             ("↳ Grounding IET (doc) (-)",                  a => Pair(a, RawGroundingIet)),
@@ -243,8 +248,9 @@ internal sealed partial class Cards
             ("↳ skill load (tok) (context)",               a => Pair(a, RawDoc)),
             ("↳ output tok (% of IET) (-)",                a => Pair(a, RawOut)),
             ("↳ tool-turn IET (% of turn IET) (-)",        a => Pair(a, RawToolTurnIet)),
-            ("LIET, IET per correct answer over floor (-)", a => ls[a].HasData ? $"{ls[a].BaseLiet} → {ls[a].AgLiet} (Δ {ls[a].LietDelta})" : "—"),
-            ("↳ Floor LIET (context)",                     a => ls[a].HasData ? ls[a].Floor : "—"),
+            ("IET per correct answer (-)",                 a => ls[a].HasData ? ls[a].LietDelta : "—"),
+            ("↳ efficiency: baseline-doable (-)",          a => ls[a].HasData ? $"{ls[a].BaseLiet} → {ls[a].AgLiet} (Δ {ls[a].LietDelta})" : "—"),
+            ("↳ Floor (context)",                          a => ls[a].HasData ? ls[a].Floor : "—"),
         };
         foreach (var (label, cell) in rows)
             _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(cell)) + " |");
