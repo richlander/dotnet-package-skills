@@ -72,18 +72,36 @@ Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
 - *Per task*, five runs is a tiny poll: `5/5` does **not** prove `p = 1` (0 failures in 5 is still
   consistent with a true failure rate near ½). So a single task's dot carries a **wide** band that
   never collapses to "certain," and `3/5` vs `5/5` are distinguished — not merged.
-- *For the suite*, the aggregate pools `N·k` observations (24×5 = 120), so `ΔP` is **sharp** even
-  though any single dot is fuzzy. The per-task band does **not** cap the suite conclusion.
+- *For the suite*, state the **estimand** — the two are different questions and we report both,
+  labeled:
+  - **Finite-suite** (*these* 24 tasks): uncertainty comes only from the reruns, so the suite estimate
+    is comparatively tight.
+  - **Task-population** (does grounding help *in general*?): the 5 reruns of a task are correlated, so
+    the honest independent unit is the **task** — cluster at `n ≈ 24`, not `120`. This band is wider,
+    and it is the one that governs a general claim.
+  Either way the per-task band does **not** cap the suite conclusion.
 - Inference is **paired**: compute the per-task change `Δpᵢ = pᵢᵍ − pᵢᵇ` (same task, same run budget,
   both arms) and aggregate those, using a pre-specified small-sample paired procedure (beta-binomial
   or paired bootstrap over `(task, replicate)` blocks) — **not** endpoint plug-in Wald variance.
-  Pairing cancels each task's intrinsic difficulty, isolating grounding's effect.
+  Pairing buys **precision**: it removes each task's intrinsic difficulty from the *variance*,
+  sharpening the same effect estimate.
 
   *Why each choice matters:*
   - **Pair, don't compare two suite averages.** Each task's difficulty hits both arms; subtracting
-    *within* a task (`Δpᵢ`) cancels it, the way a crossover trial uses each patient as their own
-    control. Comparing two pooled means instead lets difficulty leak into the error bar (and can even
-    flip the sign — Simpson).
+    *within* a task (`Δpᵢ`) removes it from the error bar, the way a crossover trial uses each patient
+    as their own control. (In this balanced design pairing does **not** move the point estimate —
+    `mean(pᵍ) − mean(pᵇ) = mean(Δpᵢ)` exactly — it only tightens the *variance*. The difficulty-mix
+    *reversal* risk lives on **Axis 2**, where costs are pooled with unequal weights; see there.)
+  - **Never plug-in Wald.** The textbook SE `√(p̂(1−p̂)/k)` **collapses to 0 at `5/5` or `0/5`** — it
+    claims certainty exactly where five runs prove least (0 failures in 5 is still consistent with a
+    true failure rate near ½). The honest band there is *wide*; Wald reports a point.
+  - **Beta-binomial** fixes the boundary: a `5/5` under a uniform prior is `Beta(6,1)` (mean ≈ 0.86,
+    still spread), so the band never collapses; propagate each task's posterior into `Δpᵢ`.
+  - **Paired bootstrap over `(task, replicate)` blocks** captures *two* nested sources of luck —
+    which **tasks** we happened to sample (redraw the 24 tasks; the dominant uncertainty for "does
+    grounding help *in general*?") and which **reruns** we happened to get (redraw the 5 outcomes).
+    Resampling whole task-blocks keeps the two arms tied together inside each drawn task, preserving
+    the pairing.
   - **Never plug-in Wald.** The textbook SE `√(p̂(1−p̂)/k)` **collapses to 0 at `5/5` or `0/5`** — it
     claims certainty exactly where five runs prove least (0 failures in 5 is still consistent with a
     true failure rate near ½). The honest band there is *wide*; Wald reports a point.
@@ -97,10 +115,11 @@ Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
 
 > **What the risk band is *for*.** It is the **noise ruler** for the verdict: it sets how large a
 > `ΔP` (or cost gap) must clear to count as a result rather than luck. Two wins with the *same*
-> average premium are **not** the same buy. A tight-band `5/5 → 5/5` win is **TIPS** — the premium is
-> banked, it shows up on every run. A wide-band, high-variance win is **MSFT** — the average looks
-> great, but the next five runs might not repeat it. Same headline return, different risk: the
-> volatile win is discounted toward its downside, not celebrated at face value.
+> average premium are **not** the same buy. A tight-band win — say a steady `2/5 → 5/5` that lands the
+> same every batch — is **TIPS**: the premium is real and it shows up on every run. A win with the
+> *same average* premium but a yield that swings run to run is **MSFT** — the average looks great, but
+> the next five runs might not repeat it. Same headline return, different risk: the volatile win is
+> discounted toward its downside, not celebrated at face value.
 
 **Regression is cross-arm, not temporal.** We never compare to "yesterday"; we compare **baseline vs
 grounded on the same task, both at n=5**. A regression is a materially negative `Δpᵢ` (e.g. baseline
@@ -142,14 +161,35 @@ productive set, equal-weighted**:
 
 ```
 shared set S = { i : Kᵢᵇ ≥ 1 and Kᵢᵍ ≥ 1 }
-compare, per i∈S, Lᵢᵍ vs Lᵢᵇ  (equal weight 1/|S|, or the paired mean log-cost ratio)
+per-unit ratio   rᵢ = Lᵢᵍ / Lᵢᵇ   for i ∈ S
+summary          = geometric mean of rᵢ  =  exp( (1/|S|) · Σᵢ ln rᵢ )   # equal weight per task
 ```
 
 This is exactly **the gap between the grounded and baseline curves where both plot** on the LIET
 chart — difficulty already controlled because the same task is identically hard for both arms.
-Own-set pooled `Lˣ` is kept only as a descriptive fleet statistic. Axis 2 carries its **own** paired
-uncertainty band (resampling cost and outcome jointly); it cannot borrow the Axis-1 band. *(Binning
-by difficulty tier would later summarize this gap as a difficulty→cost curve — deferred.)*
+Own-set pooled `Lˣ` is kept only as a descriptive fleet statistic.
+
+**Why the geometric mean — and never an arithmetic mean of ratios.** Each `rᵢ` is normalized to a
+*different base*: task `i`'s own baseline cost. So the ratios are **incommensurate** — a `0.5` on a
+$2 task and a `2.0` on a $100 task are fractions of different wholes, and adding them treats
+fractions-of-$2 and fractions-of-$100 as the same currency. The arithmetic mean of ratios is then
+neither the total-dollar comparison (that would weight each ratio *by its base*) nor a symmetric
+typical factor — a meaningless in-between that one heavy task can flip (this is the SPEC-benchmark
+result, *Fleming & Wallace, CACM 29(3), 1986*). The geometric mean is **base-invariant** (the arbitrary
+denominators cancel) and **symmetric** (halving and doubling are equal-and-opposite: `√(0.5·2.0)=1`
+reads as the wash it is). It is also the equal-weight-per-task summary in ratio space — consistent
+with our equal-weighting of tasks.
+
+**Two questions, two means.** *What did the whole run cost?* — costs share a unit (tokens), so they
+**add**: the arithmetic **Total IET**. *How much cheaper is a unit, typically?* — multipliers have
+incommensurate bases, so they **don't add**: the **geometric mean** of `rᵢ`. Totals are arithmetic;
+ratios are geometric.
+
+Axis 2 carries its **own** paired uncertainty band; **resample at the task level** (whole
+`(baseline, grounded)` blocks) so every `Lᵢ` stays defined on the observed shared set — this also
+avoids an undefined `L` that a replicate-level resample would create by dropping a task's only win.
+It cannot borrow the Axis-1 band. *(Binning by difficulty tier would later summarize this gap as a
+difficulty→cost curve — deferred.)*
 
 **Entry fee (the membership) — toll vs. membership regime.** Grounding's fixed skill-load cost is
 incurred inside each grounded run, so it is already in the numerator. **The regime must be stated:**
@@ -159,10 +199,12 @@ economics (one load, many wins) appear only as a **modeled reuse curve + break-e
 never blended into the empirical verdict.
 
 **Benchmark vs the alternative.** A unit price is meaningful only against the alternative's price for
-the *same* unit (baseline = the competing store; other models/configs are further alternatives). On
-grounded-only units (`Kᵢᵇ = 0 < Kᵢᵍ`) there is no baseline price to compare — that is a **capability
-win** (coverage), reported as such, not as a price ratio. (A `0/5` baseline is *observed
-nonproduction this batch*, not proven impossibility.)
+the *same* unit — here the alternative is **baseline**, the other arm in this head-to-head. A
+**grounded-only** unit (`Kᵢᵇ = 0 < Kᵢᵍ`) has **no competitor by definition**, so there is no price to
+divide by: it is a **capability win** on Axis 1, and its cost is not a ratio at all. That cost is not
+hidden, though — it lands in the arithmetic **Total IET**, so an expensive unlock raises the run's
+top-line and the reader sees it. (A `0/5` baseline is *observed nonproduction this batch*, not proven
+impossibility.)
 
 ## The coverage scoreboard
 
@@ -177,25 +219,38 @@ number** (so `+14 wins, −2 losses` cannot masquerade as `+12`):
 | **neither** | both `0` — out of reach for both |
 
 These rows are the LIET chart's **three difficulty tiers, counted** (baseline-correct / grounded-only
-unlock / neither). Each cell may carry average yield (e.g. "grounded-only: 5 tasks, avg 4.2/5"). The
-familiar headline `correct 9→21` is the only synthetic top-line, and these rows explain it.
+unlock / neither). Each cell may carry average yield (e.g. "grounded-only: 5 tasks, avg 4.2/5").
+
+Note the scoreboard and the headline are **two different lenses on the same runs, at two thresholds**,
+not a decomposition of one by the other:
+- **Productive coverage** (`K ≥ 1` — *can it ever produce the unit?*) drives the four-way scoreboard.
+- **Reliably solved** (`K ≥ τ`, bar `τ = 3/5` — *can it produce dependably?*) drives the headline
+  `tasks correct`.
+A `2/5 → 3/5` task moves the *reliably-solved* count but is "both productive" on the scoreboard — the
+two views legitimately disagree, and both are reported.
 
 ## The verdict (to be litigated)
 
 The verdict is **not** a suite-level either/or to adjudicate — it is a **tally of per-task grades**,
-read straight off the coverage scoreboard. Each task earns a grade from the two axes (each move judged
-against its own band, so noise isn't counted as a win):
+read straight off the coverage scoreboard. Each **both-productive** task is classified by two moves —
+the **yield move** (Axis 1) and the **cost move** (Axis 2) — each read against a **predeclared margin**
+as *better*, *held*, or *worse*. The 3×3 grid is exhaustive and unambiguous:
 
-| Grade | Condition |
-| --- | --- |
-| **Strong win** | grounded better on *both* axes — more reliable **and** cheaper, each beyond its band |
-| **Half win** | better on one axis beyond its band, holding (noninferior) on the other: cheaper-at-held-reliability, or more-reliable-at-held-cost |
-| **Wash** | neither axis moves past its band |
-| **Regression** | materially worse on an axis (a baseline-only coverage loss is the severe case) |
+| yield \ cost | cost better | cost held | cost worse |
+| --- | --- | --- | --- |
+| **yield better** | **strong** | **half** | **mixed** |
+| **yield held** | **half** | **wash** | **regression** |
+| **yield worse** | **mixed** | **regression** | **regression** |
 
-The aggregate is the tally itself — e.g. `22 strong · 2 half · 0 regression` — scoped to **runtime
-economics** (authoring/maintenance is a separate deployment scenario, not folded in). No synthetic
-combined score: the rows speak.
+A **grounded-only** unlock has no cost axis → **capability win** (Axis 1 only). A **baseline-only**
+loss → the hard capability gate. **Mixed** is a genuine trade — one axis better, the other worse —
+surfaced as its own grade, never buried inside a "win."
+
+The aggregate is the tally itself — `<strong> · <half> · <mixed> · <wash> · <regression>` counts —
+scoped to **runtime economics** (authoring/maintenance is a separate deployment scenario, not folded
+in). No synthetic combined score: the rows speak. *(A real graded tally awaits per-run capture; the
+current card's `n=1` binary example cannot populate it — and note that only the `both-productive`
+tasks can earn a two-axis grade, since a grounded-only unlock has no cost axis.)*
 
 Two rules keep the tally honest:
 
@@ -213,10 +268,16 @@ Two rules keep the tally honest:
    (These are expected tendencies, not laws — we have rigorous data on one library so far.) Never pool
    model classes into one tally; compare like-for-like (the model-diff view), and set each class's
    bands/margins to its own regime.
+4. **Grades are descriptive; trust lives at the suite level.** A per-task grade classifies *point
+   estimates* (with shrinkage), it is **not** an independent significance test — grading 24 tasks each
+   against a 95% band would manufacture roughly one false movement per suite from noise alone. The
+   verdict's confidence comes from the **suite-level** bands: the paired `ΔP` (Axis 1) and the
+   geometric-mean cost ratio (Axis 2). The tally *describes*; the suite bands *certify*.
 
-Predeclare the **primary currency** (IET), the per-axis **bands/margins** that separate a grade from
-noise *(open — to be set from data + judgment, per model class)*, and the label for an **empty/thin
-shared set** ("economics not estimable").
+Predeclare, **before the scoring run**, the **primary currency** (IET), the per-axis **margins** that
+separate *better / held / worse* *(open — fixed ex ante per model class from pilot data + judgment,
+never fit to the observed outcome)*, and the label for an **empty/thin shared set** ("economics not
+estimable").
 
 ## Visualization — the reference (LIET chart)
 
@@ -228,8 +289,9 @@ The card derives from this chart; documenting it fixes the model's meaning in on
 - A rung plots a value for an arm **only where that arm is productive**; the line **breaks over a gap**
   so no segment implies a win the arm never produced. Wall-clock is overlaid as a thin dashed
   companion on *every* rung (time is spent pass or fail); a twin **archaeology** chart shares the x.
-- **Competitor envelope / ceiling** = min cost of the other productive arms — the ceiling grounded
-  must stay under to "pay its way."
+- **Competitor envelope / ceiling** = min cost of the **other arms that also produced this unit** —
+  the ceiling grounded must stay under to "pay its way." Absent on a **grounded-only** rung (no
+  competitor there — the capability-win case).
 - **Three-tier ordering** (baseline-correct → grounded-only unlocks → neither) makes unlocks and
   regressions visually obvious — the coverage scoreboard, drawn.
 - **Graded-yield encoding:** encode reliability on each dot — fill/opacity/size ∝ `Kᵢˣ/k`
@@ -259,7 +321,7 @@ The card derives from this chart; documenting it fixes the model's meaning in on
 
 | Concept | Everyday analogy |
 | --- | --- |
-| Risk-adjusted return (Axis 1) | **TIPS vs MSFT:** an equal *headline* return isn't an equal buy — a banked, low-variance premium (TIPS = a `5/5→5/5` win) beats an equal-average but volatile one (MSFT = a win you might not see on the next five runs). |
+| Risk-adjusted return (Axis 1) | **TIPS vs MSFT:** an equal *headline* return isn't an equal buy — a banked, low-variance premium (TIPS = a steady `2/5 → 5/5` that repeats every batch) beats an equal-average but volatile one (MSFT = a win you might not see on the next five runs). |
 | Trust on n=5 / "will I see it again?" | A poll of 5 people has a huge margin of error; 5/5 is not "always." |
 | Reliability of the win | The kid driving to college: the reliable car vs. the one that might strand them halfway. |
 | Graded yield (not binary) | A 2/5 batch still made 2 good parts — that's low yield, not "failure." |
