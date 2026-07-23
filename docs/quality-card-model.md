@@ -16,15 +16,19 @@ table for each card row, which *derives from* this model.
 
 Grounding — putting the right skill docs on the shelf — is asserted to change agent behavior in five
 specific, **falsifiable** ways. The model exists to adjudicate each claim; every axis and row below
-traces back to one of them. A claim is only "delivered" if it clears its **predeclared margin** at the
-**suite level**, per model class.
+traces back to one of them. Claims differ in **how strong a verdict the data can carry**: **C2** and
+**C3** are the two **margin-certified** claims — "delivered" only if the effect clears its
+**predeclared margin** at the **suite level**, per model class. **C1** is reported **descriptively**
+(a capability win has no competitor to ratio against), **C4** is an **independently reported** rate
+(no certified band), and **C5** is a **memo** signal read alongside Axis 2 — each stated at its own
+evidential strength, never over-claimed as a certified band.
 
 | # | Claim | What it means | Where the model tests it |
 | --- | --- | --- | --- |
 | **C1** | **Capability** — grounding unlocks work the baseline did not produce | Tasks the ungrounded agent did not produce this batch (`Kᵇ = 0`) become productive under grounding (`Kᵍ ≥ 1`) | **Axis 1**, grounded-only partition — a capability win with **no competitor** (no cost ratio); reported as descriptive evidence, not a margin-certified band |
-| **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band |
-| **C3** | **Efficiency** — a correct unit costs less to deliver | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` |
-| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | On the `Fails → Satisfies → Delivers` ladder, more working runs reach **Delivers** (did it as asked), not just **Satisfies** (workable but hand-rolled) | **Independently reported:** the `Delivers` rate among working (`Satisfies ∪ Delivers`) runs — isolates fidelity from function; `Delivers` is also the full-price gate feeding every yield |
+| **C2** | **Reliability** — grounding wins more *consistently* | Higher yield `pˣ = Kˣ/k`: flaky `2/5` wins become dependable `5/5` | **Axis 1**, `ΔP = Pᵍ − Pᵇ` judged against its risk band — **margin-certified** |
+| **C3** | **Efficiency** — a correct unit costs less to deliver | Lower **levelized** cost per full-price unit — retry tax and entry fee included | **Axis 2**, geometric-mean cost ratio on the shared set `S` — **margin-certified** |
+| **C4** | **Fidelity** — grounding uses the *taught* approach, not a hand-rolled equivalent | On the `Fails → Satisfies → Delivers` ladder, more working runs reach **Delivers** (did it as asked), not just **Satisfies** (workable but hand-rolled) | **Independently reported:** the `Delivers` rate among working (`Satisfies ∪ Delivers`) runs — isolates fidelity from function; `Delivers` is also the full-price gate feeding every yield. Not estimable when a task has zero working runs |
 | **C5** | **Predictability** — grounding makes cost *steadier*, not just lower | Lower run-to-run cost variance under grounding: `σ_g < σ_b` (arm-specific log-cost SD) | **Memo** read alongside Axis 2 — the variance ratio `σ_g/σ_b` with its band; a reported-not-gated signal (pooled `σ_within` sizes the margin; the *arm-specific* pair tests C5) |
 
 Two guardrails ride alongside the claims, because "delivers value" is not the same as "does no harm":
@@ -192,17 +196,21 @@ the fixed entry cost, and benchmark difficulty-for-difficulty against the altern
 Lᵢˣ = ( Σᵣ cᵢˣ,ᵣ ) / Kᵢˣ            # all k runs' cost ÷ full-price units;  undefined when Kᵢˣ = 0
 ```
 
-The failed runs of a *yielding* task sit in the numerator — the **retry tax** — so unreliability
-raises the price automatically (`Lᵢˣ = c̄ / p`). (Statistically this is the *observed* batch cost, not
-an unbiased forecast of the deployment `c/p`; treat it as measured, not predicted.)
+The **non-delivered** runs of a *yielding* task sit in the numerator — the **retry tax** — so
+unreliability raises the price automatically (`Lᵢˣ = c̄ / p`). A non-delivered run is any run that did
+**not** produce a full-price unit — whether it **Failed** (didn't work) *or* only **Satisfied** (worked
+but not as asked); both spent budget toward the eventual Delivered unit. (Statistically this is the
+*observed* batch cost, not an unbiased forecast of the deployment `c/p`; treat it as measured, not
+predicted.)
 
 **The task is the boundary** (the line that keeps the metric honest):
 
-- **Retries *within* a yielding task are IN** — scrap from a batch that produced good units is part of
-  that unit's cost (`K = 3/5` → the 2 failed runs count).
-- **A wholly-failed task (`Kᵢˣ = 0`) is OUT of cost** — no unit exists, so it is not "an expensive
-  unit." It is a **capability miss** and belongs to Axis 1 / the coverage scoreboard, never the cost
-  numerator. This is what "you don't count items you didn't buy" means, and why we **reject
+- **Retries *within* a yielding task are IN** — every non-delivered run from a batch that produced good
+  units is part of that unit's cost (`K = 3/5` → the 2 non-delivered runs count).
+- **A task that delivered no unit (`Kᵢˣ = 0`) is OUT of cost** — no full-price unit exists, so it is not
+  "an expensive unit." It is a **capability miss** and belongs to Axis 1 / the coverage scoreboard,
+  never the cost numerator. This is what "you don't count items you didn't buy" means, and why we
+  **reject
   per-all-tasks blending** (dividing a suite's whole cost by all `N`).
 
 **Difficulty control — compare on the same shopping list (this is the Simpson guard).** A raw pooled
@@ -234,29 +242,35 @@ and every task carries equal weight in log-ratio space — consistent with our e
 
 **Two questions, two means.** *What did the comparable work cost?* — costs share a unit (tokens), so
 they **add**: the **Total IET**, summed over the **shared set `S`** where both arms produced. To keep
-that total honest we take, per task/arm, the **median IET among that cell's correct runs** — one
-representative "what it costs when it works" number, robust to the run-to-run tail and to failed-run
-cost (which Axis 1 already accounts for; we do not double-charge failure here). *How much cheaper is a
-unit, typically?* — that asks for a typical multiplier, whose right summary is the **geometric mean**
-of the levelized ratios `rᵢ = Lᵢᵍ/Lᵢᵇ` (an arithmetic average answers a different question — and note
-`rᵢ` is the ratio of the *levelized* `Lᵢˣ = Σcost/Kᵢˣ`, not a ratio of the Total-IET median runs).
-Totals are arithmetic **sums of representative runs on `S`**; ratios are geometric.
+that total honest we take, per task/arm, the **median IET among that cell's Delivered runs** — one
+representative "what a full-price unit costs" number, robust to the run-to-run tail and to
+non-delivered cost (which the retry-tax `L` and Axis 1 already carry; we do not double-charge it here).
+*How much cheaper is a unit, typically?* — that asks for a typical multiplier, whose right summary is
+the **geometric mean** of the levelized ratios `rᵢ = Lᵢᵍ/Lᵢᵇ` (an arithmetic average answers a
+different question — and note `rᵢ` is the ratio of the *levelized* `Lᵢˣ = Σcost/Kᵢˣ`, not a ratio of
+the Total-IET median runs). Totals are arithmetic **sums of representative runs on `S`**; ratios are
+geometric.
 
-**Total IET is partitioned, never a black box.** Median-of-correct makes the total truthful but only
-*comparable* where both arms produced, so Total IET is reported by productivity partition: the
-head-to-head **Total IET lives on the shared set `S`** (Σ median-correct IET per arm — apples to
+**Total IET is partitioned, never a black box.** Median-of-**Delivered** makes the total truthful but
+only *comparable* where both arms produced, so Total IET is reported by productivity partition: the
+head-to-head **Total IET lives on the shared set `S`** (Σ median-Delivered IET per arm — apples to
 apples), while **grounded-only** spend (capability *investment*) and **baseline-only** spend appear as
 **memo lines**, never blended into the comparison. Everything comparable sits on `S`; everything off-`S`
-is capability-only. Even count of correct runs → **interpolated median** (mean of the two middle runs):
-this preserves the expected cost regardless of how many runs were correct, so a flaky low-`K` arm is
-not made to look artificially cheap than a reliable high-`K` arm (a "lower median" would bias toward
-whichever arm has fewer correct runs — usually baseline — and quietly work against the efficiency
-claim). Fractional turns from the two central runs feed `SkillIET` unchanged.
+is capability-only. Even count of Delivered runs → **interpolated median** (mean of the two middle
+runs): this **removes the even-`K` lower-median bias** (it targets the central-50% location
+consistently) so a flaky low-`K` arm is not made to look artificially cheaper than a reliable high-`K`
+arm (a "lower median" would bias toward whichever arm has fewer Delivered runs — usually baseline — and
+quietly work against the efficiency claim). For the two central runs, average each run's **additive
+components** (Skill, Work, output, tool IET) so `Total = Skill + Work` is preserved exactly — do not
+recombine separately-averaged activation and turns.
 
-Axis 2 carries its **own** paired uncertainty band; **resample at the task level** (whole
-`(baseline, grounded)` blocks) so every `Lᵢ` stays defined on the observed shared set — this also
-avoids an undefined `L` that a replicate-level resample would create by dropping a task's only win.
-It cannot borrow the Axis-1 band. *(Binning by difficulty tier would later summarize this gap as a
+Axis 2 carries its **own** paired uncertainty band from the **same** nested bootstrap as Axis 1 (draw
+tasks, redraw each task's runs as joint `(passed, cost)` draws, recompute `K*`, `L*`, and the shared
+set `S*` each iteration). The shared set is **recomputed per iteration**, not frozen on the observed
+`S`: a task that draws `K* = 0` for either arm simply leaves `S*` that iteration — its uncertainty
+surfaces as an Axis-1 capability gap, never an undefined `L`. If `S*` is empty/thin in an iteration,
+record it as a "not-estimable" draw (it widens the band); do not silently discard it. The Axis-2 band
+cannot borrow the Axis-1 band. *(Binning by difficulty tier would later summarize this gap as a
 difficulty→cost curve — deferred.)*
 
 **Entry fee (the membership) — toll vs. membership regime.** Grounding's fixed skill-load cost is
@@ -286,15 +300,15 @@ number** (so `+14 wins, −2 losses` cannot masquerade as `+12`):
 | **baseline-only** | `Kᵢᵍ = 0 < Kᵢᵇ` — **regressions / lost coverage (a gate)** |
 | **neither** | both `0` — out of reach for both |
 
-These rows are the LIET chart's **three difficulty tiers, counted** (baseline-correct / grounded-only
+These rows are the LIET chart's **three difficulty tiers, counted** (both-productive / grounded-only
 unlock / neither). Each cell may carry average yield (e.g. "grounded-only: 5 tasks, avg 4.2/5").
 
 Note the scoreboard and the headline are **two different lenses on the same runs, at two thresholds**,
 not a decomposition of one by the other:
 - **Productive coverage** (`K ≥ 1` — *can it ever produce the unit?*) drives the four-way scoreboard.
-- **Reliably solved** (`K ≥ τ`, bar `τ = 3/5` — *can it produce dependably?*) drives the headline
-  `tasks correct`.
-A `2/5 → 3/5` task moves the *reliably-solved* count but is "both productive" on the scoreboard — the
+- **Reliably delivered** (`K ≥ τ`, bar `τ = 3/5` — *can it produce dependably?*) drives the headline
+  `tasks reliably delivered`.
+A `2/5 → 3/5` task moves the *reliably-delivered* count but is "both productive" on the scoreboard — the
 two views legitimately disagree, and both are reported.
 
 ## The verdict (to be litigated)
@@ -411,30 +425,30 @@ The card derives from this chart; documenting it fixes the model's meaning in on
 - **Competitor envelope / ceiling** = min cost of the **other arms that also produced this unit** —
   the ceiling grounded must stay under to "pay its way." Absent on a **grounded-only** rung (no
   competitor there — the capability-win case).
-- **Three-tier ordering** (baseline-correct → grounded-only unlocks → neither) makes unlocks and
+- **Three-tier ordering** (both-productive → grounded-only unlocks → neither) makes unlocks and
   regressions visually obvious — the coverage scoreboard, drawn.
 - **Graded-yield encoding:** encode reliability on each dot — fill/opacity/size ∝ `Kᵢˣ/k`
   (5/5 solid, 2/5 faint) with an error band from run-to-run agreement — and plot **low-yield
-  productive tasks** at their successful-run cost. Only `K = 0` is absent.
+  productive tasks** at their Delivered-run cost. Only `K = 0` is absent.
 
 ## Deliberate exclusions
 
 - **No per-all-tasks blend** (`Σcost/N`) — mixes unsolved tasks into the denominator; meaningless.
-- **No binary "pass/fail" collapse** — a task's outcome is its yield `Kᵢˣ/k`; `K = 0` is the only
-  failure.
+- **No binary "pass/fail" collapse** — a task's outcome is its yield `Kᵢˣ/k` on the
+  `Fails → Satisfies → Delivers` ladder; `K = 0` (delivered no unit) is the only task-level failure.
 - **No shared subtracted floor.** Difficulty is controlled by *pairing* — each task against its own
   baseline — not by subtracting a suite-wide reference level. A shared floor fails two ways: it is one
   constant subtracted from both arms, so it cancels in every `Δ` (`ΔE ≡ ΔR`) and adjusts nothing; and a
   single task's distance to it is dominated by that task's own difficulty relative to the reference
   set — directionally right on aggregate, but never sharp per task.
 - **No pharma-style failure attribution.** Successes and failures are **independent** tasks; failures
-  are not precursors that fund the wins, so a wholly-failed task's cost is not charged against wins.
+  are not precursors that fund the wins, so a task that delivered no unit is not charged against wins.
 - **No causal "grounding replaced archaeology" claim.** We report the **outcomes** (IET ↓, duration ↓,
   correctness ↑, in some combination) and **assume** archaeology-replacement is the mechanism, showing
   the archaeology counts as supporting **context**, not proof.
-- **No binning yet** — the deferred richer grade: bucketing assertions into value tiers and scoring a
-  run by which tiers are completely vs. partially true (full-price / second / scrap). A different axis
-  from graded yield; a single equal-weighted tier is its one-tier case.
+- **No tiers beyond Satisfies/Delivers yet** — the two-tier ladder (works vs. as-asked) is active; a
+  richer grade would bucket assertions into *more* value tiers and score a run by which tiers are
+  completely vs. partially true. Deferred. A different axis from graded yield.
 
 ## Analogy glossary
 

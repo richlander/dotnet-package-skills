@@ -38,15 +38,16 @@ a re-run, since neither is recoverable from existing artifacts (see the model do
 ## ① Outcome — the coverage scoreboard
 
 *Example values are the current **binary `k=1` lens** — a single run's pass bit, so `pᵢˣ ∈ {0,1}` and
-the `τ = 3/5` bar collapses to "passed" (reliably-solved and productive coincide). The graded `τ = 3/5`
-threshold takes effect once per-run capture lands.*
+the `τ = 3/5` bar collapses to "passed" (reliably-delivered and productive coincide). The graded `τ = 3/5`
+threshold takes effect once per-run capture lands. `func passed` proves the **satisfies** gate; the
+`Delivers` bit (fidelity) needs the graded capture.*
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `tasks correct` | `#{ i : pᵢˣ ≥ 3/5 }` (k=5: `Kᵢˣ ≥ 3`) | `9 → 21` *(binary lens)* | **Reliably-solved** view (*can it produce dependably?*). The headline. A separate lens from the productive scoreboard below — not decomposed by it. Higher better. |
+| `tasks reliably delivered` | `#{ i : pᵢˣ ≥ 3/5 }` (k=5: `Kᵢˣ ≥ 3`) | `9 → 21` *(binary lens)* | **Reliably-delivered** view (*can it produce dependably?*), counting `Delivers` runs. The headline. A separate lens from the productive scoreboard below — not decomposed by it. Higher better. |
 | `↳ both / grounded-only / baseline-only / neither` | four-way paired split of `(Kᵢᵇ≥1, Kᵢᵍ≥1)` | `9 / 12 / 0 / 3` | **Productive** view (*can it ever produce?*, `K≥1`). **`baseline-only` = capability loss (the hard gate)**; `grounded-only` = new capability wins; shown as counts, never netted. |
 | `↳ coverage gained / lost` | `#grounded-only / #baseline-only` | `+12 / −0` | New wins vs lost coverage. *(graded: unlock/loss yield mass `Σ₍grounded-only₎ pᵢᵍ` / `Σ₍baseline-only₎ pᵢᵇ` — restricted to the crossing tasks, not all-task yield movement.)* |
-| `↳ func passed` | `Σᵢ fpᵢ / Σᵢ ftᵢ` | `103/126 → 123/126` | Functional assertions passed / total, summed. The assertion-level proof behind `tasks correct`. |
+| `↳ func passed` | `Σᵢ fpᵢ / Σᵢ ftᵢ` | `103/126 → 123/126` | Functional assertions passed / total, summed. The assertion-level proof behind the **satisfies** gate (function works) — *not* the `Delivers` bit (did it as asked), which the fidelity row below tests. |
 | `↳ fidelity (Delivers \| works)` | `#Delivers / #(Satisfies ∪ Delivers)` over all runs | *(graded — needs `delivers` bit)* | **C4**: among runs that *work*, the share that also did it **as asked** (taught API, not hand-rolled). Isolates fidelity from mere function; the complement is the workable-but-off-spec "second" rate. Higher better. |
 | `↳ reliability` | posterior/CI uncertainty of the yield `pᵢˣ` | *(graded)* | How trustworthy each result is on `n=5` — the noise ruler for the verdict. Binary today; graded when per-run capture lands. |
 
@@ -66,7 +67,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `Total turns (shared set)` | `Σ_{i∈S} median_correct turnsᵢˣ` | `… → …` | Total turns on the **shared set `S`**, per arm — median-correct run per cell (see Total IET). Failure not re-charged. Lower better. |
+| `Total turns (shared set)` | `Σ_{i∈S} median_delivered turnsᵢˣ` | `… → …` | Total turns on the **shared set `S`**, per arm — median-Delivered run per cell (see Total IET). Failure not re-charged. Lower better. |
 | `↳ tool-call turns (% of turns)` | `Σ_{i∈S} tturns` (rep. run) ; share | `… (… → …)` | Tool-firing turns of the representative runs on `S` and their share of `Total turns (shared set)`. |
 | `Turns per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (turns) over `S` | `8.8 → 7.4` levels; ratio *(recompute)* | Levelized turns per full-price unit on the shared set. Summarize the per-task **ratio** by **geometric mean** (the right summary for a typical multiplier — see model doc); arm levels (geometric mean of `Lᵢˣ`, which compose with the ratio) shown for context. |
 
@@ -74,7 +75,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `Total duration (shared set)` | `Σ_{i∈S} median_correct secᵢˣ` ; `%Δ` | `… → … (−…%)` | Total wall-clock on the **shared set `S`**, per arm — median-correct run per cell (see Total IET). Failure not re-charged. Lower better. |
+| `Total duration (shared set)` | `Σ_{i∈S} median_delivered secᵢˣ` ; `%Δ` | `… → … (−…%)` | Total wall-clock on the **shared set `S`**, per arm — median-Delivered run per cell (see Total IET). Failure not re-charged. Lower better. |
 | `↳ tool-call turn secs (% of turn time)` | `Σ_{i∈S} toolSec` (rep. run) ; share of `Total duration (shared set)` | `… (… → …)` | Seconds in tool-firing turns of the representative runs on `S` + share. |
 | `Duration per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (sec) over `S` | `40.0s → 34.1s` levels; ratio *(recompute)* | Levelized wall-clock per full-price unit on the shared set; geometric mean of the per-task ratio. |
 
@@ -82,8 +83,8 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 
 | Label | Equation | Example (b→g) | Description |
 | --- | --- | --- | --- |
-| `Total IET (shared set)` | `Σ_{i∈S} med_correct IETᵢˣ` ; `%Δ` | `… → … (−…%)` | Total IET (weighted tokens) on the **shared set `S`**, per arm — apples to apples. Per task/arm we take the **interpolated median IET among that cell's correct runs** (even count → mean of the two middle runs, so the expected cost is `K`-independent and a flaky low-`K` arm is not made to look cheaper). "What it costs when it works," robust to the tail. Failure is **not** re-charged here (Axis 1 owns it). Lower better. |
-| `↳ grounded-only / baseline-only (memo)` | `Σ median_correct IET` on each off-`S` partition | `… ; …` | Off-shared-set spend as **memo lines**, never compared: grounded-only = capability *investment*; baseline-only = lost coverage. |
+| `Total IET (shared set)` | `Σ_{i∈S} med_delivered IETᵢˣ` ; `%Δ` | `… → … (−…%)` | Total IET (weighted tokens) on the **shared set `S`**, per arm — apples to apples. Per task/arm we take the **interpolated median IET among that cell's Delivered runs** (even count → mean of the two middle runs, which **removes the even-`K` lower-median bias** — it targets the central-50% location consistently — so a flaky low-`K` arm is not made to look cheaper). "What a full-price unit costs," robust to the tail. Failure is **not** re-charged here (Axis 1 owns it). Lower better. |
+| `↳ grounded-only / baseline-only (memo)` | `Σ median_delivered IET` on each off-`S` partition | `… ; …` | Off-shared-set spend as **memo lines**, never compared: grounded-only = capability *investment*; baseline-only = lost coverage. |
 | `↳ Skill IET (doc)` | `SkillIET = Σ_{i∈S} DocTokᵢ·(w_write + w_read·(t̃ᵢ−1))` | `0 → …` | Carrying cost of the skill doc on `S`: written once, cache-read each later turn (`t̃ᵢ` = turns of the representative run — the interpolated-median-cost run(s); fractional when averaged over two central runs). Uses the **representative run's** activation, not any-of-`k`. The **toll** (reuse regime: fresh session per task). |
 | `↳ Work IET (agent)` | `Total(S) − Skill IET` | `… → …` | Everything else (thinking / output / tools) on `S`. `Total = Skill + Work`. |
 | `↳ skill load (tok)` | `DocTok = g_tok · Σ_{i∈S} act̃ᵢ` | `0 → …` | Total skill-doc tokens loaded on `S` (doc size × representative-run activations). Context. |
@@ -103,9 +104,13 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 1. **Only comparable values** — every row supports a like-for-like comparison. Never pool **cost levels**
    across tasks with different bases (no `Σcost/ΣK` blend over heterogeneous productive sets — the
    Simpson guard). A 0–1 rate like yield *does* average across tasks legitimately.
-2. **Failed means `K = 0` only** — a `2/5` task is low-yield productive, not a failure.
-3. **Cost is paired on the shared set `S`**, equal-weighted — never a mix-weighted pool across
+2. **`K = 0` (delivered no unit) is the only task-level failure** — a `2/5` task is low-yield
+   productive, not a failure. `Kᵢˣ` counts **Delivers** runs only.
+3. **Ladder ordering: `delivers ⇒ satisfies`** — a run cannot Deliver (did it as asked) without first
+   Satisfying (it works); the grade is the highest gate cleared. **Fidelity** (`Delivers | works`) is
+   **not estimable** for a task with zero working runs (empty `Satisfies ∪ Delivers`).
+4. **Cost is paired on the shared set `S`**, equal-weighted — never a mix-weighted pool across
    differing productive sets (the Simpson guard).
-4. **Coverage is rows, not a net** — `baseline-only` (regressions) stays a visible gate.
-5. **Lead with totals**; the only per-unit rate is the shared-set paired cost.
-6. **Card ⊇ chart** — every value on the LIET SVG appears on the card; the card may add more.
+5. **Coverage is rows, not a net** — `baseline-only` (regressions) stays a visible gate.
+6. **Lead with totals**; the only per-unit rate is the shared-set paired cost.
+7. **Card ⊇ chart** — every value on the LIET SVG appears on the card; the card may add more.
