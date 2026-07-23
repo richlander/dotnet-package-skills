@@ -75,24 +75,33 @@ Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
 ΔP = Pᵍ − Pᵇ                 # the return grounding delivers
 ```
 
-**Risk = how much to trust it on only `k` runs** — the "n=5, will I see this again?" question.
+**Risk = how much to trust it on only `k` runs** — the "n=5, will I see this again?" question. This
+"risk" is the **within-batch sampling uncertainty** of the yield (how firmly `k` runs pin `pᵢˣ`); a
+premium that *swings batch to batch* is a different, **cross-batch** volatility that a single `k`-run
+batch cannot identify — detecting that would need repeated batches (a stated limitation). The
+risk-adjustment is operational: the verdict judges `ΔP` against its **band lower bound**, not its point
+estimate, so a wide-band win is discounted toward its downside.
 
 - *Per task*, five runs is a tiny poll: `5/5` does **not** prove `p = 1` (0 failures in 5 is still
   consistent with a true failure rate near ½). So a single task's dot carries a **wide** band that
   never collapses to "certain," and `3/5` vs `5/5` are distinguished — not merged.
-- *For the suite*, state the **estimand** — the two are different questions and we report both,
-  labeled:
-  - **Finite-suite** (*these* 24 tasks): uncertainty comes only from the reruns, so the suite estimate
-    is comparatively tight.
+- *For the suite*, state the **estimand** — the **finite-suite** result is the one we certify; the
+  task-population figure is a **sensitivity** read, not an external claim:
+  - **Finite-suite** (*these* 24 tasks) — the confirmatory estimand: uncertainty comes only from the
+    reruns, so the suite estimate is comparatively tight. This is what the verdict rests on.
   - **Task-population** (does grounding help *in general*?): the 5 reruns of a task are correlated, so
-    the honest independent unit is the **task** — cluster at `n ≈ 24`, not `120`. This band is wider,
-    and it is the one that governs a general claim.
+    the honest independent unit is the **task** — cluster at `n ≈ 24`, not `120`. This band is wider.
+    But the 24 tasks are a **curated** suite, not a random sample of any population, so it generalizes
+    only to *this* suite's task mix — report it as a sensitivity bound, never as "grounding helps
+    everywhere." A genuine population claim would need a defined task-sampling frame we do not have.
   Either way the per-task band does **not** cap the suite conclusion.
-- Inference is **paired**: compute the per-task change `Δpᵢ = pᵢᵍ − pᵢᵇ` (same task, same run budget,
-  both arms) and aggregate those, using a pre-specified small-sample paired procedure (beta-binomial
-  or paired bootstrap over `(task, replicate)` blocks) — **not** endpoint plug-in Wald variance.
-  Pairing buys **precision**: it removes each task's intrinsic difficulty from the *variance*,
-  sharpening the same effect estimate.
+- Inference is **paired at the task level**: compute the per-task change `Δpᵢ = pᵢᵍ − pᵢᵇ` (same task,
+  same run budget) and aggregate those with **one** pre-specified small-sample procedure — a
+  **beta-binomial posterior** (primary; boundary-safe), cross-checked by a **nested task→run bootstrap**
+  (below) — **not** endpoint plug-in Wald variance. Pairing buys **precision** *when the two arms'
+  per-task outcomes are positively correlated* (a hard task depresses both), removing that task's
+  intrinsic difficulty from the *variance*; it never moves the point estimate. Runs are **not** matched
+  across arms (no shared seed), so we pair whole tasks, never replicate indices.
 
   *Why each choice matters:*
   - **Pair, don't compare two suite averages.** Each task's difficulty hits both arms; subtracting
@@ -103,16 +112,16 @@ Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
   - **Never plug-in Wald.** The textbook SE `√(p̂(1−p̂)/k)` **collapses to 0 at `5/5` or `0/5`** — it
     claims certainty exactly where five runs prove least (0 failures in 5 is still consistent with a
     true failure rate near ½). The honest band there is *wide*; Wald reports a point.
-  - **Beta-binomial** fixes the boundary: a `5/5` under a uniform prior is `Beta(6,1)` (mean ≈ 0.86,
-    still spread), so the band never collapses; propagate each task's posterior into `Δpᵢ`.
-  - **Paired bootstrap over `(task, replicate)` blocks** captures *two* nested sources of luck —
-    which **tasks** we happened to sample (redraw the 24 tasks; the dominant uncertainty for "does
-    grounding help *in general*?") and which **reruns** we happened to get (redraw the 5 outcomes).
-    Resampling whole task-blocks keeps the two arms tied together inside each drawn task, preserving
-    the pairing.
-  - **Never plug-in Wald.** The textbook SE `√(p̂(1−p̂)/k)` **collapses to 0 at `5/5` or `0/5`** — it
-    claims certainty exactly where five runs prove least (0 failures in 5 is still consistent with a
-    true failure rate near ½). The honest band there is *wide*; Wald reports a point.
+  - **Beta-binomial (primary) fixes the boundary:** a `5/5` under a uniform prior is `Beta(6,1)`
+    (mean ≈ 0.86, still spread), so the band never collapses; propagate each task's posterior into
+    `Δpᵢ` and aggregate across tasks.
+  - **Nested task→run bootstrap (cross-check).** Draw the 24 **tasks** with replacement (the dominant
+    uncertainty for a general claim), then *within* each drawn task redraw its runs — resampling from
+    each task's **posterior/parametric** yield, **not** its 5 raw outcomes, so a `5/5` or `0/5` still
+    carries spread (an empirical redraw of five identical outcomes is degenerate). The two arms stay
+    tied inside each drawn task (task-level pairing); on **Axis 2** the shared set `S*` is **recomputed
+    each iteration**, so a task that draws `K* = 0` drops out — its uncertainty correctly surfaces as an
+    Axis-1 capability gap rather than an undefined cost.
   - **Beta-binomial** fixes the boundary: a `5/5` under a uniform prior is `Beta(6,1)` (mean ≈ 0.86,
     still spread), so the band never collapses; propagate each task's posterior into `Δpᵢ`.
   - **Paired bootstrap over `(task, replicate)` blocks** captures *two* nested sources of luck —
@@ -178,20 +187,20 @@ This is exactly **the gap between the grounded and baseline curves where both pl
 chart — difficulty already controlled because the same task is identically hard for both arms.
 Own-set pooled `Lˣ` is kept only as a descriptive fleet statistic.
 
-**Why the geometric mean — and never an arithmetic mean of ratios.** Averaging the ratios
-arithmetically gives the **wrong number**. Take two tasks, one `2×` more expensive under grounding and
-one `2×` cheaper (`rᵢ = 2.0` and `0.5`): grounding broke even, a wash. Their arithmetic mean is `1.25`
-— reporting a 25% loss that never happened. Their geometric mean is `√(2.0·0.5) = 1.0` — the wash it
-is. The arithmetic answer is not merely imprecise, it is **incorrect**: it fails the basic test that a
-factor and its reciprocal must cancel, and one extreme task can swing it (the SPEC-benchmark result,
-*Fleming & Wallace, CACM 29(3), 1986*). Cost multipliers combine by **multiplying, not adding**, so the
-correct average is the geometric mean: reciprocals cancel, each task's arbitrary baseline cancels, and
-every task carries equal weight in ratio space — consistent with our equal-weighting of tasks.
+**Why the geometric mean — the right tool for a typical multiplier.** We want the **typical
+proportional effect**: if grounding makes one task `2×` more expensive and another `2×` cheaper
+(`rᵢ = 2.0` and `0.5`), that is a **wash**, and the summary should say so. The geometric mean does:
+`√(2.0·0.5) = 1.0`. The arithmetic mean reports `1.25` — a 25% loss — because it answers a *different*
+question (the average ratio if you picked a task at random), which **misrepresents the break-even** and
+lets one extreme task swing the number (the SPEC-benchmark result, *Fleming & Wallace, CACM 29(3),
+1986*). For a "how much cheaper, typically?" multiplier the geometric mean is the correct summary: it is
+**symmetric under reciprocal** (halving and doubling cancel), each task's arbitrary baseline cancels,
+and every task carries equal weight in log-ratio space — consistent with our equal-weighting of tasks.
 
 **Two questions, two means.** *What did the whole run cost?* — costs share a unit (tokens), so they
-**add**: the arithmetic **Total IET**. *How much cheaper is a unit, typically?* — multipliers combine
-by **multiplying, not adding**, so an arithmetic average is the wrong answer: use the **geometric
-mean** of `rᵢ`. Totals are arithmetic; ratios are geometric.
+**add**: the arithmetic **Total IET**. *How much cheaper is a unit, typically?* — that asks for a
+typical multiplier, whose right summary is the **geometric mean** of `rᵢ` (an arithmetic average
+answers a different question). Totals are arithmetic; ratios are geometric.
 
 Axis 2 carries its **own** paired uncertainty band; **resample at the task level** (whole
 `(baseline, grounded)` blocks) so every `Lᵢ` stays defined on the observed shared set — this also
