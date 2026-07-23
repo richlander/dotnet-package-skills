@@ -132,8 +132,9 @@ Pₓ = (1/N) · Σᵢ pᵢˣ          # arm's expected win rate on a random run
 **Regression is cross-arm, not temporal.** We never compare to "yesterday"; we compare **baseline vs
 grounded on the same task, both at n=5**. A regression is a materially negative `Δpᵢ` (e.g. baseline
 4/5 → grounded 0/5) — measured by yield movement past a noninferiority margin, **not** a brittle
-"was-5/5-now-isn't" veto (which fires ~99.9% on pure noise across 24 tasks and misses real `4/5→0/5`
-collapses). Report positive/negative yield mass: `Σ max(±Δpᵢ, 0)`.
+"was-5/5-now-isn't" veto (which, when many tasks sit near the ceiling, fires on almost every suite from
+pure noise yet still misses real `4/5→0/5` collapses). Report positive/negative yield mass over **all**
+tasks: `Σ max(±Δpᵢ, 0)` — the regression/gain signal, distinct from the *coverage* crossing counts.
 
 ## Axis 2 — Levelized cost / yield
 
