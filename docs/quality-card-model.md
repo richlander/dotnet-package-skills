@@ -177,21 +177,20 @@ This is exactly **the gap between the grounded and baseline curves where both pl
 chart — difficulty already controlled because the same task is identically hard for both arms.
 Own-set pooled `Lˣ` is kept only as a descriptive fleet statistic.
 
-**Why the geometric mean — and never an arithmetic mean of ratios.** Each `rᵢ` is normalized to a
-*different base*: task `i`'s own baseline cost. So the ratios are **incommensurate** — a `0.5` on a
-$2 task and a `2.0` on a $100 task are fractions of different wholes, and adding them treats
-fractions-of-$2 and fractions-of-$100 as the same currency. The arithmetic mean of ratios is then
-neither the total-dollar comparison (that would weight each ratio *by its base*) nor a symmetric
-typical factor — a meaningless in-between that one heavy task can flip (this is the SPEC-benchmark
-result, *Fleming & Wallace, CACM 29(3), 1986*). The geometric mean is **base-invariant** (the arbitrary
-denominators cancel) and **symmetric** (halving and doubling are equal-and-opposite: `√(0.5·2.0)=1`
-reads as the wash it is). It is also the equal-weight-per-task summary in ratio space — consistent
-with our equal-weighting of tasks.
+**Why the geometric mean — and never an arithmetic mean of ratios.** Averaging the ratios
+arithmetically gives the **wrong number**. Take two tasks, one `2×` more expensive under grounding and
+one `2×` cheaper (`rᵢ = 2.0` and `0.5`): grounding broke even, a wash. Their arithmetic mean is `1.25`
+— reporting a 25% loss that never happened. Their geometric mean is `√(2.0·0.5) = 1.0` — the wash it
+is. The arithmetic answer is not merely imprecise, it is **incorrect**: it fails the basic test that a
+factor and its reciprocal must cancel, and one extreme task can swing it (the SPEC-benchmark result,
+*Fleming & Wallace, CACM 29(3), 1986*). Cost multipliers combine by **multiplying, not adding**, so the
+correct average is the geometric mean: reciprocals cancel, each task's arbitrary baseline cancels, and
+every task carries equal weight in ratio space — consistent with our equal-weighting of tasks.
 
 **Two questions, two means.** *What did the whole run cost?* — costs share a unit (tokens), so they
-**add**: the arithmetic **Total IET**. *How much cheaper is a unit, typically?* — multipliers have
-incommensurate bases, so they **don't add**: the **geometric mean** of `rᵢ`. Totals are arithmetic;
-ratios are geometric.
+**add**: the arithmetic **Total IET**. *How much cheaper is a unit, typically?* — multipliers combine
+by **multiplying, not adding**, so an arithmetic average is the wrong answer: use the **geometric
+mean** of `rᵢ`. Totals are arithmetic; ratios are geometric.
 
 Axis 2 carries its **own** paired uncertainty band; **resample at the task level** (whole
 `(baseline, grounded)` blocks) so every `Lᵢ` stays defined on the observed shared set — this also

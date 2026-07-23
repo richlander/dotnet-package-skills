@@ -27,8 +27,9 @@ a re-run, since neither is recoverable from existing artifacts (see the model do
   both arms); the cost verdict is therefore **conditional on joint productivity** (both arms produced),
   not a suite-wide claim.
 - **Two means.** *Totals* (whole-run spend) share a unit, so they **add** — arithmetic sum. *Per-unit
-  cost ratios* have incommensurate bases (each task's own baseline), so they **don't add** — summarize
-  with the **geometric mean** of `rᵢ = costᵢᵍ/costᵢᵇ`. See the model doc for the derivation.
+  cost ratios* combine by multiplying, not adding, so an arithmetic mean gives the **wrong answer**
+  (a `2×` and a `0.5×` should wash to `1×`, but average to `1.25×`) — summarize with the **geometric
+  mean** of `rᵢ = costᵢᵍ/costᵢᵇ`. See the model doc for the derivation.
 
 ## ① Outcome — the coverage scoreboard
 
@@ -62,7 +63,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 | --- | --- | --- | --- |
 | `Total turns` | `Σᵢ,ᵣ turnsᵢˣ,ᵣ` | `343 → 246` | Total turns across the whole run. Lower better. |
 | `↳ tool-call turns (% of turns)` | `Σ tturns` ; share | `319 → 222 (93% → 90%)` | Tool-firing turns and their share. |
-| `Turns per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (turns) over `S` | `8.8 → 7.4` levels; ratio *(recompute)* | Levelized turns per full-price unit on the shared set. Summarize the per-task **ratio** by **geometric mean** (bases are incommensurate — see model doc); arm levels (arithmetic mean of `Lᵢˣ` over `S`) shown for context. |
+| `Turns per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (turns) over `S` | `8.8 → 7.4` levels; ratio *(recompute)* | Levelized turns per full-price unit on the shared set. Summarize the per-task **ratio** by **geometric mean** (ratios multiply, so an arithmetic mean is wrong — see model doc); arm levels (arithmetic mean of `Lᵢˣ` over `S`) shown for context. |
 
 ## ④ Wall-clock (duration) — symmetric with ⑤
 
@@ -82,7 +83,7 @@ Context for the **assumed** mechanism (a skill read replacing library archaeolog
 | `↳ skill load (tok)` | `DocTok = g_tok · Σᵢ actᵢ` | `0 → 24.9k` | Total skill-doc tokens loaded (doc size × activations). Context. |
 | `↳ output (tok · IET share)` | tokens `Σᵢ outᵢ` ; IET share = output-IET / Total IET | `142k tok · 34% IET → 98.3k tok · 30% IET` | Output **tokens** (raw count) and output's **IET share** (weighted — output IET is priced above input, so its share of Total IET far exceeds its raw-token share). Two bases by design: the `142k` is tokens, the `34%` is weighted IET. |
 | `↳ tool-call turn IET (% of turn IET)` | share | `92% → 92%` | % of turn IET in tool-firing turns. |
-| `IET per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (IET) over `S` | `46.9k → 44.0k` levels; ratio *(recompute)* | Levelized IET per full-price unit on the shared set — the economic punchline. Geometric mean of the per-task **ratio** (incommensurate bases); carries its own task-level band. |
+| `IET per unit (shared set)` | geo-mean of `rᵢ = Lᵢᵍ/Lᵢᵇ` (IET) over `S` | `46.9k → 44.0k` levels; ratio *(recompute)* | Levelized IET per full-price unit on the shared set — the economic punchline. Geometric mean of the per-task **ratio** (ratios multiply — an arithmetic mean is the wrong answer); carries its own task-level band. |
 
 ## Verdict
 
