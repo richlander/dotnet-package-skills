@@ -78,6 +78,8 @@ internal sealed class Ladder
             _o.WriteLine("> ⚠ no per-run capture in this dataset — yields are a k=1 binary proxy " +
                          "(Satisfies from the averaged run). Re-run with the per-run-capture harness for graded K/k.\n");
 
+        _o.WriteLine("_Goal column: ↑ higher is better · ↓ lower is better · · context (no direction)._\n");
+
         Scoreboard(rows);
         Axis1(rows);
         Axis2(rows, iet);
@@ -94,12 +96,12 @@ internal sealed class Ladder
         int bOnly = rows.Count(r => r.B.Productive && !r.G.Productive);   // regression candidate
         int neither = rows.Count(r => !r.B.Productive && !r.G.Productive);
         _o.WriteLine("### Coverage scoreboard (K ≥ 1 productive)\n");
-        _o.WriteLine("| cell | tasks | meaning |");
-        _o.WriteLine("|------|-------|---------|");
-        _o.WriteLine($"| both productive (S) | {both} | the efficiency-comparable shared set |");
-        _o.WriteLine($"| grounded-only | {gOnly} | C1 capability unlocks (descriptive) |");
-        _o.WriteLine($"| baseline-only | {bOnly} | regression candidates (hard gate) |");
-        _o.WriteLine($"| neither | {neither} | out of reach for both |");
+        _o.WriteLine("| cell | tasks | goal | meaning |");
+        _o.WriteLine("|------|-------|------|---------|");
+        _o.WriteLine($"| both productive (S) | {both} | · | the efficiency-comparable shared set |");
+        _o.WriteLine($"| grounded-only | {gOnly} | ↑ | C1 capability unlocks (descriptive) |");
+        _o.WriteLine($"| baseline-only | {bOnly} | ↓ | regression candidates (hard gate) |");
+        _o.WriteLine($"| neither | {neither} | · | out of reach for both |");
         _o.WriteLine();
     }
 
@@ -111,10 +113,10 @@ internal sealed class Ladder
         var both = rows.Where(r => r.B.Productive && r.G.Productive).ToList();
         double dpBoth = both.Count > 0 ? both.Average(r => r.G.P - r.B.P) : double.NaN;
         _o.WriteLine("### Axis 1 — return (yield pˣ = Kˣ/k)\n");
-        _o.WriteLine("| quantity | baseline | grounded | Δ |");
-        _o.WriteLine("|----------|----------|----------|---|");
-        _o.WriteLine($"| mean yield P (all tasks) | {pb:0.000} | {pg:0.000} | {Signed(pg - pb)} |");
-        _o.WriteLine($"| ΔP\\|both (C2 estimand, both-productive) | — | — | {(double.IsNaN(dpBoth) ? "n/a" : Signed(dpBoth))} |");
+        _o.WriteLine("| quantity | goal | baseline | grounded | Δ |");
+        _o.WriteLine("|----------|------|----------|----------|---|");
+        _o.WriteLine($"| mean yield P (all tasks) | ↑ | {pb:0.000} | {pg:0.000} | {Signed(pg - pb)} |");
+        _o.WriteLine($"| ΔP\\|both (C2 estimand, both-productive) | ↑ | — | — | {(double.IsNaN(dpBoth) ? "n/a" : Signed(dpBoth))} |");
         _o.WriteLine("\n_ΔP over all tasks mixes C1 unlocks into C2; ΔP\\|both is the reliability quantity " +
                      "(conditional on joint productivity; the excluded cells are owned by C1 and the gate)._\n");
     }
@@ -134,11 +136,11 @@ internal sealed class Ladder
         double totB = s.Sum(r => r.B.MedianDelivIet);
         double totG = s.Sum(r => r.G.MedianDelivIet);
 
-        _o.WriteLine("| quantity | value |");
-        _o.WriteLine("|----------|-------|");
-        _o.WriteLine($"| geo-mean ratio rᵢ = Lᵍ/Lᵇ (typical multiplier) | {Mult(geo)} |");
-        _o.WriteLine($"| pooled ΣLᵍ/ΣLᵇ (Simpson guard) | {Mult(pooled)} |");
-        _o.WriteLine($"| Total IET on S (median-delivered) | {K(totB)} → {K(totG)} ({SignedPct(totB > 0 ? (totG - totB) / totB * 100 : 0)}) |");
+        _o.WriteLine("| quantity | goal | value |");
+        _o.WriteLine("|----------|------|-------|");
+        _o.WriteLine($"| geo-mean ratio rᵢ = Lᵍ/Lᵇ (typical multiplier) | ↓ | {Mult(geo)} |");
+        _o.WriteLine($"| pooled ΣLᵍ/ΣLᵇ (Simpson guard) | ↓ | {Mult(pooled)} |");
+        _o.WriteLine($"| Total IET on S (median-delivered) | ↓ | {K(totB)} → {K(totG)} ({SignedPct(totB > 0 ? (totG - totB) / totB * 100 : 0)}) |");
         if (geo > 0 && pooled > 0 && Math.Sign(Math.Log(geo)) != Math.Sign(Math.Log(pooled)))
             _o.WriteLine("\n> ⚠ Simpson flag: geo-mean and pooled ratios disagree in direction — a size-mix effect. Trust the paired geo-mean.");
         _o.WriteLine("\n_Total (arithmetic median) and the levelized ratio answer different questions and will not match._\n");
@@ -159,10 +161,10 @@ internal sealed class Ladder
         double c5 = sb > 0 ? sg / sb : double.NaN;
 
         _o.WriteLine("### Claims (point estimates)\n");
-        _o.WriteLine("| claim | value | strength |");
-        _o.WriteLine("|-------|-------|----------|");
-        _o.WriteLine($"| C4 fidelity (Delivers rate over working tasks) | {(double.IsNaN(c4) ? "n/a" : c4.ToString("0.00", Inv))} | not-yet-measured (Stage 1: Delivers≡Satisfies) |");
-        _o.WriteLine($"| C5 predictability (σ_g/σ_b, delivered log-IET) | {(double.IsNaN(c5) ? "n/a" : c5.ToString("0.00", Inv))} | memo |");
+        _o.WriteLine("| claim | goal | value | strength |");
+        _o.WriteLine("|-------|------|-------|----------|");
+        _o.WriteLine($"| C4 fidelity (Delivers rate over working tasks) | ↑ | {(double.IsNaN(c4) ? "n/a" : c4.ToString("0.00", Inv))} | not-yet-measured (Stage 1: Delivers≡Satisfies) |");
+        _o.WriteLine($"| C5 predictability (σ_g/σ_b, delivered log-IET) | ↓ | {(double.IsNaN(c5) ? "n/a" : c5.ToString("0.00", Inv))} | memo |");
         _o.WriteLine();
     }
 
@@ -172,7 +174,7 @@ internal sealed class Ladder
         var regressions = rows.Where(r => r.G.P < r.B.P).ToList();
         double lossMass = rows.Sum(r => Math.Max(r.B.P - r.G.P, 0.0));       // Σ max(−Δpᵢ, 0) over all N
         _o.WriteLine("### Hard gate — do-no-harm (points-first)\n");
-        _o.WriteLine($"- Suite loss mass Σ max(−Δpᵢ, 0) over all {rows.Count} tasks: **{lossMass:0.000}**");
+        _o.WriteLine($"- Suite loss mass Σ max(−Δpᵢ, 0) over all {rows.Count} tasks (↓ lower better, 0 = clean): **{lossMass:0.000}**");
         if (regressions.Count == 0)
             _o.WriteLine("- No per-task yield regressions.");
         else
