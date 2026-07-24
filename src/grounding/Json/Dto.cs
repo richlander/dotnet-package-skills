@@ -81,6 +81,11 @@ public sealed class Metrics
     [JsonPropertyName("toolCallBreakdown")] public Dictionary<string, int>? ToolCallBreakdown { get; set; }
     [JsonPropertyName("assertionResults")] public List<AssertionResult>? AssertionResults { get; set; }
     [JsonPropertyName("events")] public List<EventRecord>? Events { get; set; }
+    // Per-run raw outcomes preserved by the harness before it averages the k runs into this
+    // representative object. Present (harness >= per-run-capture) => the analyzer scores the graded
+    // yield ladder (Fails/Satisfies/Delivers) and the cost bootstrap from these. Absent (old
+    // datasets) => fall back to the single averaged run (binary, k=1 proxy).
+    [JsonPropertyName("perRun")] public List<RunOutcome>? PerRun { get; set; }
     // Authoritative per-run-AVERAGED tool-call/tool-turn stats, injected by `grounding enrich`
     // (read from sessions.db across ALL runs). Present => the analyzer uses these instead of the
     // single-run `events`/`toolCallBreakdown`, which skill-validator collapses inconsistently for
@@ -112,6 +117,27 @@ public sealed class AssertionResult
 {
     [JsonPropertyName("assertion")] public Assertion? Assertion { get; set; }
     [JsonPropertyName("passed")] public bool Passed { get; set; }
+}
+
+// A single run's raw outcome, mirrors the harness RunOutcome record. Policy-free primitives; the
+// analyzer defines the ladder (Satisfies = all functional assertions pass; Delivers = Satisfies
+// proxy until the delivers-tier assertions land). IET is recomputed from the token fields.
+public sealed class RunOutcome
+{
+    [JsonPropertyName("assertionsPassed")] public int AssertionsPassed { get; set; }
+    [JsonPropertyName("assertionsTotal")] public int AssertionsTotal { get; set; }
+    [JsonPropertyName("taskCompleted")] public bool TaskCompleted { get; set; }
+    [JsonPropertyName("cost")] public double Cost { get; set; }
+    [JsonPropertyName("inputTokens")] public long InputTokens { get; set; }
+    [JsonPropertyName("cacheReadTokens")] public long CacheReadTokens { get; set; }
+    [JsonPropertyName("outputTokens")] public long OutputTokens { get; set; }
+    [JsonPropertyName("toolCallCount")] public int ToolCallCount { get; set; }
+    [JsonPropertyName("turnCount")] public int TurnCount { get; set; }
+    [JsonPropertyName("wallTimeMs")] public long WallTimeMs { get; set; }
+
+    // Satisfies: at least one functional assertion and all pass (reject-tools already excluded
+    // upstream) — mirrors the analyzer's binary Correct definition, evaluated per run.
+    [JsonIgnore] public bool Satisfies => AssertionsTotal > 0 && AssertionsPassed == AssertionsTotal;
 }
 
 public sealed class Assertion
@@ -154,5 +180,6 @@ public sealed class EventData
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(ResultsFile))]
 [JsonSerializable(typeof(Metrics))]
+[JsonSerializable(typeof(RunOutcome))]
 [JsonSerializable(typeof(ToolStats))]
 public sealed partial class GroundingJsonContext : JsonSerializerContext;

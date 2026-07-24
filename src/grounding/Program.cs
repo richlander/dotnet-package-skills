@@ -13,10 +13,10 @@ var filesArg = new Argument<string[]>("files")
 };
 var viewOpt = new Option<string>("--view", "-v")
 {
-    Description = "table | card | smell | doc-card | liet | h2h | model-diff | source-diff | skill-diff | tools-card | web-card",
+    Description = "table | card | ladder | smell | doc-card | liet | h2h | model-diff | source-diff | skill-diff | tools-card | web-card",
     DefaultValueFactory = _ => "table",
 };
-viewOpt.AcceptOnlyFromAmong("table", "card", "smell", "doc-card", "liet", "h2h", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
+viewOpt.AcceptOnlyFromAmong("table", "card", "ladder", "smell", "doc-card", "liet", "h2h", "model-diff", "source-diff", "skill-diff", "tools-card", "web-card");
 var svgOpt = new Option<string?>("--svg")
 {
     Description = "For --view liet: also write the LIET curve as an SVG to this path.",
@@ -61,6 +61,7 @@ analyze.SetAction(parse =>
     switch (view)
     {
         case "card": cards.Card(files); break;
+        case "ladder": new Ladder(Console.Out) { NoTitle = parse.GetValue(noTitleOpt) }.Render(files); break;
         case "smell": cards.SmellCard(files); break;
         case "doc-card": cards.DocCard(files, parse.GetValue(jsonlOpt)); break;
         case "h2h": cards.H2H(files); break;

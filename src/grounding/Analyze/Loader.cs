@@ -21,7 +21,22 @@ internal sealed class ArmRow
     public double Cost;           // rounded to 1 decimal, like Python (for aggregation)
     public string CostDisplay = ""; // raw-table cell, preserving JSON int/float type
     public long Secs;
+    // Per-run ladder outcomes, present when the dataset carries per-run capture (harness >=
+    // perRun[]). Null on older single-averaged-run datasets. Enables graded yield K/k.
+    public IReadOnlyList<RunLadder>? PerRun;
 }
+
+// One run's ladder outcome, derived from the harness RunOutcome. Satisfies/Delivers are the
+// analyzer-owned ladder tiers (Delivers == Satisfies until the delivers-tier assertions land).
+// Iet is recomputed per run from token fields exactly as for the averaged arm.
+internal readonly record struct RunLadder(
+    bool Satisfies,
+    bool Delivers,
+    long Iet,
+    int Turns,
+    long Secs,
+    double Cost,
+    bool TaskCompleted);
 
 internal static class Loader
 {
@@ -53,6 +68,23 @@ internal static class Loader
         }
         long input = m.InputTokens, output = m.OutputTokens;
         var iet = (long)System.Math.Round(model.Iet(m));
+
+        // Per-run ladder outcomes, when the dataset carries per-run capture. IET is recomputed per
+        // run from the same token fields as the averaged arm. Delivers == Satisfies (Stage-1 proxy)
+        // until the delivers-tier assertions land.
+        IReadOnlyList<RunLadder>? perRun = null;
+        if (m.PerRun is { Count: > 0 } pr)
+        {
+            perRun = pr.Select(o => new RunLadder(
+                Satisfies: o.Satisfies,
+                Delivers: o.Satisfies,
+                Iet: (long)System.Math.Round(model.Iet(o.InputTokens, o.CacheReadTokens, o.OutputTokens)),
+                Turns: o.TurnCount,
+                Secs: (long)Math.Round(o.WallTimeMs / 1000.0, MidpointRounding.ToEven),
+                Cost: o.Cost,
+                TaskCompleted: o.TaskCompleted)).ToList();
+        }
+
         return new ArmRow
         {
             Qual = arm.JudgeResult?.OverallScore,
@@ -92,6 +124,7 @@ internal static class Loader
                 ? ((long)m.Cost).ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : Metrics.Round1(m.Cost).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
             Secs = (long)Math.Round(m.WallTimeMs / 1000.0, MidpointRounding.ToEven),
+            PerRun = perRun,
         };
     }
 
