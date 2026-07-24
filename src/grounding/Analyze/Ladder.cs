@@ -80,11 +80,15 @@ internal sealed class Ladder
 
         _o.WriteLine("_Goal column: ↑ higher is better · ↓ lower is better · · context (no direction)._\n");
 
+        // Bands (beta-binomial posterior + one nested finite-suite bootstrap) only when per-run capture
+        // exists — a k=1 proxy carries no within-task spread to resample.
+        var bands = capture ? ComputeBands(rows) : null;
+
         Scoreboard(rows);
-        Axis1(rows);
-        Axis2(rows, iet);
+        Axis1(rows, bands);
+        Axis2(rows, iet, bands);
         Claims(rows);
-        Gate(rows);
+        Gate(rows, bands);
         _o.WriteLine();
     }
 
@@ -106,23 +110,46 @@ internal sealed class Ladder
     }
 
     // ---- Axis 1: return -----------------------------------------------------
-    private void Axis1(List<TaskRow> rows)
+    private void Axis1(List<TaskRow> rows, Bands? bands)
     {
         double pb = rows.Average(r => r.B.P);
         double pg = rows.Average(r => r.G.P);
         var both = rows.Where(r => r.B.Productive && r.G.Productive).ToList();
         double dpBoth = both.Count > 0 ? both.Average(r => r.G.P - r.B.P) : double.NaN;
         _o.WriteLine("### Axis 1 — return (yield pˣ = Kˣ/k)\n");
-        _o.WriteLine("| quantity | goal | baseline | grounded | Δ |");
-        _o.WriteLine("|----------|------|----------|----------|---|");
-        _o.WriteLine($"| mean yield P (all tasks) | ↑ | {pb:0.000} | {pg:0.000} | {Signed(pg - pb)} |");
-        _o.WriteLine($"| ΔP\\|both (C2 estimand, both-productive) | ↑ | — | — | {(double.IsNaN(dpBoth) ? "n/a" : Signed(dpBoth))} |");
-        _o.WriteLine("\n_ΔP over all tasks mixes C1 unlocks into C2; ΔP\\|both is the reliability quantity " +
-                     "(conditional on joint productivity; the excluded cells are owned by C1 and the gate)._\n");
+        _o.WriteLine("| quantity | goal | baseline | grounded | Δ | 95% CrI |");
+        _o.WriteLine("|----------|------|----------|----------|---|---------|");
+        _o.WriteLine($"| mean yield P (all tasks) | ↑ | {pb:0.000} | {pg:0.000} | {Signed(pg - pb)} | descriptive |");
+        _o.WriteLine($"| ΔP\\|both (C2 estimand, both-productive) | ↑ | — | — | {(double.IsNaN(dpBoth) ? "n/a" : Signed(dpBoth))} | {CiSigned(bands?.DpBoth)} |");
+        _o.WriteLine("\n_ΔP over all tasks mixes C1 unlocks into C2 and is descriptive only (its beta-binomial band " +
+                     "would shrink the 0/5→5/5 unlocks hard — a conservative attenuation, but not the certified quantity); " +
+                     "ΔP\\|both is the banded reliability estimand (conditional on joint productivity; the excluded cells " +
+                     "are owned by C1 and the gate)._");
+        if (bands is { } bn)
+        {
+            _o.WriteLine($"\n_Bands: beta-binomial posterior (uniform Beta(1,1) prior), one nested finite-suite bootstrap " +
+                         $"(B={BootIters}, tasks fixed, S\\* recomputed per iteration). Jeffreys Beta(½,½) sensitivity on " +
+                         $"ΔP\\|both: {CiSigned(bn.DpBothJeffreys)} — {PriorReadout(bn.DpBoth, bn.DpBothJeffreys)}_");
+        }
+        _o.WriteLine();
     }
 
+    // Compare the uniform vs Jeffreys ΔP|both bands on whether each excludes zero — the model's
+    // "is the verdict about the data or the prior?" read.
+    private static string PriorReadout(Ci uni, Ci jef)
+    {
+        bool uZ = ExcludesZero(uni), jZ = ExcludesZero(jef);
+        if (uZ && jZ && Math.Sign(uni.Lo) == Math.Sign(jef.Lo))
+            return "same-sign and excludes zero under both priors — the verdict is about the data, not the prior.";
+        if (uZ != jZ)
+            return "⚠ prior-sensitive — one prior's CrI excludes zero and the other includes it; treat C2 as prior-dependent (expected when an arm sits near the ceiling).";
+        return "both priors' CrI include zero — C2 reliability is not established on this suite (expected when baseline is already near-ceiling; the win is on cost, not reliability).";
+    }
+
+    private static bool ExcludesZero(Ci c) => (c.Lo > 0 && c.Hi > 0) || (c.Lo < 0 && c.Hi < 0);
+
     // ---- Axis 2: cost (levelized, paired on S) -------------------------------
-    private void Axis2(List<TaskRow> rows, IetScheme iet)
+    private void Axis2(List<TaskRow> rows, IetScheme iet, Bands? bands)
     {
         var s = rows.Where(r => r.B.Productive && r.G.Productive).ToList();
         _o.WriteLine("### Axis 2 — cost (levelized Lˣ = Σ IET / Kˣ, paired on S)\n");
@@ -136,13 +163,20 @@ internal sealed class Ladder
         double totB = s.Sum(r => r.B.MedianDelivIet);
         double totG = s.Sum(r => r.G.MedianDelivIet);
 
-        _o.WriteLine("| quantity | goal | value |");
-        _o.WriteLine("|----------|------|-------|");
-        _o.WriteLine($"| geo-mean ratio rᵢ = Lᵍ/Lᵇ (typical multiplier) | ↓ | {Mult(geo)} |");
-        _o.WriteLine($"| pooled ΣLᵍ/ΣLᵇ (Simpson guard) | ↓ | {Mult(pooled)} |");
-        _o.WriteLine($"| Total IET on S (median-delivered) | ↓ | {K(totB)} → {K(totG)} ({SignedPct(totB > 0 ? (totG - totB) / totB * 100 : 0)}) |");
+        bool notEstimable = bands is { } b0 && b0.EstimabilityRate < 0.95;
+        _o.WriteLine("| quantity | goal | value | 95% CrI |");
+        _o.WriteLine("|----------|------|-------|---------|");
+        _o.WriteLine($"| geo-mean ratio rᵢ = Lᵍ/Lᵇ (typical multiplier) | ↓ | {Mult(geo)} | {(notEstimable ? "not estimable" : CiMult(bands?.Geo))} |");
+        _o.WriteLine($"| pooled ΣLᵍ/ΣLᵇ (Simpson guard) | ↓ | {Mult(pooled)} | — |");
+        _o.WriteLine($"| Total IET on S (median-delivered) | ↓ | {K(totB)} → {K(totG)} ({SignedPct(totB > 0 ? (totG - totB) / totB * 100 : 0)}) | — |");
         if (geo > 0 && pooled > 0 && Math.Sign(Math.Log(geo)) != Math.Sign(Math.Log(pooled)))
             _o.WriteLine("\n> ⚠ Simpson flag: geo-mean and pooled ratios disagree in direction — a size-mix effect. Trust the paired geo-mean.");
+        if (bands is { } bn)
+        {
+            _o.WriteLine($"\n_Geo-mean band is paired inside the same nested bootstrap (joint (delivered, cost) redraw; " +
+                         $"S\\* recomputed per iteration). Estimability rate {bn.EstimabilityRate:0.0%}" +
+                         (notEstimable ? " < 95% → Axis 2 reported not estimable rather than banding a biased subset." : ".") + "_");
+        }
         _o.WriteLine("\n_Total (arithmetic median) and the levelized ratio answer different questions and will not match._\n");
     }
 
@@ -169,12 +203,19 @@ internal sealed class Ladder
     }
 
     // ---- hard gate (do-no-harm) --------------------------------------------
-    private void Gate(List<TaskRow> rows)
+    private void Gate(List<TaskRow> rows, Bands? bands)
     {
         var regressions = rows.Where(r => r.G.P < r.B.P).ToList();
         double lossMass = rows.Sum(r => Math.Max(r.B.P - r.G.P, 0.0));       // Σ max(−Δpᵢ, 0) over all N
         _o.WriteLine("### Hard gate — do-no-harm (points-first)\n");
         _o.WriteLine($"- Suite loss mass Σ max(−Δpᵢ, 0) over all {rows.Count} tasks (↓ lower better, 0 = clean): **{lossMass:0.000}**");
+        if (bands is { } bn)
+        {
+            bool trips = lossMass > bn.LossNull95;
+            _o.WriteLine($"- Null-calibrated threshold (finite-suite null p̃ᵢ=(Kᵇ+Kᵍ)/2k, 95th pct of B={NullIters}): " +
+                         $"**{bn.LossNull95:0.000}** → gate **{(trips ? "TRIPS ⛔" : "clean ✅")}** " +
+                         $"(loss mass {(trips ? ">" : "≤")} null 95th).");
+        }
         if (regressions.Count == 0)
             _o.WriteLine("- No per-task yield regressions.");
         else
@@ -183,9 +224,144 @@ internal sealed class Ladder
             foreach (var r in regressions.OrderByDescending(r => r.B.P - r.G.P))
                 _o.WriteLine($"  - {r.Name}: pᵇ={r.B.P:0.00} → pᵍ={r.G.P:0.00} (Δ {Signed(r.G.P - r.B.P)})");
         }
-        _o.WriteLine("\n_Materiality (margin + band-excludes-zero) is deferred to the bands pass; " +
-                     "this cut trips on raw point Δp only._");
+        _o.WriteLine("\n_Loss mass is truncation-biased (≥0 under the null), so the gate trips on the " +
+                     "null-calibrated threshold, not on literal zero._");
     }
+
+    // ---- bands: beta-binomial posterior + one nested finite-suite bootstrap ---
+    private const int BootIters = 4000;
+    private const int NullIters = 4000;
+    private const int Seed = 12345;
+
+    private sealed record Ci(double Lo, double Hi);
+
+    private sealed record Bands(
+        Ci DpAll, Ci DpBoth, Ci DpBothJeffreys,
+        Ci Geo, double EstimabilityRate,
+        double LossNull95);
+
+    // Per-arm log-cost model for a task: lognormal(μ, σ) fit on all-run IET (all k runs' cost sit in
+    // the levelized numerator — the retry tax), with a pooled per-arm σ fallback for σ=0 / single-run.
+    private static (double mu, double sig) CostModel(ArmTask a, double pooledSig)
+    {
+        var logs = a.AllIet.Where(x => x > 0).Select(x => (double)Math.Log(x)).ToList();
+        if (logs.Count == 0) return (double.NaN, pooledSig);
+        double mu = logs.Average();
+        double sig = logs.Count >= 2 ? Sd(logs) : pooledSig;
+        if (double.IsNaN(sig) || sig <= 0) sig = pooledSig;
+        return (mu, sig);
+    }
+
+    private static double PooledSigma(IEnumerable<ArmTask> arms)
+    {
+        var res = new List<double>();
+        foreach (var a in arms)
+        {
+            var logs = a.AllIet.Where(x => x > 0).Select(x => (double)Math.Log(x)).ToList();
+            if (logs.Count < 2) continue;
+            double m = logs.Average();
+            res.AddRange(logs.Select(l => l - m));
+        }
+        double s = Sd(res);
+        return double.IsNaN(s) || s <= 0 ? 0.3 : s;   // conservative default when the suite is degenerate
+    }
+
+    private static Bands ComputeBands(List<TaskRow> rows)
+    {
+        int n = rows.Count;
+        var rng = new Rng(Seed);
+        double poolB = PooledSigma(rows.Select(r => r.B));
+        double poolG = PooledSigma(rows.Select(r => r.G));
+        var bc = rows.Select(r => CostModel(r.B, poolB)).ToArray();
+        var gc = rows.Select(r => CostModel(r.G, poolG)).ToArray();
+
+        var dpAll = new List<double>(BootIters);
+        var dpBoth = new List<double>(BootIters);
+        var geo = new List<double>(BootIters);
+        int nonEstimable = 0;
+
+        // Primary pass: uniform Beta(1,1) prior.
+        BootstrapPass(rows, rng, bc, gc, 1.0, dpAll, dpBoth, geo, ref nonEstimable);
+
+        // Jeffreys Beta(½,½) sensitivity — ΔP|both only.
+        var dpBothJ = new List<double>(BootIters);
+        var dpAllJ = new List<double>(BootIters);
+        var geoJ = new List<double>(BootIters);
+        int junk = 0;
+        BootstrapPass(rows, rng, bc, gc, 0.5, dpAllJ, dpBothJ, geoJ, ref junk);
+
+        // Null-calibrated loss-mass gate: both arms redrawn from pooled p̃ᵢ, finite-suite.
+        var lossNull = new List<double>(NullIters);
+        for (int b = 0; b < NullIters; b++)
+        {
+            double sum = 0;
+            for (int i = 0; i < n; i++)
+            {
+                int kb = rows[i].B.k, kg = rows[i].G.k;
+                double pt = (rows[i].B.Deliv + rows[i].G.Deliv) / (double)(kb + kg);
+                int Kb = rng.NextBinomial(kb, pt);
+                int Kg = rng.NextBinomial(kg, pt);
+                double dp = (double)Kg / kg - (double)Kb / kb;
+                sum += Math.Max(-dp, 0);
+            }
+            lossNull.Add(sum);
+        }
+        lossNull.Sort();
+
+        double estRate = (double)(BootIters - nonEstimable) / BootIters;
+        return new Bands(
+            Ci95(dpAll), Ci95(dpBoth), Ci95(dpBothJ),
+            Ci95Mult(geo), estRate,
+            Stats.Percentile(lossNull, 0.95));
+    }
+
+    // One bootstrap pass. priorAB is the Beta prior weight (1.0 uniform, 0.5 Jeffreys); per task draw
+    // posterior rates, binomial K*, joint lognormal costs; collect ΔP, ΔP|both and geo over S* (S*
+    // recomputed each iteration — a task with K*=0 for either arm leaves S* that iteration).
+    private static void BootstrapPass(
+        List<TaskRow> rows, Rng rng, (double mu, double sig)[] bc, (double mu, double sig)[] gc,
+        double priorAB, List<double> dpAll, List<double> dpBoth, List<double> geo, ref int nonEstimable)
+    {
+        int n = rows.Count;
+        for (int b = 0; b < BootIters; b++)
+        {
+            double sumDpAll = 0, sumDpBoth = 0, sumLnR = 0;
+            int cntBoth = 0;
+            for (int i = 0; i < n; i++)
+            {
+                int kb = rows[i].B.k, kg = rows[i].G.k;
+                double pb = rng.NextBeta(priorAB + rows[i].B.Deliv, priorAB + kb - rows[i].B.Deliv);
+                double pg = rng.NextBeta(priorAB + rows[i].G.Deliv, priorAB + kg - rows[i].G.Deliv);
+                sumDpAll += pg - pb;
+
+                int Kb = rng.NextBinomial(kb, pb);
+                int Kg = rng.NextBinomial(kg, pg);
+                if (Kb >= 1 && Kg >= 1)
+                {
+                    double cb = 0, cg = 0;
+                    for (int r = 0; r < kb; r++) cb += Math.Exp(rng.NextNormal(bc[i].mu, bc[i].sig));
+                    for (int r = 0; r < kg; r++) cg += Math.Exp(rng.NextNormal(gc[i].mu, gc[i].sig));
+                    double lb = cb / Kb, lg = cg / Kg;
+                    if (lb > 0 && lg > 0) { sumLnR += Math.Log(lg / lb); }
+                    sumDpBoth += pg - pb;
+                    cntBoth++;
+                }
+            }
+            dpAll.Add(sumDpAll / n);
+            if (cntBoth > 0) { dpBoth.Add(sumDpBoth / cntBoth); geo.Add(Math.Exp(sumLnR / cntBoth)); }
+            else nonEstimable++;
+        }
+    }
+
+    private static Ci Ci95(List<double> xs)
+    {
+        var (_, lo, hi) = Stats.MeanCI(xs);
+        return new Ci(lo, hi);
+    }
+    private static Ci Ci95Mult(List<double> xs) => Ci95(xs);   // same percentiles; formatted as ×
+
+    private static string CiSigned(Ci? c) => c is { } v ? $"[{Signed(v.Lo)}, {Signed(v.Hi)}]" : "—";
+    private static string CiMult(Ci? c) => c is { } v ? $"[{Mult(v.Lo)}, {Mult(v.Hi)}]" : "—";
 
     // ---- construction from per-run capture ----------------------------------
     private static ArmTask? ArmTaskOf(Arm? arm, IetScheme iet)
