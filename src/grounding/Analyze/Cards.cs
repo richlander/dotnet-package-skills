@@ -36,6 +36,7 @@ internal sealed partial class Cards
     private static string RawToolSplit(ArmAgg a) => $"{F0(a.Web)}/{F0(a.Bash)}/{F0(a.Other)}";
     private static string RawIet(ArmAgg a) => F0(a.Iet);
     private static string RawSessionTurns(ArmAgg a) => F0(a.AllTurns);
+    private static string RawSessionSecs(ArmAgg a) => $"{F0(a.Secs)}s";
     private static string RawOut(ArmAgg a) => $"{F0(a.Out)} ({F0(a.OutIetPct)}%)";
     private static string RawReadGrounding(ArmAgg a) => $"{F0(a.Activated * a.N)}/{a.N}";
     private static string RawToolTurnSecs(ArmAgg a) => $"{F0(a.ToolTurnSecs)}s ({F0(a.ToolTurnSecsPct)}%)";
@@ -55,6 +56,7 @@ internal sealed partial class Cards
     private static string RawWorkIet(ArmAgg a) => F0(a.WorkIet);
     private static string DiffWorkIet(ArmAgg n, ArmAgg o) => $"{K(o.WorkIet)}\u2192{K(n.WorkIet)} ({SignedPct(Pct(n.WorkIet, o.WorkIet))})";
     private static string DiffSessionTurns(ArmAgg n, ArmAgg o) => $"{F0(o.AllTurns)}\u2192{F0(n.AllTurns)}";
+    private static string DiffSessionSecs(ArmAgg n, ArmAgg o) => $"{F0(o.Secs)}\u2192{F0(n.Secs)}s ({SignedPct(Pct(n.Secs, o.Secs))})";
     private static string DiffOut(ArmAgg n, ArmAgg o) => SignedPct(Pct(n.Out, o.Out));
     private static string DiffReadGrounding(ArmAgg n, ArmAgg o) =>
         $"{F0(o.Activated * o.N)}/{o.N}\u2192{F0(n.Activated * n.N)}/{n.N}";
@@ -106,6 +108,7 @@ internal sealed partial class Cards
         // 216/216), so a separate cost row would just restate turns — dropped. `Session IET`
         // is the real token-weighted cost.
         ("Session turns (-)",                  RawSessionTurns, DiffSessionTurns),
+        ("Session wall-clock (end-to-end) (-)", RawSessionSecs, DiffSessionSecs),
         ("Total IET (-)",                      RawIet,          DiffIet),
         ("↳ Grounding IET (doc) (-)",          RawGroundingIet, DiffGroundingIet),
         ("↳ Work IET (agent) (-)",             RawWorkIet,      DiffWorkIet),
@@ -198,15 +201,59 @@ internal sealed partial class Cards
         _o.WriteLine($"_Each cell: baseline (no grounding) → `{docLabel}`{tokNote}. Columns are models. Judge `{arms[0].Judge}`. IET model {IetModels.CaptionFor(arms.Select(a => a.Model))}. Means across scenarios._\n");
         _o.WriteLine("| Metric (goal) | " + string.Join(" | ", arms.Select(a => $"`{a.Model}`")) + " |");
         _o.WriteLine("| --- |" + string.Concat(Enumerable.Repeat(" ---: |", arms.Count)));
-        foreach (var (label, raw, _) in Spec)
+
+        // Per-arm LIET summary (floor-anchored IET/duration per correct answer + target-skill hit),
+        // computed once and reused so the card and the SVG report the SAME numbers.
+        var ls = arms.ToDictionary(a => a, a => Liet.Summarize(a.Path, Arm));
+
+        // A grounded "base → grounded" cell built from an ArmAgg raw formatter.
+        string Pair(LoadedArm a, Func<ArmAgg, string> raw) => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}";
+
+        // Rows in NARRATIVE order — five acts, each cost act following the same total → decomposition
+        // → levelized shape, grouped by currency (tokens / turns / wall-clock):
+        //   ① OUTCOME    — did the skills produce correct work? (tasks correct ← func passed proves it)
+        //   ② MECHANISM  — did it lean on the skills or fall back to digging (archaeology)?
+        //   ③ TURNS      — billable requests (total → tool-call share)
+        //   ④ WALL-CLOCK — duration; SYMMETRIC with ⑤: a raw Total (+ tool share) then a floor-anchored
+        //                   per-correct-answer hero (+ efficiency detail + Floor). Machine-dependent.
+        //   ⑤ TOKEN COST — IET, the normative metric and the punchline; SYMMETRIC with ④: a raw Total
+        //                   (+ doc/work/skill-load/output/tool decomposition) then the floor-anchored
+        //                   per-correct-answer hero (+ efficiency detail + Floor). Last: it's what we sell.
+        // Parent rows carry a Session/Total; the `↳` children decompose, drive, or prove that parent.
+        var rows = new (string Label, Func<LoadedArm, string> Cell)[]
         {
-            // Total IET carries a per-arm % change (the bottom-line cost delta readers ask for first).
-            if (label.StartsWith("Total IET", StringComparison.Ordinal))
-                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a =>
-                    $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})")) + " |");
-            else
-                _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(a => $"{raw(a.Agg["baseline"])} → {raw(a.Agg[Arm])}")) + " |");
-        }
+            // ① OUTCOME
+            ("tasks correct (+)",                          a => Pair(a, RawSuccess)),
+            ("↳ func passed (assertions) (+)",             a => Pair(a, RawFunc)),
+            // ② MECHANISM — skills vs. archaeology
+            ("relied on skills: tasks (+)",                a => Pair(a, RawReadGrounding)),
+            ("↳ expected skill pulled (target) (context)", a => ls[a].HasData && ls[a].TargetTotal > 0 ? $"{ls[a].TargetHits}/{ls[a].TargetTotal}" : "—"),
+            ("↳ unique skills used (of shelf) (context)",  a => Pair(a, RawSkillsUsed)),
+            ("relied on archaeology, fallback: cache / nuget.org (-)", a => Pair(a, RawCache)),
+            ("↳ tool calls: web / bash / other (context)", a => Pair(a, RawToolSplit)),
+            // ③ TURNS
+            ("Session turns (-)",                          a => Pair(a, RawSessionTurns)),
+            ("↳ tool-call turns (% of total) (-)",         a => Pair(a, RawToolCallTurns)),
+            // ④ WALL-CLOCK (duration) — mirrors the IET section: a raw Total with a decomposition, then
+            //    a floor-anchored per-correct-answer hero with its efficiency detail + Floor.
+            ("Total duration (-)",                         a => $"{RawSessionSecs(a.Agg["baseline"])} → {RawSessionSecs(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Secs, a.Agg["baseline"].Secs))})"),
+            ("↳ tool-turn secs (% of turn time) (-)",      a => Pair(a, RawToolTurnSecs)),
+            ("Duration per correct answer (-)",            a => ls[a].HasData ? ls[a].DurDelta : "—"),
+            ("↳ efficiency: baseline-doable (-)",          a => ls[a].HasData ? $"{ls[a].BaseDur} → {ls[a].AgDur} (Δ {ls[a].DurDelta})" : "—"),
+            ("↳ Floor (context)",                          a => ls[a].HasData ? ls[a].FloorDur : "—"),
+            // ⑤ TOKEN COST (IET) — the punchline
+            ("Total IET (-)",                              a => $"{RawIet(a.Agg["baseline"])} → {RawIet(a.Agg[Arm])} ({SignedPct(Pct(a.Agg[Arm].Iet, a.Agg["baseline"].Iet))})"),
+            ("↳ Grounding IET (doc) (-)",                  a => Pair(a, RawGroundingIet)),
+            ("↳ Work IET (agent) (-)",                     a => Pair(a, RawWorkIet)),
+            ("↳ skill load (tok) (context)",               a => Pair(a, RawDoc)),
+            ("↳ output tok (% of IET) (-)",                a => Pair(a, RawOut)),
+            ("↳ tool-turn IET (% of turn IET) (-)",        a => Pair(a, RawToolTurnIet)),
+            ("IET per correct answer (-)",                 a => ls[a].HasData ? ls[a].LietDelta : "—"),
+            ("↳ efficiency: baseline-doable (-)",          a => ls[a].HasData ? $"{ls[a].BaseLiet} → {ls[a].AgLiet} (Δ {ls[a].LietDelta})" : "—"),
+            ("↳ Floor (context)",                          a => ls[a].HasData ? ls[a].Floor : "—"),
+        };
+        foreach (var (label, cell) in rows)
+            _o.WriteLine($"| {label} | " + string.Join(" | ", arms.Select(cell)) + " |");
         _o.WriteLine("| **verdict** | " + string.Join(" | ", arms.Select(a => $"**{GradeLabel(a.Agg["baseline"], a.Agg[Arm])}**")) + " |");
         _o.WriteLine("\n_Two axes. **Gate** (correctness): **PASS** = 100% of tier correct, **FAIL** = below the gate. "
             + "**Efficiency** (independent of the gate): **BETTER** = more tasks correct / archaeology→0 / work IET cut ≥20%; "
@@ -534,7 +581,7 @@ internal sealed partial class Cards
     public void SmellCard(IReadOnlyList<string> files)
     {
         var arm = Environment.GetEnvironmentVariable("GROUNDING_CARD_ARM") is { Length: > 0 } v ? v : "skilledPlugin";
-        var arms = files.Select(Loader.LoadArm).Where(a => !a.IsReadme && a.Agg.ContainsKey(arm))
+        var arms = files.Select(Loader.LoadAny).Where(a => !a.IsReadme && a.Agg.ContainsKey(arm))
             .OrderBy(a => a.Tier == "mini" ? 0 : 1).ThenBy(a => a.Model, StringComparer.Ordinal).ToList();
         if (arms.Count == 0)
         {

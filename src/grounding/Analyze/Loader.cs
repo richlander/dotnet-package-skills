@@ -21,7 +21,22 @@ internal sealed class ArmRow
     public double Cost;           // rounded to 1 decimal, like Python (for aggregation)
     public string CostDisplay = ""; // raw-table cell, preserving JSON int/float type
     public long Secs;
+    // Per-run ladder outcomes, present when the dataset carries per-run capture (harness >=
+    // perRun[]). Null on older single-averaged-run datasets. Enables graded yield K/k.
+    public IReadOnlyList<RunLadder>? PerRun;
 }
+
+// One run's ladder outcome, derived from the harness RunOutcome. Satisfies/Delivers are the
+// analyzer-owned ladder tiers (Delivers == Satisfies until the delivers-tier assertions land).
+// Iet is recomputed per run from token fields exactly as for the averaged arm.
+internal readonly record struct RunLadder(
+    bool Satisfies,
+    bool Delivers,
+    long Iet,
+    int Turns,
+    long Secs,
+    double Cost,
+    bool TaskCompleted);
 
 internal static class Loader
 {
@@ -53,6 +68,23 @@ internal static class Loader
         }
         long input = m.InputTokens, output = m.OutputTokens;
         var iet = (long)System.Math.Round(model.Iet(m));
+
+        // Per-run ladder outcomes, when the dataset carries per-run capture. IET is recomputed per
+        // run from the same token fields as the averaged arm. Delivers == Satisfies (Stage-1 proxy)
+        // until the delivers-tier assertions land.
+        IReadOnlyList<RunLadder>? perRun = null;
+        if (m.PerRun is { Count: > 0 } pr)
+        {
+            perRun = pr.Select(o => new RunLadder(
+                Satisfies: o.Satisfies,
+                Delivers: o.Satisfies,
+                Iet: (long)System.Math.Round(model.Iet(o.InputTokens, o.CacheReadTokens, o.OutputTokens)),
+                Turns: o.TurnCount,
+                Secs: (long)Math.Round(o.WallTimeMs / 1000.0, MidpointRounding.ToEven),
+                Cost: o.Cost,
+                TaskCompleted: o.TaskCompleted)).ToList();
+        }
+
         return new ArmRow
         {
             Qual = arm.JudgeResult?.OverallScore,
@@ -92,6 +124,7 @@ internal static class Loader
                 ? ((long)m.Cost).ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : Metrics.Round1(m.Cost).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
             Secs = (long)Math.Round(m.WallTimeMs / 1000.0, MidpointRounding.ToEven),
+            PerRun = perRun,
         };
     }
 
@@ -201,6 +234,7 @@ internal static class Loader
                 if (r.Ft > 0 && r.Fp == r.Ft)
                     a.Succ++;
                 a.Iet += r.Iet; a.Cost += r.Cost; a.Tok += r.Tok;
+                a.Secs += r.Secs;
                 a.Out += r.Out; a.Web += r.Web; a.Cache += r.Cache; a.NugetWeb += r.NugetWeb;
                 a.Bash += r.Bash; a.Tools += r.Tools ?? 0;
                 a.ToolTurnSecs += r.ToolTurnSecs; a.ToolTurnSecsPct += r.ToolTurnSecsPct;
@@ -218,6 +252,7 @@ internal static class Loader
             var n = Math.Max(a.N, 1);
             a.Qual = quals[key].Count > 0 ? quals[key].Average() : null;
             a.Iet /= n; a.Cost /= n; a.Tok /= n; a.Out /= n;
+            a.Secs /= n;
             a.ToolTurnSecs /= n; a.ToolTurnSecsPct /= n;
             a.ToolTurnIet /= n; a.ToolTurnIetPct /= n;
             a.ToolTurns /= n; a.AllTurns /= n; a.ToolTurnPct /= n;
@@ -257,9 +292,30 @@ internal static class Loader
                ?? new ResultsFile();
     }
 
-    public static LoadedArm LoadArm(string path)
+    public static LoadedArm LoadArm(string path) => BuildLoadedArm(Parse(path), path);
+
+    // Route by extension: a sessions.db goes through the LLM-free deterministic reader (no judge,
+    // no results.json); a results.json goes through the normal parse. Lets `smell` render a run
+    // straight from persisted agent sessions.
+    public static LoadedArm LoadAny(string path) =>
+        path.EndsWith(".db", StringComparison.OrdinalIgnoreCase)
+            ? LoadArmFromSessions(path)
+            : LoadArm(path);
+
+    public static LoadedArm LoadArmFromSessions(string sessionsDb)
     {
-        var d = Parse(path);
+        var d = SmellSessions.BuildFromSessions(sessionsDb);
+        var sn = d.Verdicts is { Count: > 0 } ? d.Verdicts[0].SkillName ?? "skill" : "skill";
+        var ms = d.Model ?? "model";
+        // Synthetic filename so the arm's source flags (IsSkill) resolve; the directory is the db's
+        // so a sibling results.json/skill dir could still be found if present.
+        var dir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(sessionsDb)) ?? ".";
+        var synthetic = System.IO.Path.Combine(dir, $"{sn}-skill.{ms}.json");
+        return BuildLoadedArm(d, synthetic);
+    }
+
+    public static LoadedArm BuildLoadedArm(ResultsFile d, string path)
+    {
         var model = d.Model ?? "?";
         var iet = IetModels.For(model);
         var v = d.Verdicts is { Count: > 0 } ? d.Verdicts[0] : new Verdict();

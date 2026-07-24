@@ -33,6 +33,7 @@ internal sealed class Liet
         public bool Passed;      // arm answered correctly (all functional assertions pass)
         public bool Present;     // arm exists in the dataset for this rung
         public double Arch;      // archaeology = external digging (nuget cache + nuget.org + web tool calls)
+        public double Secs;      // end-to-end wall-clock seconds (spent regardless of correctness)
     }
 
     private sealed class Rung
@@ -44,6 +45,40 @@ internal sealed class Liet
         public string Region = "";
         public List<string> Skills = new();  // skills the grounded arm pulled for this rung (plugin self-select)
         public string? Expected;             // methodology prior: the ONE target skill for this rung (eval.yaml)
+    }
+
+    // The LIET-family scalars the SVG Metrics block reports (floor-anchored IET-per-correct, the
+    // identical levelization on wall-clock duration, and the target-skill hit rate), preformatted to
+    // match the chart text so the card can carry them verbatim — the card is a SUPERSET of the SVG.
+    internal readonly record struct LietSummary(
+        bool HasData,
+        string Floor,                                   // IET floor "24.9k"
+        string BaseLiet, string AgLiet, string LietDelta,  // "160.9k" / "110.3k" / "−50.6k"
+        string FloorDur,                                // duration floor "18.2s"
+        string BaseDur, string AgDur, string DurDelta,     // "139.1s" / "83s" / "−56.1s"
+        int TargetHits, int TargetTotal);
+
+    // Compute the LIET Metrics summary for ONE dataset file + grounded arm, reusing the exact rung
+    // build + FloorMetric/TargetHit the SVG uses so the card and the chart never disagree. The rung
+    // sort is irrelevant here (FloorMetric/TargetHit are order-independent), so it is skipped.
+    public static LietSummary Summarize(string path, string groundArm)
+    {
+        ResultsFile d;
+        try { d = Loader.Parse(path); } catch { return default; }
+        var v = (d.Verdicts ?? new()).FirstOrDefault();
+        if (v is null) return default;
+        var iet = IetModels.For(d.Model);
+        var rungs = BuildRungs(v, iet, false, groundArm, null);
+        if (rungs.Count == 0) return default;
+        var fm = FloorMetric(rungs);
+        var dm = FloorMetric(rungs, p => p.Secs);   // identical levelization on wall-clock duration
+        var th = TargetHit(rungs);
+        return new LietSummary(true,
+            K(fm.floor),
+            K(fm.basePerCorrect), K(fm.agPerCorrect), SignedK(fm.agPerCorrect - fm.basePerCorrect),
+            Secs(dm.floor),
+            Secs(dm.basePerCorrect), Secs(dm.agPerCorrect), SignedSecs(dm.agPerCorrect - dm.basePerCorrect),
+            th.hits, th.total);
     }
 
     private static bool Correct(ArmRow? r) => r is { Ft: > 0 } && r.Fp == r.Ft;
@@ -97,11 +132,17 @@ internal sealed class Liet
             {
                 var rungs = BuildRungs(v, iet, OracleFromPlugin, GroundArm, readmeMap);
                 if (rungs.Count == 0) { vi++; continue; }
-                // Levelize: order rungs by MEASURED difficulty (baseline IET) — the LCOE-faithful
-                // x-axis — not authored order. Rungs the baseline could not answer are the hardest
-                // and sort to the end (their AGENTS/oracle 'unlock' points plot at the right).
-                rungs = rungs.OrderBy(r => r.Base.Passed ? r.Base.Iet : double.PositiveInfinity)
-                             .ThenBy(r => r.Index).ToList();
+                // Levelize: order rungs by MEASURED difficulty — the LCOE-faithful x-axis — not
+                // authored order. Baseline alone doesn't cover the whole range (it can't answer the
+                // hardest rungs), so we sort in three tiers so both curves read left-to-right easy→hard:
+                //   0. baseline-correct rungs, easiest first (by baseline IET)
+                //   1. grounded-only unlocks (baseline ✗, SKILL ✓), easiest first (by grounded IET)
+                //   2. rungs neither arm answers (SKILL ✗), lowest grounded IET first
+                // Within tiers 1–2 there is no baseline IET, so the grounded arm's IET defines difficulty.
+                rungs = rungs
+                    .OrderBy(r => r.Base.Passed ? 0 : (r.Ag.Passed ? 1 : 2))
+                    .ThenBy(r => r.Base.Passed ? r.Base.Iet : r.Ag.Iet)
+                    .ThenBy(r => r.Index).ToList();
                 for (int k = 0; k < rungs.Count; k++) rungs[k].Index = k;
                 var unit = v.SkillName ?? "?";
                 // Label the grounded arm from the dataset file name (same heuristic as the card's
@@ -155,9 +196,9 @@ internal sealed class Liet
             {
                 Name = (sc.ScenarioName ?? "").Split(':')[0].Trim(),
                 Index = i++,
-                Base = new Point { Present = b is not null, Passed = Correct(b), Iet = b?.Iet ?? 0, Arch = Arch(b) },
-                Ag = new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0, Arch = Arch(a) },
-                Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0, Arch = Arch(o) },
+                Base = new Point { Present = b is not null, Passed = Correct(b), Iet = b?.Iet ?? 0, Arch = Arch(b), Secs = b?.Secs ?? 0 },
+                Ag = new Point { Present = a is not null, Passed = Correct(a), Iet = a?.Iet ?? 0, Arch = Arch(a), Secs = a?.Secs ?? 0 },
+                Oracle = new Point { Present = o is not null, Passed = Correct(o), Iet = o?.Iet ?? 0, Arch = Arch(o), Secs = o?.Secs ?? 0 },
             };
             if (readmeMap is not null && readmeMap.TryGetValue(r.Name, out var rm)) r.Readme = rm;
             r.Skills = Loader.DetectedSkillsOf(sc, groundArm).Distinct().ToList();
@@ -196,7 +237,9 @@ internal sealed class Liet
     {
         var ds = docLabel.Replace(".md", "");
         if (!NoTitle) _o.WriteLine($"### LIET curve — {unit} | `{model}`\n");
-        _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = measured baseline IET (levelized). `✗` = arm failed "
+        _o.WriteLine($"_Per-rung IET (levelized) by arm; difficulty = measured baseline IET where the baseline "
+            + $"answers, else grounded IET (three-tier: baseline-correct, then grounded-only unlocks, then neither). "
+            + $"`✗` = arm failed "
             + $"(not plotted, not extrapolated). Ceiling = min IET of passing competitors — the max price "
             + $"`{docLabel}` may pay. Judge `{judge ?? "?"}`. IET model {IetModels.CaptionFor(new[] { model })}._\n");
         bool hasReadme = rungs.Any(r => r.Readme.Present);
@@ -227,7 +270,7 @@ internal sealed class Liet
         var th = TargetHit(rungs);
         var hit = th.total > 0 ? $" · target-skill hit {th.hits}/{th.total}" : "";
         _o.WriteLine($"\n**Score:** correct {scr.baseCorrect}→{scr.agCorrect}/{scr.total} · "
-            + $"IET per baseline-correct answer (over floor {K(fm.floor)}, all 24 incl. waste) "
+            + $"IET per baseline-correct answer (over floor {K(fm.floor)}, shared baseline-correct set) "
             + $"{K(fm.basePerCorrect)}→{K(fm.agPerCorrect)} (Δ {SignedK(fm.agPerCorrect - fm.basePerCorrect)}/answer) · "
             + $"archaeology {N(scr.baseArch)}→{N(scr.agArch)} calls ({PctStr(scr.baseArch, scr.agArch)}){hit}.");
         EmitScalars(rungs, ds);
@@ -465,6 +508,16 @@ internal sealed class Liet
         maxIet = Math.Ceiling(maxIet / yStep) * yStep;   // snap the top to a round gridline value
         double X(int i) => n <= 1 ? (L + R) / 2.0 : L + (R - L) * i / (n - 1);
         double Y(double v) => B - (B - T) * (v / maxIet);
+        // Secondary axis: end-to-end wall-clock seconds. Plotted for EVERY present rung (answered or
+        // not) — wall-time is spent regardless of correctness — so these lines span the full x-range,
+        // unlike the per-correct IET curves. Kept visually subordinate (thin, dashed, muted) against a
+        // right axis; where two axes cross is arbitrary, so correctness stays the story.
+        double maxSecs = rungs.SelectMany(r => new[] { r.Base.Present ? r.Base.Secs : 0, r.Ag.Present ? r.Ag.Secs : 0 })
+            .DefaultIfEmpty(1).Max();
+        maxSecs = Math.Max(maxSecs, 1);
+        double secStep = NiceStep(maxSecs / 4.0);
+        maxSecs = Math.Ceiling(maxSecs / secStep) * secStep;
+        double Ysec(double v) => B - (B - T) * (v / maxSecs);
 
         var sb = new StringBuilder();
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
@@ -483,6 +536,15 @@ internal sealed class Liet
         }
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"438\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
         sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">IET per correct answer (tokens) →</text>\n");
+        // right y-axis: wall-clock seconds (secondary, subordinate axis for the duration overlay).
+        sb.Append($"  <line x1=\"{R}\" y1=\"{B}\" x2=\"{R}\" y2=\"{T}\" stroke=\"#94a3b8\" stroke-width=\"1.2\"/>\n");
+        for (double gv = secStep; gv <= maxSecs + secStep * 0.01; gv += secStep)
+        {
+            double gy = Ysec(gv);
+            sb.Append($"  <line x1=\"{R}\" y1=\"{N(gy)}\" x2=\"{R + 4}\" y2=\"{N(gy)}\" stroke=\"#94a3b8\" stroke-width=\"1\"/>\n");
+            sb.Append($"  <text x=\"{R + 7}\" y=\"{N(gy + 4)}\" text-anchor=\"start\" font-size=\"10\" fill=\"#94a3b8\">{N(gv)}s</text>\n");
+        }
+        sb.Append($"  <text x=\"{R + 44}\" y=\"222\" text-anchor=\"middle\" font-size=\"10.5\" fill=\"#94a3b8\" transform=\"rotate(-90 {R + 44} 222)\">wall-clock per question (s), all rungs →</text>\n");
         // Floor reference: the LIET metric's zero-point (mean levelized IET of the baseline's correct
         // basics). A light dashed green line so each rung's cost reads as height OVER the floor.
         {
@@ -509,6 +571,14 @@ internal sealed class Liet
             if (hasReadme) Swatch("#7c3aed", "README.md (packed)");
             Swatch("#2563eb", docLabel);
             if (hasOracle) Swatch("#d97706", "SKILL.md (oracle)");
+            // duration overlay swatches (secondary right axis; dashed to match the muted lines)
+            void DashSwatch(string color, string label)
+            {
+                double y = ly + row++ * 16;
+                sb.Append($"    <line x1=\"{N(lx)}\" y1=\"{N(y)}\" x2=\"{N(lx + 22)}\" y2=\"{N(y)}\" stroke=\"{color}\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{N(lx + 28)}\" y=\"{N(y + 4)}\" font-style=\"italic\">{Esc(label)} · s, right axis</text>\n");
+            }
+            DashSwatch("#c4a484", "baseline time");
+            DashSwatch("#5eaaa8", "grounded time");
             sb.Append("  </g>\n");
         }
         // rung ticks
@@ -525,6 +595,10 @@ internal sealed class Liet
             sb.Append($"  <line x1=\"{N(x - hw)}\" y1=\"{N(y)}\" x2=\"{N(x + hw)}\" y2=\"{N(y)}\" stroke=\"#b45309\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>\n");
             sb.Append($"  <text x=\"{N(x)}\" y=\"{B + 44}\" text-anchor=\"middle\" font-size=\"9.5\" font-weight=\"700\" fill=\"#1d4ed8\">{Esc(docLabel.Replace(".md", ""))} ✗</text>\n");
         }
+        // duration overlay (secondary axis): baseline + grounded wall-clock, muted/dashed, no dots,
+        // spanning every rung (including unanswered). Drawn UNDER the IET series so correctness leads.
+        sb.Append(DurSeries(rungs, r => r.Base, "#c4a484", "baseline time", X, Ysec));
+        sb.Append(DurSeries(rungs, r => r.Ag,   "#5eaaa8", docLabel.Replace(".md", "") + " time", X, Ysec));
         // series
         sb.Append(Series(rungs, p => p.Oracle, "#d97706", "SKILL.md (oracle)", X, Y, false));
         sb.Append(Series(rungs, p => p.Base, "#dc2626", "baseline", X, Y, false));
@@ -564,12 +638,14 @@ internal sealed class Liet
         }
         var sc = Score(rungs);
         var fm = FloorMetric(rungs);
+        var dm = FloorMetric(rungs, p => p.Secs);   // identical levelization on wall-clock duration
         var th = TargetHit(rungs);
         var metrics = new List<string>
         {
             $"Correct answers: {sc.baseCorrect}\u2192{sc.agCorrect}/{sc.total}",
             $"Floor LIET: {K(fm.floor)}",
             $"LIET: {K(fm.basePerCorrect)}\u2192{K(fm.agPerCorrect)} (\u0394 {SignedK(fm.agPerCorrect - fm.basePerCorrect)})",
+            $"Levelized duration: {Secs(dm.basePerCorrect)}\u2192{Secs(dm.agPerCorrect)} (\u0394 {SignedSecs(dm.agPerCorrect - dm.basePerCorrect)})",
             $"Archaeology operations: {N(sc.baseArch)}\u2192{N(sc.agArch)} ({PctStr(sc.baseArch, sc.agArch)})",
         };
         if (th.total > 0) metrics.Add($"Expected skill pulled: {th.hits}/{th.total}");
@@ -579,6 +655,28 @@ internal sealed class Liet
             sb.Append($"    <text x=\"{L + 20}\" y=\"{metricsY + 14 + i * 14}\">\u2022 {Esc(metrics[i])}</text>\n");
         sb.Append("  </g>\n");
         sb.Append("</svg>\n");
+        return sb.ToString();
+    }
+
+    // Duration overlay line for the secondary (wall-clock) axis: connects EVERY present rung in order
+    // (answered or not — wall-time is spent regardless), thin + dashed + muted, no markers. A
+    // subordinate companion to the per-correct IET curve.
+    private static string DurSeries(List<Rung> rungs, Func<Rung, Point> sel, string color, string label,
+        Func<int, double> X, Func<double, double> Ysec)
+    {
+        var pts = rungs.Where(r => sel(r).Present).Select(r => (x: X(r.Index), y: Ysec(sel(r).Secs), passed: sel(r).Passed)).ToList();
+        if (pts.Count < 2) return "";
+        var sb = new StringBuilder();
+        sb.Append($"  <polyline points=\"{string.Join(" ", pts.Select(p => $"{N(p.x)},{N(p.y)}"))}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\" opacity=\"0.85\"/>\n");
+        // node dots so per-rung values read even across straight multi-rung runs. Match the big
+        // markers' convention: filled = this arm PASSED the rung, open = failed (duration is spent
+        // either way). Small + muted so they stay subordinate to the IET/archaeology markers.
+        foreach (var p in pts)
+            sb.Append(p.passed
+                ? $"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"2\" fill=\"{color}\" opacity=\"0.85\"/>\n"
+                : $"  <circle cx=\"{N(p.x)}\" cy=\"{N(p.y)}\" r=\"2\" fill=\"white\" stroke=\"{color}\" stroke-width=\"1.2\" opacity=\"0.85\"/>\n");
+        var last = pts[^1];
+        sb.Append($"  <text x=\"{N(last.x - 4)}\" y=\"{N(last.y - 6)}\" text-anchor=\"end\" font-size=\"10\" font-style=\"italic\" fill=\"{color}\">{Esc(label)}</text>\n");
         return sb.ToString();
     }
 
@@ -638,6 +736,17 @@ internal sealed class Liet
         maxArch = Math.Ceiling(maxArch / yStep) * yStep;
         double X(int i) => n <= 1 ? (L + R) / 2.0 : L + (R - L) * i / (n - 1);
         double Y(double v) => B - (B - T) * (v / maxArch);
+        // secondary axis: wall-clock seconds (same overlay as the LIET chart) — to eyeball whether
+        // archaeology (external digging) tracks duration.
+        double maxSecs = rungs.SelectMany(r => new[] { r.Base.Present ? r.Base.Secs : 0, r.Ag.Present ? r.Ag.Secs : 0 })
+            .DefaultIfEmpty(1).Max();
+        maxSecs = Math.Max(maxSecs, 1);
+        double secStep = NiceStep(maxSecs / 4.0);
+        maxSecs = Math.Ceiling(maxSecs / secStep) * secStep;
+        double Ysec(double v) => B - (B - T) * (v / maxSecs);
+        // The wall-clock duration overlay on the arch chart is an opt-in diagnostic (does archaeology
+        // track duration?); default OFF so the published arch charts stay archaeology-only.
+        bool durOverlay = Environment.GetEnvironmentVariable("GROUNDING_ARCH_DURATION_OVERLAY") is { Length: > 0 };
 
         var sb = new StringBuilder();
         sb.Append($"<svg viewBox=\"0 0 {W} {H}\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif\">\n");
@@ -653,10 +762,28 @@ internal sealed class Liet
         }
         sb.Append($"  <text x=\"{(L + R) / 2}\" y=\"430\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\">rung (difficulty) →</text>\n");
         sb.Append($"  <text x=\"46\" y=\"222\" text-anchor=\"middle\" font-size=\"12\" fill=\"#334155\" transform=\"rotate(-90 46 222)\">archaeology tool calls →</text>\n");
+        // right y-axis: wall-clock seconds (secondary, for the duration overlay).
+        if (durOverlay)
+        {
+            sb.Append($"  <line x1=\"{R}\" y1=\"{B}\" x2=\"{R}\" y2=\"{T}\" stroke=\"#94a3b8\" stroke-width=\"1.2\"/>\n");
+            for (double gv = secStep; gv <= maxSecs + secStep * 0.01; gv += secStep)
+            {
+                double gy = Ysec(gv);
+                sb.Append($"  <line x1=\"{R}\" y1=\"{N(gy)}\" x2=\"{R + 4}\" y2=\"{N(gy)}\" stroke=\"#94a3b8\" stroke-width=\"1\"/>\n");
+                sb.Append($"  <text x=\"{R + 7}\" y=\"{N(gy + 4)}\" text-anchor=\"start\" font-size=\"10\" fill=\"#94a3b8\">{N(gv)}s</text>\n");
+            }
+            sb.Append($"  <text x=\"{R + 44}\" y=\"222\" text-anchor=\"middle\" font-size=\"10.5\" fill=\"#94a3b8\" transform=\"rotate(-90 {R + 44} 222)\">wall-clock per question (s), all rungs →</text>\n");
+        }
         // rung ticks
         sb.Append("  <g font-size=\"11\" fill=\"#64748b\" text-anchor=\"middle\">\n");
         for (int i = 0; i < n; i++) sb.Append($"    <text x=\"{N(X(i))}\" y=\"{B + 18}\">{Esc(ShortRung(rungs[i].Name))}</text>\n");
         sb.Append("  </g>\n");
+        // duration overlay (secondary axis), drawn UNDER the archaeology series so digging leads.
+        if (durOverlay)
+        {
+            sb.Append(DurSeries(rungs, r => r.Base, "#c4a484", "baseline time", X, Ysec));
+            sb.Append(DurSeries(rungs, r => r.Ag,   "#5eaaa8", docLabel.Replace(".md", "") + " time", X, Ysec));
+        }
         // series (every PRESENT arm, connected in rung order — archaeology is effort, not success)
         sb.Append(ArchSeries(rungs, p => p.Base, "#dc2626", false, X, Y));
         sb.Append(ArchSeries(rungs, p => p.Ag, "#2563eb", true, X, Y));
@@ -664,6 +791,11 @@ internal sealed class Liet
         sb.Append("  <g font-size=\"11\" fill=\"#475569\">\n");
         sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 8}\" x2=\"{L + 34}\" y2=\"{T + 8}\" stroke=\"#dc2626\" stroke-width=\"2.5\"/><text x=\"{L + 40}\" y=\"{T + 12}\">baseline (archaeology only)</text>\n");
         sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 24}\" x2=\"{L + 34}\" y2=\"{T + 24}\" stroke=\"#2563eb\" stroke-width=\"2.5\"/><text x=\"{L + 40}\" y=\"{T + 28}\">{Esc(docLabel)}</text>\n");
+        if (durOverlay)
+        {
+            sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 40}\" x2=\"{L + 34}\" y2=\"{T + 40}\" stroke=\"#c4a484\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{L + 40}\" y=\"{T + 44}\" font-style=\"italic\">baseline time · s, right axis</text>\n");
+            sb.Append($"    <line x1=\"{L + 12}\" y1=\"{T + 56}\" x2=\"{L + 34}\" y2=\"{T + 56}\" stroke=\"#5eaaa8\" stroke-width=\"1.6\" stroke-dasharray=\"4 3\"/><text x=\"{L + 40}\" y=\"{T + 60}\" font-style=\"italic\">grounded time · s, right axis</text>\n");
+        }
         sb.Append("  </g>\n");
         sb.Append("  <g font-size=\"10.5\" fill=\"#475569\">\n");
         sb.Append($"    <circle cx=\"{L + 20}\" cy=\"{B + 62}\" r=\"3.8\" fill=\"#64748b\"/><text x=\"{L + 30}\" y=\"{B + 66}\">passed</text>\n");
@@ -727,28 +859,38 @@ internal sealed class Liet
             rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Arch),
             sh.Sum(r => r.Base.Iet), sh.Sum(r => r.Ag.Iet));
     }
-    // Floor-anchored efficiency: one COMMON floor F = mean levelized IET of the 6 CHEAPEST
-    // baseline-correct rungs (the first 6 points on the LIET slope). Both arms are charged their
-    // total IET-over-F across ALL 24 tasks (including wasted IET on tasks they FAILED — this
-    // penalizes hedging), then normalized by a FIXED denominator = the baseline's correct count (so a
-    // skill can't dilute its cost by unlocking cheap tasks). The 6-cheapest anchor (vs nominal
-    // "basics") keeps the floor at the true bottom of the curve: a task that is nominally basic but
-    // expensive for baseline (archaeology tax) is not in the cheapest 6 and cannot inflate the zero-
-    // point. F cancels in the arm DELTA (both arms run all 24), so the anchor sets absolute scale, not
-    // the story. Returns per-correct-baseline-answer premium for each arm. Precedent: cost-per-
-    // successful-outcome / cost-effectiveness ratio (cost per approved drug incl. failures).
-    private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs)
+    // Floor-anchored EFFICIENCY — a LEVELIZED head-to-head, so difficulty must be SHARED: both arms are
+    // scored on the IDENTICAL task set (the baseline-CORRECT tasks), never on each arm's own set. That
+    // shared-difficulty basis is what makes it levelized at all; comparing arms across DIFFERENT sets
+    // (e.g. cost-per-own-correct-answer) is NOT levelized — it confounds cost with difficulty and would
+    // rank 1 cheap answer above 24 hard-won ones. Floor F = mean levelized IET of the 6 CHEAPEST
+    // baseline-correct rungs, removing the shared base difficulty (the minimum any arm must pay); the
+    // premium-over-F that remains is the excess. Both premiums are normalized by nBase, a symmetric
+    // arm-independent denominator, so coverage/volume can't leak in (that signal lives in the correct-
+    // answer count). F cancels in the arm DELTA — the anchor sets absolute scale, not the story.
+    // Returns per-baseline-correct-answer premium for each arm; pair with the (symmetric /24) Total IET
+    // row for the raw-spend view.
+    private static (double floor, int nBase, double basePerCorrect, double agPerCorrect) FloorMetric(List<Rung> rungs, Func<Point, double>? metric = null)
     {
-        var basePassedBasics = rungs.Where(r => r.Base.Passed).OrderBy(r => r.Base.Iet)
-            .Take(6).Select(r => r.Base.Iet).ToList();
+        // metric selector defaults to IET (LIET); pass p => p.Secs for the identical levelization on
+        // wall-clock duration ("levelized duration"). Floor = the 6 cheapest baseline-correct rungs
+        // BY THIS METRIC; the delta cancels the floor, so only the arm difference is the story.
+        var m = metric ?? (p => p.Iet);
+        var basePassedBasics = rungs.Where(r => r.Base.Passed).OrderBy(r => m(r.Base))
+            .Take(6).Select(r => m(r.Base)).ToList();
         double f = basePassedBasics.Count > 0 ? basePassedBasics.Average() : 0;
         int nBase = rungs.Count(r => r.Base.Passed);
-        double baseTotal = rungs.Where(r => r.Base.Present).Sum(r => r.Base.Iet - f);
-        double agTotal = rungs.Where(r => r.Ag.Present).Sum(r => r.Ag.Iet - f);
+        // Shared-difficulty basis: score BOTH arms on the SAME set (baseline-correct tasks). This is
+        // what levelizes the H2H — identical tasks, identical difficulty, only cost differs.
+        var pop = rungs.Where(r => r.Base.Passed).ToList();
+        double baseTotal = pop.Sum(r => m(r.Base) - f);
+        double agTotal = pop.Where(r => r.Ag.Present).Sum(r => m(r.Ag) - f);
         return (f, nBase, nBase > 0 ? baseTotal / nBase : 0, nBase > 0 ? agTotal / nBase : 0);
     }
     private static string N(double v) => v.ToString("0.#", Inv);   // invariant SVG coordinate
     private static string SignedK(double v) => (v >= 0 ? "+" : "−") + K(Math.Abs(v));  // signed IET delta
+    private static string Secs(double v) => (Math.Abs(v) < 0.05 ? 0.0 : v).ToString("0.#", Inv) + "s"; // wall-clock seconds (clamp -0)
+    private static string SignedSecs(double v) => (v >= 0 ? "+" : "−") + Secs(Math.Abs(v)); // signed duration delta
     private static double NiceStep(double raw)                     // round axis step: 1/2/2.5/5 × 10ⁿ
     {
         if (raw <= 0 || double.IsNaN(raw)) return 1;

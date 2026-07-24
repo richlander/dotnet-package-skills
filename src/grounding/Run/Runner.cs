@@ -318,6 +318,19 @@ internal static class Runner
                 : null;
             if (rj is null)
             {
+                // Smell path: `--no-judge` writes agent sessions but no results.json. Render the
+                // deterministic card straight from sessions.db instead of failing.
+                if (smellDests is not null && Directory.Exists(resultsDir))
+                {
+                    var sdbSmell = Directory.EnumerateFiles(resultsDir, "sessions.db", SearchOption.AllDirectories)
+                        .OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
+                    if (sdbSmell is not null)
+                    {
+                        Console.WriteLine($"   -> {sdbSmell} (sessions, unjudged)");
+                        smellDests.Add(sdbSmell);
+                        return 0;
+                    }
+                }
                 Console.Error.WriteLine($"   !! no results.json for {tag} (skill-validator exit {p.ExitCode}).");
                 return 1;
             }

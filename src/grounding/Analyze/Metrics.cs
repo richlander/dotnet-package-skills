@@ -13,6 +13,7 @@ internal sealed class ArmAgg
     // are diagnostic subsets.
     public double Web, Cache, Bash, Tools, NugetWeb;
     public double Iet, Cost, Tok, Out;
+    public double Secs;           // mean end-to-end wall-clock seconds per scenario (session WallTimeMs)
     public double GroundingIet, WorkIet;   // Total IET = Grounding (doc carry) + Work (agent effort)
     public double ToolTurnSecs, ToolTurnSecsPct, ToolTurnIet, ToolTurnIetPct;
     public double ToolTurns, AllTurns, ToolTurnPct;
